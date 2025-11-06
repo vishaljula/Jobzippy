@@ -7,23 +7,9 @@ import '@testing-library/jest-dom';
 import { expect, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
-import { TextEncoder as NodeTextEncoder, TextDecoder as NodeTextDecoder } from 'util';
 
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers);
-
-// Fix for jsdom compatibility with Node.js
-// https://github.com/jsdom/jsdom/issues/3363
-if (typeof global.structuredClone === 'undefined') {
-  global.structuredClone = (val: unknown) => JSON.parse(JSON.stringify(val));
-}
-
-// Fix for TextEncoder/TextDecoder in jsdom
-// https://github.com/jsdom/jsdom/issues/2524
-if (typeof global.TextEncoder === 'undefined') {
-  global.TextEncoder = NodeTextEncoder as typeof TextEncoder;
-  global.TextDecoder = NodeTextDecoder as typeof TextDecoder;
-}
 
 // Cleanup after each test
 afterEach(() => {
