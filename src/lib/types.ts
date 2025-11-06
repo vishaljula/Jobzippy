@@ -108,12 +108,12 @@ export type MessageType =
   | 'START_AUTO_APPLY'
   | 'STOP_AUTO_APPLY';
 
-export interface Message<T = any> {
+export interface Message<T = unknown> {
   type: MessageType;
   data?: T;
 }
 
-export interface MessageResponse<T = any> {
+export interface MessageResponse<T = unknown> {
   status: 'success' | 'error' | 'ok';
   data?: T;
   message?: string;
@@ -138,4 +138,3 @@ export interface JobFilters {
   keywords?: string[];
   sponsorship_required?: boolean;
 }
-

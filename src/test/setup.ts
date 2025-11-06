@@ -70,4 +70,4 @@ global.chrome = {
     setOptions: () => Promise.resolve(),
     setPanelBehavior: () => Promise.resolve(),
   },
-} as any;
+} as unknown as typeof chrome;
