@@ -7,6 +7,8 @@ import {
   Shield,
   Sparkles,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Toaster } from '@/components/ui/sonner';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +30,9 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50">
+    <>
+      <Toaster position="top-right" />
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="px-6 py-4">
@@ -68,9 +72,12 @@ function App() {
               <p className="text-gray-600 mb-6">
                 Your personal agentic AI assistant who manages your job applications
               </p>
-              <button className="px-6 py-3 bg-gradient-to-r from-primary-600 to-secondary-600 text-white font-semibold rounded-lg hover:from-primary-700 hover:to-secondary-700 transition-all duration-200 shadow-md hover:shadow-lg">
+              <Button 
+                size="lg" 
+                className="bg-gradient-to-r from-primary-600 to-secondary-600 hover:from-primary-700 hover:to-secondary-700"
+              >
                 Get Started
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -112,6 +119,7 @@ function App() {
         </div>
       </footer>
     </div>
+    </>
   );
 }
 
