@@ -9,6 +9,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    environmentOptions: {
+      jsdom: {
+        resources: 'usable',
+      },
+    },
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
