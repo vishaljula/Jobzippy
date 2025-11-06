@@ -437,5 +437,29 @@ Now that auth is complete, we can:
 
 ---
 
+---
+
+## 🤖 **BONUS: Agentic Features Planning**
+
+During JZ-004, we also planned comprehensive agentic AI capabilities:
+
+**Backlog Updated with:**
+- Conversational onboarding (chat, not forms!)
+- AI resume parsing (GPT-4)
+- Full ATS navigation (Greenhouse, Lever, Workday)
+- AI form understanding
+- Job match decision engine
+- Smart email detection (no manual setup!)
+- AI cover letter generation
+
+**Cost Analysis:**
+- Per user: ~$0.59/month
+- At scale: 2% of revenue
+- Fully sustainable ✅
+
+**See:** `AGENTIC_TRANSFORMATION_SUMMARY.md` for full details
+
+---
+
 **Story Complete!** Full OAuth 2.0 with PKCE ready for production use. 🎉
 
