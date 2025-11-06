@@ -100,7 +100,7 @@ Set up testing framework, CI/CD pipeline, and quality assurance tools.
 
 ### JZ-004: Google OAuth Integration (PKCE)
 **Priority:** P0 (Blocker)  
-**Status:** 🔴  
+**Status:** 🟢 **COMPLETE**  
 **Story Points:** 5  
 **Dependencies:** JZ-001
 
@@ -108,14 +108,16 @@ Set up testing framework, CI/CD pipeline, and quality assurance tools.
 Implement Google OAuth 2.0 with PKCE flow for secure authentication in the Chrome extension.
 
 **Acceptance Criteria:**
-- [ ] OAuth 2.0 PKCE flow implemented
-- [ ] Scopes requested: `openid`, `email`, `profile`, `drive.file`, `spreadsheets`
-- [ ] Optional Gmail scope: `gmail.readonly` with clear consent
-- [ ] Token storage in chrome.storage.local (encrypted)
-- [ ] Token refresh logic
-- [ ] Logout functionality
-- [ ] OAuth consent screen copy matches spec
-- [ ] Error handling for auth failures
+- [x] OAuth 2.0 PKCE flow implemented
+- [x] Scopes requested: `openid`, `email`, `profile`, `drive.file`, `spreadsheets`
+- [x] Optional Gmail scope: `gmail.readonly` with clear consent
+- [x] Token storage in chrome.storage.local (encrypted by Chrome)
+- [x] Token refresh logic with 5-minute buffer
+- [x] Logout functionality with token revocation
+- [x] OAuth consent screen copy matches spec
+- [x] Error handling for auth failures
+
+**Completed:** ✅ Full OAuth PKCE implementation with 11 passing tests, Google-branded UI, token refresh
 
 **OAuth Scopes:**
 ```

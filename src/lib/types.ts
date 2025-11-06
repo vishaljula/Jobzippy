@@ -138,3 +138,31 @@ export interface JobFilters {
   keywords?: string[];
   sponsorship_required?: boolean;
 }
+
+// OAuth Types
+export interface OAuthTokens {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+  scope: string;
+  id_token?: string;
+  expires_at?: number; // Calculated expiration timestamp
+}
+
+export interface UserInfo {
+  sub: string; // Google user ID
+  email: string;
+  email_verified: boolean;
+  name: string;
+  given_name: string;
+  family_name: string;
+  picture: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  user: UserInfo | null;
+  error: string | null;
+}
