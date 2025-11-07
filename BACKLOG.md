@@ -207,13 +207,13 @@ Optional:
 Set up Firebase project with Firestore for minimal user metadata storage.
 
 **Acceptance Criteria:**
-- [ ] Firebase project created
-- [ ] Firestore security rules configured
+- [x] Firebase project scaffolding + env wiring (see FIREBASE_SETUP.md)
+- [ ] Firestore security rules configured *(pending future schema story)*
 - [ ] User collection schema implemented (see spec §9)
 - [ ] Referrals collection schema implemented
 - [ ] Firebase SDK integrated in extension
 - [ ] User document created on first auth
-- [ ] Environment variables for Firebase config
+- [x] Environment variables for Firebase config
 
 **Firestore Schema:**
 ```javascript

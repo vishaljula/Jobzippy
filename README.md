@@ -155,6 +155,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 - [Product Specification](MVP%20Product%20Specification%20v1.0.md)
 - [Product Backlog](BACKLOG.md)
+- [Firebase Setup](FIREBASE_SETUP.md)
 - [API Documentation](#) (Coming soon)
 
 ## 🐛 Issues & Support
