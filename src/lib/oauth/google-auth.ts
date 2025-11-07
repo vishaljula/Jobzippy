@@ -95,7 +95,7 @@ async function exchangeCodeForTokens(code: string, codeVerifier: string): Promis
   const tokenParams = new URLSearchParams({
     client_id: GOOGLE_OAUTH_CONFIG.clientId,
     code,
-    code_verifier: codeVerifier,
+    code_verifier: codeVerifier, // PKCE replaces client_secret!
     grant_type: 'authorization_code',
     redirect_uri: GOOGLE_OAUTH_CONFIG.redirectUri,
   });
@@ -144,6 +144,7 @@ export async function refreshAccessToken(): Promise<OAuthTokens> {
     client_id: GOOGLE_OAUTH_CONFIG.clientId,
     refresh_token: currentTokens.refresh_token,
     grant_type: 'refresh_token',
+    // Note: Refresh tokens don't require client_secret with PKCE
   });
 
   const response = await fetch(GOOGLE_OAUTH_CONFIG.tokenEndpoint, {

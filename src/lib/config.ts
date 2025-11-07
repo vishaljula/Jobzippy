@@ -5,9 +5,16 @@
 
 // Google OAuth Configuration
 export const GOOGLE_OAUTH_CONFIG = {
-  // TODO: Replace with your actual OAuth client ID from Google Cloud Console
+  // OAuth Client ID from Google Cloud Console
   // https://console.cloud.google.com/apis/credentials
-  clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+  clientId:
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    '230186995085-oalftgmm6bhncn6gorjfl6ricptculam.apps.googleusercontent.com',
+
+  // OAuth Client Secret (Web application type requires this)
+  // Note: While exposed in extension code, security comes from PKCE (code_verifier)
+  // This is standard practice for Chrome extensions with Web application OAuth clients
+  clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET',
 
   // OAuth endpoints
   authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
