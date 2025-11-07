@@ -11,11 +11,6 @@ export const GOOGLE_OAUTH_CONFIG = {
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
     '230186995085-oalftgmm6bhncn6gorjfl6ricptculam.apps.googleusercontent.com',
 
-  // OAuth Client Secret (Web application type requires this)
-  // Note: While exposed in extension code, security comes from PKCE (code_verifier)
-  // This is standard practice for Chrome extensions with Web application OAuth clients
-  clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET',
-
   // OAuth endpoints
   authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',

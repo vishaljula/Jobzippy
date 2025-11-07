@@ -292,6 +292,30 @@ All your data stays in YOUR Google account.
 
 ---
 
+### JZ-005A: Cloud Run OAuth Token Service (NEW)
+**Priority:** P0 (Blocker)  
+**Status:** 🔴  
+**Story Points:** 5  
+**Dependencies:** JZ-004
+
+**Description:**  
+Stand up a secure Node.js/Express microservice on Google Cloud Run to exchange Google OAuth authorization codes for tokens using the client secret.
+
+**Acceptance Criteria:**
+- [ ] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
+- [ ] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
+- [ ] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`
+- [ ] Validates inputs, handles Google error responses, and returns tokens (access, refresh, expires_in)
+- [ ] Secrets stored in Google Secret Manager and injected into Cloud Run environment variables
+- [ ] `GET /healthz` endpoint for monitoring/uptime checks
+- [ ] CORS configured to allow requests from the Chrome extension only
+- [ ] Unit tests for success and failure paths (mock Google endpoint)
+- [ ] Dockerfile + GitHub Actions workflow to build/test/deploy to Cloud Run (staging + prod)
+- [ ] Extension updated to call Cloud Run endpoint instead of Google token endpoint directly
+- [ ] Documentation updates (`OAUTH_SETUP.md`, `README`) covering backend setup, env vars, deployment, sample curl request
+
+---
+
 ## Epic 3: Profile Management (IndexedDB Vault)
 
 ### JZ-007: IndexedDB Profile Vault Setup
@@ -1759,14 +1783,14 @@ Visualize apply → reply → interview → offer funnel.
 
 ## Summary
 
-**Total Stories:** 58 (55 original + 3 new agentic)  
-**Active Stories:** 57 (1 deprecated: JZ-022)  
-**P0 (Blocker):** 19 stories (+2 agentic: JZ-009A, JZ-020A)  
+**Total Stories:** 59 (55 original + 3 new agentic + 1 new infrastructure)  
+**Active Stories:** 58 (1 deprecated: JZ-022)  
+**P0 (Blocker):** 20 stories (+2 agentic: JZ-009A, JZ-020A, +1 infrastructure: JZ-005A)  
 **P1 (High):** 30 stories (+1 agentic: JZ-009B, +1 promoted: JZ-052)  
 **P2 (Medium):** 4 stories  
 **P3 (Low/Future):** 4 stories (-1 promoted)  
 
-**Estimated Total Story Points:** ~390 points (+65 for agentic features)
+**Estimated Total Story Points:** ~395 points (+65 for agentic features)
 
 ### **Completed:**
 - ✅ JZ-001: Project Scaffolding (3 pts)
