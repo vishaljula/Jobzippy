@@ -120,10 +120,25 @@ export interface MessageResponse<T = unknown> {
 }
 
 // Storage Types
+export interface AuthState {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  user: UserInfo | null;
+  error: string | null;
+}
+
+// Onboarding Types
+export type OnboardingStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped';
+
+export interface OnboardingSnapshot {
+  status: OnboardingStatus;
+  updatedAt: string;
+}
+
 export interface ExtensionStorage {
   version: string;
   installedAt: string;
-  onboardingComplete: boolean;
+  onboardingStatus?: OnboardingSnapshot;
   sheetId?: string;
   userId?: string;
   lastSync?: string;
@@ -158,11 +173,4 @@ export interface UserInfo {
   given_name: string;
   family_name: string;
   picture: string;
-}
-
-export interface AuthState {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  user: UserInfo | null;
-  error: string | null;
 }
