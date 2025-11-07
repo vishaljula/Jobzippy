@@ -215,6 +215,18 @@ Set up Firebase project with Firestore for minimal user metadata storage.
 - [ ] User document created on first auth
 - [x] Environment variables for Firebase config
 
+### JZ-005B: Firestore Integration Validation (NEW)
+**Priority:** P0  **Status:** 🔴  **Story Points:** 2  **Dependencies:** JZ-005
+
+**Description:**  Add end-to-end tests / integration harness to verify Firestore writes once schema is finalized.
+
+**Acceptance Criteria:**
+- [ ] Local emulator script or test harness documented
+- [ ] Seed data + teardown utilities
+- [ ] Automated check in CI (optional)
+- [ ] Update FIREBASE_SETUP.md with testing instructions
+
+---
 **Firestore Schema:**
 ```javascript
 users/{userId}: {
