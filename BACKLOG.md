@@ -251,6 +251,47 @@ Create the initial user onboarding experience with Google sign-in and welcome sc
 
 ---
 
+### JZ-006A: OAuth Consent Screen Optimization (NEW)
+**Priority:** P1  
+**Status:** 🔴  
+**Story Points:** 2  
+**Dependencies:** JZ-004
+
+**Description:**  
+Improve OAuth consent screen to build trust and clearly explain what we access.
+
+**Acceptance Criteria:**
+- [ ] Add professional app description to OAuth consent screen
+- [ ] Add app logo to consent screen
+- [ ] Add Privacy Policy URL (jobzippy.ai/privacy)
+- [ ] Add Terms of Service URL (jobzippy.ai/terms)
+- [ ] Add App Homepage URL (jobzippy.ai)
+- [ ] Clear explanation of data access in consent screen
+- [ ] Remove blue warning banner about missing Privacy/TOS links
+- [ ] Professional appearance for user trust
+
+**OAuth Consent Screen Description (to add):**
+```
+Jobzippy is your AI assistant for job applications. 
+
+We create a Google Sheet in YOUR Drive to track your job applications. 
+We only access the Sheet we create - not your other files.
+
+Optionally, you can enable email tracking to detect recruiter replies 
+automatically (with your permission, in a later step).
+
+All your data stays in YOUR Google account.
+```
+
+**Why This Matters:**
+- Builds trust with transparent explanation
+- Removes scary warning about missing Privacy/TOS
+- Professional appearance
+- Higher conversion on consent screen
+- Required for OAuth verification later
+
+---
+
 ## Epic 3: Profile Management (IndexedDB Vault)
 
 ### JZ-007: IndexedDB Profile Vault Setup
@@ -1399,27 +1440,82 @@ Prepare and publish extension to Chrome Web Store.
 
 ---
 
-### JZ-042: Privacy Policy & Terms of Service
+### JZ-042: Privacy Policy & Terms of Service Pages
 **Priority:** P1  
 **Status:** 🔴  
-**Story Points:** 3  
+**Story Points:** 5 ⬆️ (was 3)  
 **Dependencies:** None
 
 **Description:**  
-Draft legal documents for compliance.
+Create and host legal documents (Privacy Policy, Terms of Service) for compliance, OAuth verification, and user trust.
 
 **Acceptance Criteria:**
-- [ ] Privacy Policy (see spec §16 for guidance)
-  - What data we collect (minimal)
-  - What data we DON'T collect (resumes, EEO, emails)
-  - Where data lives (user's Sheet, IndexedDB, Firestore)
-  - User rights (export, delete)
-- [ ] Terms of Service
-  - Auto-apply may violate site TOS (user accepts risk)
-  - Referral terms (45-day hold, $25 min, fraud prevention)
-  - Subscription terms (cancellation, refunds)
-- [ ] Host on website or GitHub Pages
-- [ ] Link from extension
+
+**Privacy Policy (jobzippy.ai/privacy):**
+- [ ] Create HTML page with Privacy Policy
+- [ ] Section: What data we collect (account email, billing, Sheet metadata)
+- [ ] Section: What data we DON'T collect (resumes, EEO, email contents)
+- [ ] Section: Where data lives (user's Sheet, IndexedDB, Firestore)
+- [ ] Section: How we use data (authentication, billing, features)
+- [ ] Section: Data sharing - anonymized aggregates disclosure
+- [ ] Section: Google API access (Drive, Sheets, Gmail scopes explained)
+- [ ] Section: User rights (export, delete, revoke access)
+- [ ] Section: Security measures (encryption, Chrome storage)
+- [ ] Section: Contact information (support@jobzippy.ai)
+- [ ] Last updated date
+- [ ] Mobile-responsive design
+- [ ] Professional formatting
+
+**Terms of Service (jobzippy.ai/terms):**
+- [ ] Create HTML page with Terms of Service
+- [ ] Section: Service description (AI job application assistant)
+- [ ] Section: User responsibilities
+  - Auto-apply may violate some site TOS (user accepts risk)
+  - Accurate information required
+  - Account security
+- [ ] Section: Subscription terms
+  - Pricing: $14.99/month or $149/year
+  - Cancellation policy (anytime, no questions)
+  - Refund policy (pro-rated for annual)
+  - Free trial terms (7 days or 10 applications)
+- [ ] Section: Referral program terms
+  - $3 per paid referral
+  - 45-day hold + 1 renewal requirement
+  - $25 minimum payout
+  - Anti-fraud measures
+- [ ] Section: Limitation of liability
+- [ ] Section: Dispute resolution
+- [ ] Section: Changes to terms
+- [ ] Last updated date
+
+**Website/Hosting:**
+- [ ] Set up simple static website (Vercel/Netlify/GitHub Pages)
+- [ ] Domain: jobzippy.ai
+- [ ] Landing page (jobzippy.ai)
+- [ ] Privacy page (jobzippy.ai/privacy)
+- [ ] Terms page (jobzippy.ai/terms)
+- [ ] SSL certificate (HTTPS)
+- [ ] Mobile responsive
+- [ ] Fast loading
+
+**Integration:**
+- [ ] Add links to OAuth consent screen (Google Cloud)
+- [ ] Add links in extension footer
+- [ ] Add links in Settings page
+- [ ] Add links in sign-up flow
+
+**Templates to Use:**
+- Termly.io (free privacy policy generator)
+- iubenda
+- GetTerms.io
+- Customize for Jobzippy specifics
+
+**Why This Matters:**
+- Required for OAuth verification
+- Removes warning on consent screen
+- Builds user trust
+- Legal compliance (GDPR, CCPA)
+- Professional appearance
 
 ---
 
