@@ -1,15 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { AuthProvider } from '@/lib/auth/AuthContext';
 import App from './App';
+
+// Helper to render with AuthProvider
+function renderApp() {
+  return render(
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  );
+}
 
 describe('App', () => {
   it('shows loading state initially', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByText(/loading jobzippy/i)).toBeInTheDocument();
   });
 
   it('renders main content after loading', async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText(/welcome to jobzippy/i)).toBeInTheDocument();
@@ -17,17 +27,17 @@ describe('App', () => {
   });
 
   it('displays the header with logo and status', async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('Jobzippy')).toBeInTheDocument();
       expect(screen.getByText('Your AI Job Assistant')).toBeInTheDocument();
-      expect(screen.getByText('Ready')).toBeInTheDocument();
+      expect(screen.getByText('Not signed in')).toBeInTheDocument();
     });
   });
 
   it('renders all feature cards', async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('Auto-Apply')).toBeInTheDocument();
@@ -37,16 +47,16 @@ describe('App', () => {
     });
   });
 
-  it('renders Get Started button', async () => {
-    render(<App />);
+  it('renders Sign in with Google button when not authenticated', async () => {
+    renderApp();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
     });
   });
 
   it('displays version number in footer', async () => {
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('v0.1.0')).toBeInTheDocument();
