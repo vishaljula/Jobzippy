@@ -16,6 +16,14 @@ dist-ssr
 # Build output
 dist/
 build/
+ui/dist/
+api/dist/
+
+# Workspace test artifacts
+ui/coverage/
+ui/test-results/
+ui/playwright-report/
+api/coverage/
 
 # Editor directories and files
 .vscode/*

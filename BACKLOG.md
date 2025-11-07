@@ -302,6 +302,7 @@ All your data stays in YOUR Google account.
 Stand up a secure Node.js/Express microservice on Google Cloud Run to exchange Google OAuth authorization codes for tokens using the client secret.
 
 **Acceptance Criteria:**
+- [ ] Repository reorganized into `ui/` and `api/` npm workspaces with shared root tooling
 - [ ] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
 - [ ] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
 - [ ] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`

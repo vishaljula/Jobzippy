@@ -43,7 +43,7 @@ npm run build
    - Open Chrome and go to `chrome://extensions/`
    - Enable "Developer mode" (top right)
    - Click "Load unpacked"
-   - Select the `dist` folder
+   - Select the `ui/dist` folder
 
 ### Development
 
@@ -52,34 +52,28 @@ Start the development build with hot reload:
 npm run dev
 ```
 
-This will watch for file changes and rebuild automatically. You'll need to refresh the extension in Chrome after each rebuild.
+This delegates to the `ui` workspace watcher. Refresh the extension in Chrome after each rebuild.
 
 ## 📁 Project Structure
 
 ```
 Jobzippy/
-├── public/
-│   ├── manifest.json          # Chrome extension manifest
-│   └── icons/                 # Extension icons
-├── src/
-│   ├── background/            # Background service worker
-│   │   └── index.ts
-│   ├── content/               # Content scripts for job sites
-│   │   ├── linkedin/
-│   │   │   └── index.ts
-│   │   └── indeed/
-│   │       └── index.ts
-│   ├── sidepanel/             # Main UI (React)
-│   │   ├── index.html
-│   │   ├── index.tsx
-│   │   ├── App.tsx
-│   │   └── styles.css
-│   └── lib/                   # Shared utilities
-│       ├── types.ts
-│       └── storage.ts
-├── scripts/                   # Build scripts
-├── dist/                      # Build output (generated)
-└── package.json
+├── ui/                        # Chrome extension workspace (React + Vite)
+│   ├── src/                   # Extension source
+│   ├── public/                # Manifest + icons
+│   ├── e2e/                   # Playwright E2E tests
+│   ├── package.json           # UI workspace manifest
+│   └── config files           # Tailwind, Vite, Vitest, etc.
+├── api/                       # Cloud Run token exchange service (Express)
+│   ├── src/                   # API source code
+│   ├── package.json           # API workspace manifest
+│   ├── Dockerfile             # Cloud Run container image
+│   └── config files           # tsconfig, eslint, vitest
+├── package.json               # Monorepo root (npm workspaces)
+├── package-lock.json          # Shared lockfile for all workspaces
+├── .github/workflows/ci.yml   # CI pipeline (UI + API)
+├── docs & specs               # Product documentation
+└── README.md                  # This file
 ```
 
 ## 🛠️ Tech Stack
@@ -88,17 +82,50 @@ Jobzippy/
 - **Build Tool**: Vite
 - **Styling**: Tailwind CSS
 - **Storage**: IndexedDB (idb) + chrome.storage
-- **Backend**: Firebase/Firestore
+- **Backend**: Cloud Run (Express API) + Firebase/Firestore (upcoming stories)
 - **APIs**: Google Sheets, Gmail, Twilio, Stripe
+
+## ☁️ Cloud Run Token Service (`api/`)
+
+> **Local setup:** Copy `.env.example` to `.env` and fill in real Google OAuth credentials before running `npm run dev`. The API listens on `PORT=8787` by default to match the UI's `VITE_API_URL`.
+
+
+- Exchanges OAuth authorization codes & refresh tokens using the server-side client secret
+- Express + TypeScript app with Zod validation and Vitest + Supertest coverage
+- Dockerfile for Cloud Run deployments (`api/Dockerfile`)
+- Environment variables:
+  - `GOOGLE_OAUTH_CLIENT_ID`
+  - `GOOGLE_OAUTH_CLIENT_SECRET`
+  - `ALLOWED_ORIGINS` (comma-separated list, e.g. `chrome-extension://<id>`)
+  - `PORT` (default 8787 locally; Cloud Run sets this automatically)
+- Local development: `npm run dev --workspace=api`
+- Production entrypoint: `npm run start --workspace=api`
 
 ## 📝 Scripts
 
-- `npm run dev` - Start development build with watch mode
-- `npm run build` - Build for production
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors automatically
-- `npm run format` - Format code with Prettier
-- `npm run type-check` - Run TypeScript type checking
+### Root (npm workspaces)
+
+- `npm run dev` – Run UI + API dev servers in parallel
+- `npm run dev:ui` / `npm run dev:api` – Run each workspace individually
+- `npm run build` – Build both workspaces (UI → `ui/dist`, API → `api/dist`)
+- `npm run lint` – ESLint for UI + API
+- `npm run lint:fix` – Auto-fix lint issues in both workspaces
+- `npm run test` – Run Vitest suites (UI + API)
+- `npm run test:ui` / `npm run test:api` – Run unit tests per workspace
+- `npm run test:e2e` – Playwright smoke tests for the extension (UI only)
+- `npm run type-check` – UI TypeScript project references
+- `npm run format` – Prettier formatting for UI files
+
+### UI workspace (`ui/`)
+
+- `npm run dev` – Vite build/watch (used by root script)
+- `npm run test`, `npm run test:coverage`, `npm run test:e2e`, etc.
+
+### API workspace (`api/`)
+
+- `npm run dev` – Run Express API locally with live reload
+- `npm run build` – Compile to `api/dist` (deployment artifact)
+- `npm run start` – Execute the compiled server (Cloud Run entrypoint)
 
 ## 🎨 Design System
 

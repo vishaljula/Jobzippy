@@ -3,7 +3,8 @@
 ## Overview
 
 Jobzippy uses a comprehensive testing strategy:
-- **Unit Tests**: Vitest + React Testing Library
+- **UI Unit Tests**: Vitest + React Testing Library
+- **API Unit Tests**: Vitest + Supertest (Express)
 - **E2E Tests**: Playwright
 - **Pre-commit Hooks**: Husky + lint-staged
 - **CI/CD**: GitHub Actions
@@ -12,29 +13,46 @@ Jobzippy uses a comprehensive testing strategy:
 
 ## Unit Tests
 
-### Running Tests
+### Running Tests (UI workspace)
 
 ```bash
 # Run tests in watch mode
-npm test
+npm run test --workspace=ui
 
-# Run tests with UI
-npm run test:ui
+# Run tests with the Vitest UI
+npm run test --workspace=ui -- --ui
 
 # Run tests once (CI mode)
-npm run test:run
+npm run test:run --workspace=ui
 
 # Run with coverage
-npm run test:coverage
+npm run test:coverage --workspace=ui
+```
+
+### Running Tests (API workspace)
+
+```bash
+# Execute Vitest suite for the Cloud Run API
+npm run test --workspace=api
+
+# Watch mode for local development
+npm run dev --workspace=api
+```
+
+### Running All Tests
+
+```bash
+# Execute UI + API unit tests together
+npm run test
 ```
 
 ### Writing Tests
 
-Tests are colocated with components:
+UI tests are colocated with components:
 
 ```
-src/components/ui/button.tsx
-src/components/ui/button.test.tsx  ← Test file
+ui/src/components/ui/button.tsx
+ui/src/components/ui/button.test.tsx  ← Test file
 ```
 
 **Example:**
@@ -55,7 +73,7 @@ describe('Button', () => {
 
 - **Framework**: Vitest (faster alternative to Jest)
 - **Library**: React Testing Library
-- **Environment**: jsdom
+- **Environment**: happy-dom
 - **Mocks**: Chrome extension APIs automatically mocked in `src/test/setup.ts`
 
 ---
@@ -74,10 +92,10 @@ npm run test:e2e:ui
 
 ### Writing E2E Tests
 
-E2E tests are in the `e2e/` directory:
+E2E tests are in the `ui/e2e/` directory:
 
 ```
-e2e/
+ui/e2e/
 ├── extension.spec.ts  ← Extension loading tests
 ├── linkedin.spec.ts   ← LinkedIn automation tests
 └── indeed.spec.ts     ← Indeed automation tests
@@ -127,12 +145,12 @@ npm run test:coverage
 ```
 
 Coverage reports are generated in:
-- `coverage/` - Full HTML report
-- `coverage/coverage-final.json` - JSON for CI
+- `ui/coverage/` - Full HTML report
+- `ui/coverage/coverage-final.json` - JSON for CI
 
 **Open HTML report:**
 ```bash
-open coverage/index.html
+open ui/coverage/index.html
 ```
 
 ### Coverage Goals

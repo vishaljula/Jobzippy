@@ -16,8 +16,8 @@
 
 4. **Load the extension**:
    - Click "Load unpacked" button
-   - Navigate to the `dist` folder in your Jobzippy project
-   - Select the `dist` folder and click "Select"
+   - Navigate to the `ui/dist` folder in your Jobzippy project
+   - Select the `ui/dist` folder and click "Select"
 
 5. **Verify installation**:
    - You should see "Jobzippy" in your extensions list
@@ -55,7 +55,7 @@ After each change:
 ## Troubleshooting
 
 ### Extension doesn't appear
-- Make sure you selected the `dist` folder, not the project root
+- Make sure you selected the `ui/dist` folder, not the project root
 - Check for build errors with `npm run build`
 
 ### Side panel is blank
