@@ -32,7 +32,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Lint UI workspace
         run: npm run lint --workspace=ui
@@ -67,7 +67,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Build UI workspace
         run: npm run build --workspace=ui
@@ -95,7 +95,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

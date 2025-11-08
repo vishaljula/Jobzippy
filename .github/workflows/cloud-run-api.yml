@@ -48,7 +48,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Run API tests
         run: npm run test --workspace=api
