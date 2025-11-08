@@ -80,35 +80,26 @@ Click **"Add or Remove Scopes"** and add:
 
 1. Go to **"APIs & Services"** → **"Credentials"**
 2. Click **"Create Credentials"** → **"OAuth client ID"**
-3. Application type: **"Chrome Extension"** or **"Web application"**
+3. Application type: **Web application** (required for PKCE + backend token exchange)
 
-### For Chrome Extension:
+### Why "Web application"?
 
-**Important:** You need your extension ID first!
+- Google only issues refresh tokens + client secrets for confidential clients (web apps)
+- Our Cloud Run service uses the client secret to exchange codes securely
+- Chrome Extension client type cannot be used with `chrome.identity.launchWebAuthFlow`
 
-#### Get Your Extension ID:
+### Configure OAuth Client:
 
-1. Go to `chrome://extensions/`
-2. Find Jobzippy
-3. Copy the **ID** (e.g., `abcdefghijklmnopqrstuvwxyz123456`)
-
-#### Configure OAuth Client:
-
-- Application type: **Chrome Extension**
-- Name: `Jobzippy Chrome Extension`
-- Item ID: Paste your extension ID
-
-**OR** if using Web application type:
-
-- Application type: **Web application**
-- Name: `Jobzippy Chrome Extension`
-- Authorized redirect URIs:
-  ```
-  https://<YOUR_EXTENSION_ID>.chromiumapp.org/
-  ```
+1. Ensure you know your extension ID (`chrome://extensions/`)
+2. Set application name: `Jobzippy Chrome Extension`
+3. Authorized redirect URIs:
+   ```
+   https://<YOUR_EXTENSION_ID>.chromiumapp.org/
+   ```
 
 4. Click **"Create"**
 5. Copy the **Client ID** (e.g., `123456789-abc.apps.googleusercontent.com`)
+6. Download the **Client Secret JSON** – the `client_secret` value is needed by the Cloud Run API
 
 ---
 
@@ -122,17 +113,41 @@ Create a `.env` file in the project root:
 
 ```env
 VITE_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID_HERE.apps.googleusercontent.com
+VITE_API_URL=https://api.jobzippy.ai          # Cloud Run URL (or http://localhost:8787 for local dev)
 ```
 
 ### Option B: Hardcode (for testing only)
 
-Edit `src/lib/config.ts`:
+Edit `ui/src/lib/config.ts`:
 
 ```typescript
 export const GOOGLE_OAUTH_CONFIG = {
   clientId: 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com',
   // ...
 ```
+
+---
+
+## Step 5b: Configure Cloud Run Token Service
+Create a `.env` file in the project root with:
+```
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+ALLOWED_ORIGINS=chrome-extension://<EXTENSION_ID>
+PORT=8787
+```
+This keeps the local API running at `http://localhost:8787`, matching the extension's `VITE_API_URL`.
+
+
+The backend exchanges tokens securely using the client secret.
+
+1. Set environment variables for the API service (Cloud Run console → Variables & Secrets):
+   - `GOOGLE_OAUTH_CLIENT_ID`
+   - `GOOGLE_OAUTH_CLIENT_SECRET`
+   - `ALLOWED_ORIGINS` (e.g., `chrome-extension://<your-extension-id>`)
+   - `PORT` (optional: use 8787 for local dev; Cloud Run defaults to 8080)
+2. Deploy the service using the provided GitHub Actions or `gcloud run deploy` command.
+3. Update `VITE_API_URL` in your `.env` file to match the deployed service URL.
 
 ---
 
