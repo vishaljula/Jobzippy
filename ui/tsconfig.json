@@ -30,7 +30,7 @@
     },
 
     /* Chrome Extension types */
-    "types": ["chrome", "node"]
+    "types": ["chrome", "node", "vitest"]
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

@@ -34,8 +34,9 @@ export class FirestoreRepository {
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async ensureUserDocument(_userId: string, _data: Partial<UserDocument>): Promise<void> {
+    const db = this.#db;
     if (import.meta.env.DEV) {
-      console.warn('ensureUserDocument is not implemented yet. Pending onboarding story.');
+      console.warn('ensureUserDocument is not implemented yet. Pending onboarding story.', db);
     }
   }
 

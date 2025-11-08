@@ -14,7 +14,10 @@ chrome.runtime.onInstalled.addListener((details) => {
     chrome.storage.local.set({
       version: chrome.runtime.getManifest().version,
       installedAt: new Date().toISOString(),
-      onboardingComplete: false,
+      onboardingStatus: {
+        status: 'not_started',
+        updatedAt: new Date().toISOString(),
+      },
     });
 
     // Open welcome page in side panel

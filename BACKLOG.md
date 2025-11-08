@@ -215,6 +215,18 @@ Set up Firebase project with Firestore for minimal user metadata storage.
 - [ ] User document created on first auth
 - [x] Environment variables for Firebase config
 
+### JZ-005B: Firestore Integration Validation (NEW)
+**Priority:** P0  **Status:** 🔴  **Story Points:** 2  **Dependencies:** JZ-005
+
+**Description:**  Add end-to-end tests / integration harness to verify Firestore writes once schema is finalized.
+
+**Acceptance Criteria:**
+- [ ] Local emulator script or test harness documented
+- [ ] Seed data + teardown utilities
+- [ ] Automated check in CI (optional)
+- [ ] Update FIREBASE_SETUP.md with testing instructions
+
+---
 **Firestore Schema:**
 ```javascript
 users/{userId}: {
@@ -233,7 +245,7 @@ referrals/{refId}: {
 
 ### JZ-006: User Onboarding Flow
 **Priority:** P0  
-**Status:** 🔴  
+**Status:** 🟢 **COMPLETE**  
 **Story Points:** 5  
 **Dependencies:** JZ-002, JZ-004
 
@@ -241,13 +253,13 @@ referrals/{refId}: {
 Create the initial user onboarding experience with Google sign-in and welcome screen.
 
 **Acceptance Criteria:**
-- [ ] Welcome screen with value proposition
-- [ ] "Sign in with Google" button
-- [ ] OAuth consent flow triggered
-- [ ] User redirected to setup wizard after auth
-- [ ] First-time user vs returning user detection
-- [ ] Onboarding progress indicator
-- [ ] Skip/resume onboarding capability
+- [x] Welcome screen with value proposition
+- [x] "Sign in with Google" button
+- [x] OAuth consent flow triggered
+- [x] User redirected to setup wizard after auth
+- [x] First-time user vs returning user detection
+- [x] Onboarding progress indicator
+- [x] Skip/resume onboarding capability
 
 ---
 
@@ -1798,7 +1810,8 @@ Visualize apply → reply → interview → offer funnel.
 - ✅ JZ-002: Design System (5 pts)
 - ✅ JZ-003: Testing Infrastructure (3 pts)
 - ✅ JZ-004: Google OAuth (5 pts)
-- **Total Completed:** 16 points / 390 = 4% complete
+- ✅ JZ-006: User Onboarding Flow (5 pts)
+- **Total Completed:** 21 points / 390 = 5% complete
 
 ### **New Agentic Stories:**
 - 🤖 JZ-008: AI Resume Parser (was basic parser)

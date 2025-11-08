@@ -1,13 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Rocket, Target, BarChart3, Bell, Shield, Sparkles, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
+import { useOnboarding } from '@/lib/onboarding';
+import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
 
 function App() {
   const { isAuthenticated, isLoading: authLoading, user, logout: handleLogout } = useAuth();
+  const {
+    snapshot,
+    isLoading: onboardingLoading,
+    begin,
+    complete,
+    skip,
+  } = useOnboarding(isAuthenticated);
   const [isLoading, setIsLoading] = useState(true);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   useEffect(() => {
     // Wait for both initial load and auth check
@@ -16,7 +26,42 @@ function App() {
     }
   }, [authLoading]);
 
-  if (isLoading || authLoading) {
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsWizardOpen(false);
+      return;
+    }
+
+    if (!onboardingLoading) {
+      if (snapshot.status === 'not_started') {
+        void begin();
+        setIsWizardOpen(true);
+      } else if (snapshot.status === 'in_progress') {
+        setIsWizardOpen(true);
+      } else if (snapshot.status === 'completed') {
+        setIsWizardOpen(false);
+      }
+    }
+  }, [isAuthenticated, onboardingLoading, snapshot.status, begin]);
+
+  const handleResumeOnboarding = useCallback(() => {
+    void begin();
+    setIsWizardOpen(true);
+  }, [begin]);
+
+  const handleCompleteOnboarding = useCallback(async () => {
+    await complete();
+    setIsWizardOpen(false);
+  }, [complete]);
+
+  const handleSkipOnboarding = useCallback(async () => {
+    await skip();
+    setIsWizardOpen(false);
+  }, [skip]);
+
+  const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
+
+  if (appLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50">
         <div className="text-center">
@@ -108,10 +153,17 @@ function App() {
                   <Button
                     size="lg"
                     className="bg-gradient-to-r from-primary-600 to-secondary-600 hover:from-primary-700 hover:to-secondary-700"
+                    onClick={handleResumeOnboarding}
                   >
-                    Get Started
+                    {snapshot.status === 'completed' ? 'Launch Jobzippy' : 'Complete Setup'}
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {isAuthenticated && snapshot.status === 'skipped' && (
+              <div className="mb-6">
+                <ResumeOnboardingCard onResume={handleResumeOnboarding} />
               </div>
             )}
 
@@ -153,6 +205,12 @@ function App() {
           </div>
         </footer>
       </div>
+      <OnboardingWizard
+        open={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        onComplete={handleCompleteOnboarding}
+        onSkip={handleSkipOnboarding}
+      />
     </>
   );
 }

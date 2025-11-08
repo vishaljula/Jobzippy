@@ -1,7 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import App from './App';
+import { isAuthenticated, getUserInfo } from '@/lib/oauth/google-auth';
+
+vi.mock('@/lib/oauth/google-auth', () => {
+  return {
+    startOAuthFlow: vi.fn(),
+    logout: vi.fn(),
+    isAuthenticated: vi.fn(() => Promise.resolve(false)),
+    getUserInfo: vi.fn(() =>
+      Promise.resolve({
+        sub: '123',
+        email: 'user@example.com',
+        email_verified: true,
+        name: 'Test User',
+        given_name: 'Test',
+        family_name: 'User',
+        picture: 'https://example.com/avatar.png',
+      })
+    ),
+  };
+});
 
 // Helper to render with AuthProvider
 function renderApp() {
@@ -13,6 +33,13 @@ function renderApp() {
 }
 
 describe('App', () => {
+  beforeEach(() => {
+    chrome.storage.local.get = vi.fn(
+      async () => ({}) as Record<string, unknown>
+    ) as unknown as typeof chrome.storage.local.get;
+    chrome.storage.local.set = vi.fn(() => Promise.resolve());
+  });
+
   it('shows loading state initially', () => {
     renderApp();
     expect(screen.getByText(/loading jobzippy/i)).toBeInTheDocument();
@@ -61,5 +88,64 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('v0.1.0')).toBeInTheDocument();
     });
+  });
+
+  it('opens onboarding wizard for first-time authenticated user', async () => {
+    const isAuthenticatedMock = vi.mocked(isAuthenticated);
+    const getUserInfoMock = vi.mocked(getUserInfo);
+
+    isAuthenticatedMock.mockResolvedValue(true);
+    getUserInfoMock.mockResolvedValue({
+      sub: 'abc',
+      email: 'first@jobzippy.ai',
+      email_verified: true,
+      name: 'First User',
+      given_name: 'First',
+      family_name: 'User',
+      picture: 'https://example.com/avatar.png',
+    });
+    const storageGetMock = chrome.storage.local.get as unknown as Mock;
+    storageGetMock.mockResolvedValue({
+      onboardingStatus: undefined,
+    });
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 1 of/i)).toBeInTheDocument();
+      expect(screen.getByText(/welcome to jobzippy/i)).toBeInTheDocument();
+    });
+
+    isAuthenticatedMock.mockResolvedValue(false);
+    storageGetMock.mockResolvedValue({});
+  });
+
+  it('shows resume onboarding card when onboarding was skipped', async () => {
+    const isAuthenticatedMock = vi.mocked(isAuthenticated);
+    const getUserInfoMock = vi.mocked(getUserInfo);
+    const storageGetMock = chrome.storage.local.get as unknown as Mock;
+
+    isAuthenticatedMock.mockResolvedValue(true);
+    getUserInfoMock.mockResolvedValue({
+      sub: 'abc',
+      email: 'first@jobzippy.ai',
+      email_verified: true,
+      name: 'First User',
+      given_name: 'First',
+      family_name: 'User',
+      picture: 'https://example.com/avatar.png',
+    });
+    storageGetMock.mockResolvedValue({
+      onboardingStatus: { status: 'skipped', updatedAt: new Date().toISOString() },
+    });
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /complete setup/i })).toBeInTheDocument();
+    });
+
+    isAuthenticatedMock.mockResolvedValue(false);
+    storageGetMock.mockResolvedValue({});
   });
 });
