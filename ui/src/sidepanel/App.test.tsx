@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import App from './App';
@@ -34,7 +34,9 @@ function renderApp() {
 
 describe('App', () => {
   beforeEach(() => {
-    chrome.storage.local.get = vi.fn(() => Promise.resolve({}));
+    chrome.storage.local.get = vi.fn(
+      async () => ({}) as Record<string, unknown>
+    ) as unknown as typeof chrome.storage.local.get;
     chrome.storage.local.set = vi.fn(() => Promise.resolve());
   });
 
@@ -102,7 +104,7 @@ describe('App', () => {
       family_name: 'User',
       picture: 'https://example.com/avatar.png',
     });
-    const storageGetMock = vi.mocked(chrome.storage.local.get);
+    const storageGetMock = chrome.storage.local.get as unknown as Mock;
     storageGetMock.mockResolvedValue({
       onboardingStatus: undefined,
     });
@@ -121,7 +123,7 @@ describe('App', () => {
   it('shows resume onboarding card when onboarding was skipped', async () => {
     const isAuthenticatedMock = vi.mocked(isAuthenticated);
     const getUserInfoMock = vi.mocked(getUserInfo);
-    const storageGetMock = vi.mocked(chrome.storage.local.get);
+    const storageGetMock = chrome.storage.local.get as unknown as Mock;
 
     isAuthenticatedMock.mockResolvedValue(true);
     getUserInfoMock.mockResolvedValue({
