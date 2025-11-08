@@ -37,6 +37,9 @@ build/
 
 # Testing
 coverage
+test-results
+playwright-report
+*.html-report
 
 # Misc
 *.zip

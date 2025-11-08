@@ -108,12 +108,12 @@ export type MessageType =
   | 'START_AUTO_APPLY'
   | 'STOP_AUTO_APPLY';
 
-export interface Message<T = any> {
+export interface Message<T = unknown> {
   type: MessageType;
   data?: T;
 }
 
-export interface MessageResponse<T = any> {
+export interface MessageResponse<T = unknown> {
   status: 'success' | 'error' | 'ok';
   data?: T;
   message?: string;
@@ -139,3 +139,30 @@ export interface JobFilters {
   sponsorship_required?: boolean;
 }
 
+// OAuth Types
+export interface OAuthTokens {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+  scope: string;
+  id_token?: string;
+  expires_at?: number; // Calculated expiration timestamp
+}
+
+export interface UserInfo {
+  sub: string; // Google user ID
+  email: string;
+  email_verified: boolean;
+  name: string;
+  given_name: string;
+  family_name: string;
+  picture: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  user: UserInfo | null;
+  error: string | null;
+}
