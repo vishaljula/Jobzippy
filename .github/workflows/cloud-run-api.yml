@@ -47,8 +47,15 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          check-latest: true
+          cache: 'npm'
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
       - name: Run API tests
         run: npm run test --workspace=api
