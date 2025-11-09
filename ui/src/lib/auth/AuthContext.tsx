@@ -11,6 +11,7 @@ import {
   isAuthenticated as checkAuth,
   getUserInfo,
 } from '../oauth/google-auth';
+import { connectFirebaseAuth, disconnectFirebaseAuth } from '../firebase/session';
 
 interface AuthContextType extends AuthState {
   login: (includeGmailScope?: boolean) => Promise<void>;
@@ -37,12 +38,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (authenticated) {
         const user = await getUserInfo();
-        setState({
-          isAuthenticated: true,
-          isLoading: false,
-          user,
-          error: null,
-        });
+        if (user) {
+          try {
+            await connectFirebaseAuth(user);
+          } catch (error) {
+            console.error('[Auth] Failed to synchronize Firebase session:', error);
+          }
+          setState({
+            isAuthenticated: true,
+            isLoading: false,
+            user,
+            error: null,
+          });
+        } else {
+          setState({
+            isAuthenticated: false,
+            isLoading: false,
+            user: null,
+            error: 'Unable to load user information',
+          });
+        }
       } else {
         setState({
           isAuthenticated: false,
@@ -90,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
       await logoutService();
+      await disconnectFirebaseAuth();
 
       setState({
         isAuthenticated: false,

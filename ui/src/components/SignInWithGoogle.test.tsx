@@ -10,6 +10,18 @@ vi.mock('@/lib/oauth/google-auth', () => ({
   isAuthenticated: vi.fn().mockResolvedValue(false),
   getUserInfo: vi.fn().mockResolvedValue(null),
   logout: vi.fn(),
+  getStoredTokens: vi.fn().mockResolvedValue({
+    access_token: 'mock-access',
+    expires_in: 3600,
+    token_type: 'Bearer',
+    scope: 'openid email profile',
+    id_token: 'mock-id',
+  }),
+}));
+
+vi.mock('@/lib/firebase/session', () => ({
+  connectFirebaseAuth: vi.fn().mockResolvedValue(undefined),
+  disconnectFirebaseAuth: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('SignInWithGoogle', () => {

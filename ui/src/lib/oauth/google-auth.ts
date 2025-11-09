@@ -274,3 +274,9 @@ export async function logout(): Promise<void> {
     await chrome.storage.local.remove([STORAGE_KEYS.TOKENS, STORAGE_KEYS.USER_INFO]);
   }
 }
+
+export async function getStoredTokens(): Promise<OAuthTokens | null> {
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.TOKENS);
+  const tokens: OAuthTokens | undefined = stored[STORAGE_KEYS.TOKENS];
+  return tokens ?? null;
+}

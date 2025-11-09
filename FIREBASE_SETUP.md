@@ -45,16 +45,10 @@ VITE_FIREBASE_MEASUREMENT_ID=G-XXXXXXXXXX
 1. Navigate to **Build → Firestore Database**
 2. Click **Create database** → choose **Start in production mode**
 3. Select the nearest region (eg. `us-central1`)
-4. Leave the rules for now – we’ll tighten them once schemas are finalized
+4. After the database is created, open **Rules** and replace the default rules with the contents of `firebase/firestore.rules`
+5. Publish the rules
 
-## 5. Long-Term TODOs (Future Stories)
-
-- Define user and referral schemas once conversational onboarding finishes
-- Write security rules to enforce per-user access
-- Add Cloud Functions or scheduled jobs if we need server-side aggregation
-- Consider Firebase Authentication if we want to mirror users outside Chrome
-
-## 6. Local Development Verification
+## 5. Local Development Verification
 
 ```bash
 npm run dev
@@ -66,4 +60,9 @@ You should see:
 [API] Server listening on port 8787
 ```
 
-The UI will lazy-load Firebase when needed. `FirestoreRepository` currently logs TODO warnings—these will be replaced with real read/write logic in future tickets.
+The UI will lazy-load Firebase when needed. On first successful Google OAuth login the extension signs into Firebase using the Google ID token and creates/updates a user document in `users/{firebaseUid}` with the schema defined in §9 of the spec.
+
+## 6. Troubleshooting
+
+- **Missing id_token:** Ensure the OAuth scope includes `openid` and that the Cloud Run token service forwards the `id_token`. Without it Firebase sign-in will be skipped.
+- **Permission denied:** Confirm the published Firestore rules match `firebase/firestore.rules` and that the Firebase project has Google sign-in enabled under **Authentication → Sign-in method**.
