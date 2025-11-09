@@ -370,20 +370,19 @@ Implement encrypted local storage for sensitive user profile data using IndexedD
 **Dependencies:** JZ-007
 
 **Description:**  
-Use LLM to intelligently extract structured data from any resume format.
+Spin up the **Intake Agent**—a chat-first conversational experience that collects missing profile data, ingests resumes, and writes structured results into the vault via GPT-4 powered extraction.
 
 **Acceptance Criteria:**
-- [ ] File upload UI (drag & drop + file picker)
-- [ ] Support PDF and DOCX formats
-- [ ] Extract text from resume (pdf.js, mammoth.js)
-- [ ] **Use OpenAI GPT-4 for structured extraction**
-- [ ] JSON schema response (ProfileVault structure)
-- [ ] Extract: name, email, phone, work history, education, **skills, technologies**
-- [ ] Handle any resume format (chronological, functional, creative)
-- [ ] Show AI-extracted preview with confidence
-- [ ] Allow manual editing of AI results
-- [ ] Resume stored as encrypted blob
-- [ ] Error handling for unparseable resumes
+- [ ] Chat conversation drives onboarding (no standalone form). Intake Agent can initiate follow-up questions inside the same thread.
+- [ ] Single composer (text + attachment icon) supports drag & drop / file picker for PDF & DOCX resumes; attachment shows as capsule preview before send.
+- [ ] Conversation timeline renders full history with scrollback, inline attachment tiles, and agent/assistant status bubbles.
+- [ ] Streaming status indicators mirror Sider.ai: e.g. “Parsing resume…”, “Summarizing experience…”, “Encrypting & syncing…”.
+- [ ] User replies like “later” or “skip” defer the task; Intake Agent acknowledges and queues a reminder without writing to the vault.
+- [ ] Resume text extraction pipeline (pdf.js, mammoth.js) feeds GPT-4o with JSON schema instructions (ProfileVault structure + skills/technologies).
+- [ ] Model response persisted to vault via existing encryption layer; raw resume stored as encrypted blob.
+- [ ] AI output preview rendered in chat with confidence notes and quick “apply updates” / “edit manually” controls.
+- [ ] Prompt templates, field mappings, and follow-up rules are data-driven (configurable JSON/Zod schemas)—no hardcoded question strings in components.
+- [ ] Robust error handling and recovery prompts for unreadable files or model failures.
 
 **AI Implementation:**
 ```typescript

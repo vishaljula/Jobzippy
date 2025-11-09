@@ -9,9 +9,12 @@ import {
 import {
   clearStore,
   getEncryptedValue,
+  getMetaValue,
   getSalt as readSalt,
+  removeMetaValue,
   resetVault,
   setEncryptedValue,
+  setMetaValue,
   setSalt as writeSalt,
 } from './db';
 import { EXPORT_VERSION, VAULT_STORES } from './constants';
@@ -24,6 +27,8 @@ const DATA_STORES: VaultDataStoreKey[] = [
   VAULT_STORES.history,
   VAULT_STORES.policies,
 ];
+
+const RESUME_META_KEY = 'resume_blob';
 
 class VaultService {
   private async getSalt(allowCreate: boolean): Promise<Uint8Array | null> {
@@ -98,6 +103,40 @@ class VaultService {
 
   async clearAll(): Promise<void> {
     await resetVault();
+  }
+
+  async saveResume(data: ArrayBuffer, password: string): Promise<void> {
+    const keyArtifacts = await this.getKey(password, true);
+    if (!keyArtifacts) {
+      throw new Error('Unable to initialize vault.');
+    }
+
+    const base64 = encodeBase64(data);
+    const payload = await encryptString(keyArtifacts.key, base64);
+    await setMetaValue(RESUME_META_KEY, JSON.stringify(payload));
+  }
+
+  async loadResume(password: string): Promise<ArrayBuffer | null> {
+    const persisted = await getMetaValue(RESUME_META_KEY);
+    if (!persisted) {
+      return null;
+    }
+
+    const keyArtifacts = await this.getKey(password, false);
+    if (!keyArtifacts) {
+      throw new Error('Vault not initialized.');
+    }
+
+    const parsed = JSON.parse(persisted) as EncryptedPayload;
+    const base64 = await decryptToString(keyArtifacts.key, parsed);
+    const bytes = decodeBase64(base64);
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    return copy.buffer;
+  }
+
+  async clearResume(): Promise<void> {
+    await removeMetaValue(RESUME_META_KEY);
   }
 
   async export(password: string): Promise<VaultExportEnvelope> {

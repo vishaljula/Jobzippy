@@ -66,6 +66,73 @@ export interface ProfileVault {
   policies: Policies;
 }
 
+// Intake Agent & Conversation Types
+export type IntakeRole = 'assistant' | 'user' | 'system';
+
+export type IntakeMessageKind = 'text' | 'status' | 'preview' | 'notice';
+
+export type IntakeStatusState = 'pending' | 'in_progress' | 'completed' | 'error';
+
+export interface IntakeStatusStep {
+  id: string;
+  label: string;
+  description?: string;
+  state: IntakeStatusState;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface IntakeAttachment {
+  id: string;
+  kind: 'file';
+  name: string;
+  size: number;
+  mimeType: string;
+  previewUrl?: string;
+}
+
+export interface IntakePreviewField {
+  id: string;
+  label: string;
+  value: string | string[];
+  highlight?: boolean;
+}
+
+export interface IntakePreviewSection {
+  id: string;
+  title: string;
+  confidence: number;
+  fields: IntakePreviewField[];
+}
+
+export interface IntakeMessage {
+  id: string;
+  role: IntakeRole;
+  kind: IntakeMessageKind;
+  content: string;
+  createdAt: string;
+  attachments?: IntakeAttachment[];
+  statusSteps?: IntakeStatusStep[];
+  previewSections?: IntakePreviewSection[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface IntakeDeferredTask {
+  id: string;
+  prompt: string;
+  createdAt: string;
+  reason?: string;
+  resolved?: boolean;
+}
+
+export interface IntakeConversationSnapshot {
+  version: number;
+  messages: IntakeMessage[];
+  deferredTasks: IntakeDeferredTask[];
+  lastUpdated: string;
+}
+
 // Job Application Types
 export type ApplicationStatus =
   | 'applied'
@@ -142,6 +209,8 @@ export interface ExtensionStorage {
   sheetId?: string;
   userId?: string;
   lastSync?: string;
+  intakeConversation?: IntakeConversationSnapshot;
+  intakeDraft?: ProfileVault;
 }
 
 // Job Filters

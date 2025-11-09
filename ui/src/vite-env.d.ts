@@ -10,3 +10,18 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare module '*.worker.min.mjs?url' {
+  const src: string;
+  export default src;
+}
+
+declare module '*.mjs?url' {
+  const src: string;
+  export default src;
+}
+
+declare module '*.js?url' {
+  const src: string;
+  export default src;
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import App from './App';
 import { isAuthenticated, getUserInfo } from '@/lib/oauth/google-auth';
@@ -58,19 +59,16 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Jobzippy')).toBeInTheDocument();
-      expect(screen.getByText('Your AI Job Assistant')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /preview layout/i })).toBeInTheDocument();
       expect(screen.getByText('Not signed in')).toBeInTheDocument();
     });
   });
 
-  it('renders all feature cards', async () => {
+  it('renders hero card in default view', async () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByText('Auto-Apply')).toBeInTheDocument();
-      expect(screen.getByText('Track Applications')).toBeInTheDocument();
-      expect(screen.getByText('Daily Updates')).toBeInTheDocument();
-      expect(screen.getByText('Privacy First')).toBeInTheDocument();
+      expect(screen.getByText(/welcome to jobzippy/i)).toBeInTheDocument();
     });
   });
 
@@ -90,7 +88,7 @@ describe('App', () => {
     });
   });
 
-  it('opens onboarding wizard for first-time authenticated user', async () => {
+  it('lets a first-time authenticated user launch onboarding from the CTA', async () => {
     const isAuthenticatedMock = vi.mocked(isAuthenticated);
     const getUserInfoMock = vi.mocked(getUserInfo);
 
@@ -109,7 +107,14 @@ describe('App', () => {
       onboardingStatus: undefined,
     });
 
+    const user = userEvent.setup();
     renderApp();
+
+    const ctaButton = await screen.findByRole('button', { name: /complete setup/i });
+    expect(ctaButton).toBeInTheDocument();
+    expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument();
+
+    await user.click(ctaButton);
 
     await waitFor(() => {
       expect(screen.getByText(/step 1 of/i)).toBeInTheDocument();
