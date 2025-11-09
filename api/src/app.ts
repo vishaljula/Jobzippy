@@ -13,7 +13,11 @@ const allowedOrigins = config.security.allowedOrigins;
 const isProduction = process.env.NODE_ENV === 'production';
 
 function matchesAllowedOrigin(origin: string, allowed: string): boolean {
-  if (allowed === '*' || allowed === origin) {
+  if (allowed === '*') {
+    return !isProduction;
+  }
+
+  if (allowed === origin) {
     return true;
   }
 
