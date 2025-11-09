@@ -17,8 +17,13 @@ function matchesAllowedOrigin(origin: string, allowed: string): boolean {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.length === 0) {
-        callback(null, origin ?? true);
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.length === 0) {
+        callback(new Error('CORS not configured'));
         return;
       }
 
