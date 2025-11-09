@@ -22,7 +22,6 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
-import { NewLayoutPreview } from './NewLayoutPreview';
 import { LayoutShell } from './LayoutShell';
 import { useIntakeAgent } from '@/lib/intake';
 import type {
@@ -50,7 +49,6 @@ function App() {
   } = useOnboarding(isAuthenticated);
   const [isLoading, setIsLoading] = useState(true);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [composerValue, setComposerValue] = useState('');
   const [queuedFile, setQueuedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -166,10 +164,6 @@ function App() {
       handleRemoveAttachment();
     }
   };
-
-  if (showPreview) {
-    return <NewLayoutPreview onExit={() => setShowPreview(false)} />;
-  }
 
   if (appLoading) {
     return (
@@ -378,14 +372,6 @@ function App() {
         statusLabel={statusLabel}
         headerActions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden text-xs md:inline-flex"
-              onClick={() => setShowPreview(true)}
-            >
-              Preview layout
-            </Button>
             {isAuthenticated && (
               <Button
                 variant="ghost"
