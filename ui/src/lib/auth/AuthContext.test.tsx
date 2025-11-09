@@ -8,6 +8,18 @@ vi.mock('../oauth/google-auth', () => ({
   logout: vi.fn(),
   isAuthenticated: vi.fn().mockResolvedValue(false),
   getUserInfo: vi.fn().mockResolvedValue(null),
+  getStoredTokens: vi.fn().mockResolvedValue({
+    access_token: 'mock-access',
+    expires_in: 3600,
+    token_type: 'Bearer',
+    scope: '',
+    id_token: 'mock-id',
+  }),
+}));
+
+vi.mock('../firebase/session', () => ({
+  connectFirebaseAuth: vi.fn().mockResolvedValue(undefined),
+  disconnectFirebaseAuth: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Test component that uses the hook

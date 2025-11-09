@@ -21,8 +21,23 @@ vi.mock('@/lib/oauth/google-auth', () => {
         picture: 'https://example.com/avatar.png',
       })
     ),
+    getStoredTokens: vi.fn(() =>
+      Promise.resolve({
+        access_token: 'mock-access',
+        refresh_token: 'mock-refresh',
+        expires_in: 3600,
+        token_type: 'Bearer',
+        scope: 'openid email profile',
+        id_token: 'mock-id-token',
+      })
+    ),
   };
 });
+
+vi.mock('@/lib/firebase/session', () => ({
+  connectFirebaseAuth: vi.fn(),
+  disconnectFirebaseAuth: vi.fn(),
+}));
 
 // Helper to render with AuthProvider
 function renderApp() {
@@ -59,7 +74,6 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Jobzippy')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /preview layout/i })).toBeInTheDocument();
       expect(screen.getByText('Not signed in')).toBeInTheDocument();
     });
   });

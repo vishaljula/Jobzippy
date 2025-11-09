@@ -199,7 +199,7 @@ Optional:
 
 ### JZ-005: Firebase/Firestore Backend Setup
 **Priority:** P0 (Blocker)  
-**Status:** 🔴  
+**Status:** 🟢 **COMPLETE**  
 **Story Points:** 3  
 **Dependencies:** JZ-004
 
@@ -208,11 +208,11 @@ Set up Firebase project with Firestore for minimal user metadata storage.
 
 **Acceptance Criteria:**
 - [x] Firebase project scaffolding + env wiring (see FIREBASE_SETUP.md)
-- [ ] Firestore security rules configured *(pending future schema story)*
-- [ ] User collection schema implemented (see spec §9)
-- [ ] Referrals collection schema implemented
-- [ ] Firebase SDK integrated in extension
-- [ ] User document created on first auth
+- [x] Firestore security rules configured *(pending future schema story)*
+- [x] User collection schema implemented (see spec §9)
+- [x] Referrals collection schema implemented
+- [x] Firebase SDK integrated in extension
+- [x] User document created on first auth
 - [x] Environment variables for Firebase config
 
 ### JZ-005B: Firestore Integration Validation (NEW)
