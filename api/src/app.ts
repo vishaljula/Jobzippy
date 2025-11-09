@@ -10,26 +10,8 @@ import { GoogleOAuthError } from './services/google-oauth.js';
 const app = express();
 
 const allowedOrigins = config.security.allowedOrigins;
-const isProduction = process.env.NODE_ENV === 'production';
-
 function matchesAllowedOrigin(origin: string, allowed: string): boolean {
-  if (allowed === '*') {
-    return !isProduction;
-  }
-
-  if (allowed === origin) {
-    return true;
-  }
-
-  if (allowed.endsWith('*')) {
-    if (isProduction) {
-      return false;
-    }
-    const prefix = allowed.slice(0, -1);
-    return origin.startsWith(prefix);
-  }
-
-  return false;
+  return allowed === origin;
 }
 
 app.use(
