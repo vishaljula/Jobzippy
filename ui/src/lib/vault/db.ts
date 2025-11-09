@@ -76,3 +76,18 @@ export async function setSalt(base64Salt: string): Promise<void> {
   const db = await dbPromise;
   await db.put(VAULT_STORES.meta, base64Salt, SALT_KEY);
 }
+
+export async function setMetaValue(key: string, value: string): Promise<void> {
+  const db = await dbPromise;
+  await db.put(VAULT_STORES.meta, value, key);
+}
+
+export async function getMetaValue(key: string): Promise<string | undefined> {
+  const db = await dbPromise;
+  return db.get(VAULT_STORES.meta, key);
+}
+
+export async function removeMetaValue(key: string): Promise<void> {
+  const db = await dbPromise;
+  await db.delete(VAULT_STORES.meta, key);
+}

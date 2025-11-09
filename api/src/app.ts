@@ -10,11 +10,28 @@ import { GoogleOAuthError } from './services/google-oauth.js';
 const app = express();
 
 const allowedOrigins = config.security.allowedOrigins;
+function matchesAllowedOrigin(origin: string, allowed: string): boolean {
+  return allowed === origin;
+}
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.length === 0) {
+        callback(new Error('CORS not configured'));
+        return;
+      }
+
+      const isAllowed = allowedOrigins.some((allowed) =>
+        origin ? matchesAllowedOrigin(origin, allowed) : false,
+      );
+
+      if (isAllowed) {
         callback(null, origin ?? true);
         return;
       }
