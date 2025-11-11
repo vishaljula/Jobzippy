@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
 import { config } from './config.js';
+import { intakeRouter } from './routes/intake.js';
 import { oauthRouter } from './routes/oauth.js';
 import { GoogleOAuthError } from './services/google-oauth.js';
 
@@ -48,6 +49,7 @@ app.get('/healthz', (_req: Request, res: Response) => {
 });
 
 app.use('/oauth/google', oauthRouter);
+app.use('/intake', intakeRouter);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

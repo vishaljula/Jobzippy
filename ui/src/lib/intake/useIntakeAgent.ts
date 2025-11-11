@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import { intakeAgentConfig, INTAKE_STATUS_STEPS } from './config';
-import { processResumeWithAgent } from './service';
-import type { IntakeProgressUpdate } from './types';
+import { persistIntakeResult, processResumeWithAgent } from './service';
+import type { IntakeProcessResult, IntakeProgressUpdate } from './types';
 import {
   type IntakeAttachment,
   type IntakeConversationSnapshot,
@@ -12,7 +12,7 @@ import {
   type ProfileVault,
   type UserInfo,
 } from '@/lib/types';
-import { getStorage, setStorage } from '@/lib/storage';
+import { getStorage, removeStorage, setStorage } from '@/lib/storage';
 
 interface UseIntakeAgentOptions {
   enabled: boolean;
@@ -127,6 +127,11 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<IntakeAttachment | null>(null);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
+  const [activeDraft, setActiveDraft] = useState<{
+    result: IntakeProcessResult;
+    statusEmitter: (update: IntakeProgressUpdate) => void;
+    messageId: string;
+  } | null>(null);
 
   const vaultPassword = useMemo(() => deriveVaultPassword(user), [user]);
 
@@ -230,6 +235,7 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
   const handleResumeProcessing = useCallback(
     async (file: File) => {
       setIsProcessing(true);
+      setActiveDraft(null);
 
       const statusMessage: IntakeMessage = {
         id: uuid(),
@@ -244,7 +250,19 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
       const emit = handleProgressUpdate(statusMessage.id);
 
       try {
-        const result = await processResumeWithAgent(file, vaultPassword, emit);
+        const conversationPayload = state.messages
+          .filter((message) => message.kind === 'text')
+          .slice(-10)
+          .map((message) => ({
+            role: message.role,
+            content: message.content,
+          }));
+
+        const result = await processResumeWithAgent(file, {
+          password: vaultPassword,
+          emit,
+          conversation: conversationPayload,
+        });
 
         const previewMessage: IntakeMessage = {
           id: uuid(),
@@ -269,6 +287,11 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
         await persistVaultDraft(profileVault);
 
         appendMessage(previewMessage);
+        setActiveDraft({
+          result,
+          statusEmitter: emit,
+          messageId: previewMessage.id,
+        });
 
         if (result.llm.followUpPrompt) {
           const followUp: IntakeMessage = {
@@ -295,12 +318,13 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
           createdAt: new Date().toISOString(),
         };
         appendMessage(message);
+        setActiveDraft(null);
       } finally {
         setIsProcessing(false);
         setPendingAttachment(null);
       }
     },
-    [appendMessage, handleProgressUpdate, vaultPassword]
+    [appendMessage, handleProgressUpdate, state.messages, vaultPassword]
   );
 
   const sendMessage = useCallback(
@@ -338,7 +362,7 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
         return;
       }
 
-      if (['later', 'not now', 'maybe later'].includes(trimmed.toLowerCase())) {
+      if (['later', 'not now', 'maybe later', 'skip', 'not yet'].includes(trimmed.toLowerCase())) {
         handleDeferredLater();
         return;
       }
@@ -355,6 +379,70 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
     [appendMessage, handleDeferredLater, handleResumeProcessing]
   );
 
+  const applyDraft = useCallback(async () => {
+    if (!activeDraft) return;
+    setIsProcessing(true);
+
+    // Show user action in chat history
+    appendMessage({
+      id: uuid(),
+      role: 'user',
+      kind: 'text',
+      content: 'Apply updates',
+      createdAt: new Date().toISOString(),
+    });
+
+    try {
+      await persistIntakeResult(activeDraft.result, vaultPassword, activeDraft.statusEmitter);
+      await removeStorage('intakeDraft');
+      appendMessage({
+        id: uuid(),
+        role: 'assistant',
+        kind: 'notice',
+        content: intakeAgentConfig.followUps.confirmApply,
+        createdAt: new Date().toISOString(),
+      });
+      setActiveDraft(null);
+      setPendingFollowUp(null);
+    } catch (error) {
+      appendMessage({
+        id: uuid(),
+        role: 'assistant',
+        kind: 'notice',
+        content:
+          error instanceof Error
+            ? `${intakeAgentConfig.followUps.resumeFailed}\n${error.message}`
+            : intakeAgentConfig.followUps.resumeFailed,
+        createdAt: new Date().toISOString(),
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [activeDraft, appendMessage, vaultPassword]);
+
+  const requestManualEdit = useCallback(() => {
+    if (!activeDraft) return;
+
+    // Show user action in chat history
+    appendMessage({
+      id: uuid(),
+      role: 'user',
+      kind: 'text',
+      content: 'Edit manually',
+      createdAt: new Date().toISOString(),
+    });
+
+    appendMessage({
+      id: uuid(),
+      role: 'assistant',
+      kind: 'notice',
+      content: intakeAgentConfig.followUps.editManual,
+      createdAt: new Date().toISOString(),
+    });
+    setActiveDraft(null);
+    setPendingFollowUp(null);
+  }, [activeDraft, appendMessage]);
+
   const resolveDeferredTask = useCallback((id: string) => {
     dispatch({ type: 'resolve_deferred', id });
   }, []);
@@ -369,5 +457,8 @@ export function useIntakeAgent({ enabled, user }: UseIntakeAgentOptions) {
     sendMessage,
     resolveDeferredTask,
     pendingFollowUp,
+    applyDraft,
+    requestManualEdit,
+    activeDraftMessageId: activeDraft?.messageId ?? null,
   } as const;
 }

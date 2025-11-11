@@ -107,6 +107,9 @@ function App() {
     pendingAttachment,
     setPendingAttachment,
     sendMessage,
+    applyDraft,
+    requestManualEdit,
+    activeDraftMessageId,
   } = useIntakeAgent({ enabled: isAuthenticated, user });
 
   const sortedMessages = useMemo(
@@ -238,7 +241,19 @@ function App() {
     return (
       <div className="space-y-5">
         {sortedMessages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onApplyPreview={
+              activeDraftMessageId === message.id
+                ? () => {
+                    void applyDraft();
+                  }
+                : undefined
+            }
+            onEditPreview={activeDraftMessageId === message.id ? requestManualEdit : undefined}
+            isPreviewProcessing={isProcessing && activeDraftMessageId === message.id}
+          />
         ))}
         <div ref={messagesEndRef} />
       </div>
@@ -499,33 +514,51 @@ function StatusMessage({ message }: { message: IntakeMessage }) {
 }
 
 function PreviewSection({ section }: { section: IntakePreviewSection }) {
+  // Clamp confidence to 0-1 range in case API returns bad values
+  const normalizedConfidence = Math.min(1, Math.max(0, section.confidence));
+  const confidencePercent = Math.round(normalizedConfidence * 100);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-sm font-semibold text-slate-700">{section.title}</h4>
-          <p className="text-xs text-slate-400">
-            Confidence {Math.round(section.confidence * 100)}%
-          </p>
+          <p className="text-xs text-slate-400">Confidence {confidencePercent}%</p>
         </div>
       </div>
       <div className="mt-3 space-y-2">
-        {section.fields.map((field) => (
-          <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
-            <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
-            {Array.isArray(field.value) ? (
-              <p className="mt-1 text-sm text-slate-700">{field.value.join(', ')}</p>
-            ) : (
-              <p className="mt-1 text-sm text-slate-700">{field.value}</p>
-            )}
-          </div>
-        ))}
+        {section.fields.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">No data extracted for this section</p>
+        ) : (
+          section.fields.map((field) => (
+            <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
+              {Array.isArray(field.value) ? (
+                <p className="mt-1 text-sm text-slate-700">
+                  {field.value.length > 0 ? field.value.join(', ') : '(empty)'}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-700">{field.value || '(empty)'}</p>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function PreviewMessage({ message }: { message: IntakeMessage }) {
+function PreviewMessage({
+  message,
+  onApply,
+  onEdit,
+  isApplying,
+}: {
+  message: IntakeMessage;
+  onApply?: () => void;
+  onEdit?: () => void;
+  isApplying?: boolean;
+}) {
   const sections = message.previewSections ?? [];
   const metadata = message.metadata ?? {};
 
@@ -548,11 +581,42 @@ function PreviewMessage({ message }: { message: IntakeMessage }) {
           <PreviewSection key={section.id} section={section} />
         ))}
       </div>
+      {(onApply || onEdit) && (
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+            onClick={onEdit}
+            disabled={!onEdit}
+          >
+            Edit manually
+          </Button>
+          <Button
+            size="sm"
+            className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
+            onClick={onApply}
+            disabled={!onApply || isApplying}
+          >
+            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-function ChatMessage({ message }: { message: IntakeMessage }) {
+function ChatMessage({
+  message,
+  onApplyPreview,
+  onEditPreview,
+  isPreviewProcessing,
+}: {
+  message: IntakeMessage;
+  onApplyPreview?: () => void;
+  onEditPreview?: () => void;
+  isPreviewProcessing?: boolean;
+}) {
   const isAssistant = message.role !== 'user';
   const alignment = isAssistant ? 'items-start' : 'items-end';
   const bubbleClass = isAssistant
@@ -573,7 +637,12 @@ function ChatMessage({ message }: { message: IntakeMessage }) {
   if (message.kind === 'preview') {
     return (
       <div className="flex flex-col items-start space-y-2">
-        <PreviewMessage message={message} />
+        <PreviewMessage
+          message={message}
+          onApply={onApplyPreview}
+          onEdit={onEditPreview}
+          isApplying={isPreviewProcessing}
+        />
         <span className="text-[10px] uppercase tracking-wide text-slate-300">
           {formatTimestamp(message.createdAt)}
         </span>

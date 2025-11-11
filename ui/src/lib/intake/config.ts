@@ -12,11 +12,13 @@ export const intakeAgentConfig: IntakeAgentConfig = {
     'Never fabricate details. When uncertain, clearly state what remains missing.',
   ].join(' '),
   followUps: {
-    confirmApply: 'Shall I sync these updates to your secure vault now?',
+    confirmApply:
+      'Updates saved to your secure vault! You can continue chatting or upload another document.',
     deferAck: "No problem—I'll remind you later when you're ready.",
-    resumeReceived: 'Thanks! I’m reviewing your resume now.',
+    resumeReceived: "Thanks! I'm reviewing your resume now.",
     resumeFailed:
       'I ran into an issue reading that file. Could you try a different format (PDF or DOCX)?',
+    editManual: 'Draft saved. Feel free to make manual edits from your vault whenever you like.',
   },
   prompts: {
     welcome:
@@ -25,6 +27,36 @@ export const intakeAgentConfig: IntakeAgentConfig = {
       'Whenever you’re ready, attach a PDF or DOCX resume using the paperclip icon. You can also type questions below.',
     deferLater: "Okay, let's circle back when you're ready to sync this information.",
   },
+  fieldMappings: [
+    { path: 'profile.identity.first_name', label: 'First name', section: 'profile' },
+    { path: 'profile.identity.last_name', label: 'Last name', section: 'profile' },
+    { path: 'profile.identity.email', label: 'Email', section: 'profile' },
+    { path: 'profile.identity.phone', label: 'Phone', section: 'profile' },
+    { path: 'profile.identity.address', label: 'Address', section: 'profile' },
+    { path: 'profile.work_auth.visa_type', label: 'Visa type', section: 'profile' },
+    {
+      path: 'profile.work_auth.sponsorship_required',
+      label: 'Sponsorship required',
+      section: 'profile',
+    },
+    { path: 'profile.preferences.remote', label: 'Remote preference', section: 'profile' },
+    { path: 'profile.preferences.locations', label: 'Preferred locations', section: 'profile' },
+    { path: 'profile.preferences.salary_min', label: 'Minimum salary', section: 'profile' },
+    { path: 'profile.preferences.start_date', label: 'Start date', section: 'profile' },
+    { path: 'compliance.veteran_status', label: 'Veteran status', section: 'compliance' },
+    { path: 'compliance.disability_status', label: 'Disability status', section: 'compliance' },
+    {
+      path: 'compliance.criminal_history_policy',
+      label: 'Criminal history policy',
+      section: 'compliance',
+    },
+    { path: 'history.employment', label: 'Employment history', section: 'history' },
+    { path: 'history.education', label: 'Education history', section: 'history' },
+    { path: 'policies.eeo', label: 'EEO policy', section: 'policies' },
+    { path: 'policies.salary', label: 'Salary disclosure policy', section: 'policies' },
+    { path: 'policies.relocation', label: 'Relocation policy', section: 'policies' },
+    { path: 'policies.work_shift', label: 'Work shift policy', section: 'policies' },
+  ],
 };
 
 export const INTAKE_STATUS_STEPS = {
@@ -41,7 +73,7 @@ export const INTAKE_STATUS_STEPS = {
   analyze: {
     id: 'analyze',
     label: 'Summarizing experience',
-    description: 'Running GPT-4o for structured data',
+    description: 'Running Claude AI for structured data',
   },
   persist: {
     id: 'persist',

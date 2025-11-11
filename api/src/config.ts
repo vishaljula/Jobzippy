@@ -15,6 +15,8 @@ if (process.env.NODE_ENV !== 'test') {
   }
 }
 
+const isTestEnvironment = process.env.NODE_ENV === 'test';
+
 const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: z.string().min(1, 'GOOGLE_OAUTH_CLIENT_ID is required'),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1, 'GOOGLE_OAUTH_CLIENT_SECRET is required'),
@@ -28,15 +30,21 @@ const envSchema = z.object({
     .optional()
     .transform((value) => (value ? Number.parseInt(value, 10) : 8787))
     .pipe(z.number().int().positive()),
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.parse({
-  GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
-  GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+  GOOGLE_OAUTH_CLIENT_ID:
+    process.env.GOOGLE_OAUTH_CLIENT_ID ?? (isTestEnvironment ? 'test-client' : undefined),
+  GOOGLE_OAUTH_CLIENT_SECRET:
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? (isTestEnvironment ? 'test-secret' : undefined),
   GOOGLE_OAUTH_TOKEN_ENDPOINT:
     process.env.GOOGLE_OAUTH_TOKEN_ENDPOINT ?? 'https://oauth2.googleapis.com/token',
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
-  PORT: (process.env.PORT ?? process.env.API_PORT ?? '8787'),
+  PORT: process.env.PORT ?? process.env.API_PORT ?? '8787',
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
 });
 
 const allowedOrigins = parsed.ALLOWED_ORIGINS
@@ -54,6 +62,12 @@ export const config = {
   },
   security: {
     allowedOrigins,
+  },
+  openai: {
+    apiKey: parsed.OPENAI_API_KEY,
+  },
+  anthropic: {
+    apiKey: parsed.ANTHROPIC_API_KEY,
   },
 } as const;
 

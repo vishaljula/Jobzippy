@@ -23,7 +23,9 @@ function detectLanguage(text: string): string | undefined {
 
 async function extractPdf(file: File): Promise<ResumeExtractionResult> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await getDocument({ data: arrayBuffer }).promise;
+  // Clone the buffer to preserve original for vault storage
+  const clonedForPdfJs = arrayBuffer.slice(0);
+  const pdf = await getDocument({ data: clonedForPdfJs }).promise;
 
   let text = '';
   for (let i = 1; i <= pdf.numPages; i += 1) {
@@ -52,7 +54,9 @@ async function extractPdf(file: File): Promise<ResumeExtractionResult> {
 
 async function extractDocx(file: File): Promise<ResumeExtractionResult> {
   const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
+  // Clone the ArrayBuffer before passing to mammoth to prevent detachment
+  const clonedBuffer = arrayBuffer.slice(0);
+  const result = await mammoth.extractRawText({ arrayBuffer: clonedBuffer });
 
   return {
     text: result.value.trim(),
