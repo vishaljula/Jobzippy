@@ -331,6 +331,30 @@ Notes:
 
 ---
 
+### JZ-005B: Google Secret Manager for Cloud Run (NEW)
+**Priority:** P0 (Blocker)  
+**Status:** 🔴  
+**Story Points:** 3  
+**Dependencies:** JZ-005A
+
+**Description:**  
+Create and manage production secrets in Google Secret Manager (GSM) and wire them into Cloud Run as environment variables for the OAuth token service and intake agent integrations.
+
+**Acceptance Criteria:**
+- [ ] Secrets created in GSM (staging + prod):
+  - `GOOGLE_OAUTH_CLIENT_SECRET`
+  - `OPENAI_API_KEY`
+  - `ANTHROPIC_API_KEY`
+- [ ] Grant Cloud Run runtime service account `roles/secretmanager.secretAccessor` for the above secrets
+- [ ] Cloud Run service configured to mount secrets as environment variables (deploy workflow or infra script)
+- [ ] CI/CD uses environment-specific secrets (no secrets in repo, no plaintext in workflows)
+- [ ] Rotation plan documented (who, how, cadence); emergency rotation steps included
+- [ ] `README.md` / `OAUTH_SETUP.md` updated with `gcloud` commands to create, grant, version, and attach secrets
+- [ ] Local development remains `.env`-driven; `.env` stays gitignored
+- [ ] Validation: successful `/oauth/google/exchange` with real client secret from GSM (staging)
+
+---
+
 ## Epic 3: Profile Management (IndexedDB Vault)
 
 ### JZ-007: IndexedDB Profile Vault Setup
