@@ -306,7 +306,7 @@ All your data stays in YOUR Google account.
 
 ### JZ-005A: Cloud Run OAuth Token Service (NEW)
 **Priority:** P0 (Blocker)  
-**Status:** 🔴  
+**Status:** 🟢 COMPLETE  
 **Story Points:** 5  
 **Dependencies:** JZ-004
 
@@ -314,20 +314,23 @@ All your data stays in YOUR Google account.
 Stand up a secure Node.js/Express microservice on Google Cloud Run to exchange Google OAuth authorization codes for tokens using the client secret.
 
 **Acceptance Criteria:**
-- [ ] Repository reorganized into `ui/` and `api/` npm workspaces with shared root tooling
-- [ ] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
-- [ ] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
-- [ ] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`
-- [ ] Validates inputs, handles Google error responses, and returns tokens (access, refresh, expires_in)
-- [ ] Secrets stored in Google Secret Manager and injected into Cloud Run environment variables
-- [ ] `GET /healthz` endpoint for monitoring/uptime checks
-- [ ] CORS configured to allow requests from the Chrome extension only
-- [ ] Unit tests for success and failure paths (mock Google endpoint)
-- [ ] Dockerfile + GitHub Actions workflow to build/test/deploy to Cloud Run (staging + prod)
-- [ ] Extension updated to call Cloud Run endpoint instead of Google token endpoint directly
-- [ ] Documentation updates (`OAUTH_SETUP.md`, `README`) covering backend setup, env vars, deployment, sample curl request
+- [x] Repository reorganized into `ui/` and `api/` npm workspaces with shared root tooling
+- [x] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
+- [x] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
+- [x] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`
+- [x] Validates inputs, handles Google error responses, and returns tokens (access, refresh, expires_in)
+- [x] `GET /healthz` endpoint for monitoring/uptime checks
+- [x] CORS configured to allow requests from the Chrome extension only (strict allowlist; no wildcard in prod)
+- [x] Unit tests for success and failure paths (mocked)
+- [x] Dockerfile + GitHub Actions workflow to build/test/deploy to Cloud Run
+- [x] Extension updated to call Cloud Run endpoint instead of Google token endpoint directly
+- [x] Documentation updates (`OAUTH_SETUP.md`, `README`) covering backend setup, env vars, deployment, sample curl request
+
+Notes:
+- Production deployments should source secrets (client secret) via Google Secret Manager; local dev uses `.env` with dotenv.
 
 ---
+
 
 ## Epic 3: Profile Management (IndexedDB Vault)
 
@@ -365,7 +368,7 @@ Implement encrypted local storage for sensitive user profile data using IndexedD
 
 ### JZ-008: AI-Powered Resume Parser (AGENTIC)
 **Priority:** P0  
-**Status:** 🔴  
+**Status:** 🟢 COMPLETE  
 **Story Points:** 8  
 **Dependencies:** JZ-007
 
@@ -378,27 +381,32 @@ Spin up the **Intake Agent**—a chat-first conversational experience that colle
 - [x] Conversation timeline renders full history with scrollback, inline attachment tiles, and agent/assistant status bubbles.
 - [x] Streaming status indicators mirror Sider.ai: e.g. “Parsing resume…”, “Summarizing experience…”, “Encrypting & syncing…”.
 - [x] User replies like “later” or “skip” defer the task; Intake Agent acknowledges and queues a reminder without writing to the vault.
-- [x] Resume text extraction pipeline (pdf.js, mammoth.js) feeds GPT-4o with JSON schema instructions (ProfileVault structure + skills/technologies).
+- [x] Resume text extraction pipeline (pdf.js, mammoth.js) feeds Claude 3 Haiku with JSON schema instructions (ProfileVault structure + skills/technologies); falls back to OpenAI GPT‑4o‑mini, then heuristic.
 - [x] Model response persisted to vault via existing encryption layer; raw resume stored as encrypted blob.
-- [x] AI output preview rendered in chat with confidence notes and quick “apply updates” / “edit manually” controls.
+- [x] AI output preview rendered in chat with confidence notes; confidence clamped to 0–1; empty sections/fields display helpful hints; quick “Apply updates” / “Edit manually” controls.
+- [x] User actions (“Apply updates”, “Edit manually”) are recorded as user messages in chat history.
 - [x] Prompt templates, field mappings, and follow-up rules are data-driven (configurable JSON/Zod schemas)—no hardcoded question strings in components.
 - [x] Robust error handling and recovery prompts for unreadable files or model failures.
 
+**Implementation Notes (MVP1):**
+- Primary model: Anthropic Claude 3 Haiku for structured JSON accuracy; fallback to OpenAI GPT‑4o‑mini; final fallback to local heuristic.
+- API route `POST /intake/parse` orchestrates LLM selection, schema coercion, and logging.
+- IndexedDB writes are sequential to avoid transaction-close errors; resume ArrayBuffer cloned to avoid detachment.
+- CORS tightened; development allows configured origins only.
+
 **AI Implementation:**
 ```typescript
-const extraction = await openai.chat.completions.create({
-  model: "gpt-4o",
-  messages: [{
-    role: "system",
-    content: "Extract structured data from resume. Handle any format."
-  }, {
-    role: "user",
-    content: resumeText
-  }],
-  response_format: { 
-    type: "json_schema",
-    json_schema: ProfileVaultSchema 
-  }
+// From UI → API
+await fetch(`${API_URL}/intake/parse`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    resumeText,
+    resumeMetadata,
+    conversation,
+    knownFields,
+    missingFields
+  })
 });
 ```
 
@@ -1983,6 +1991,30 @@ When user clicks "Edit manually", provide an actual inline editing interface in 
 - Dedicated edit page
 
 **Recommended:** Inline chat form (maintains conversational flow)
+
+---
+
+### JZ-005C: Google Secret Manager for Cloud Run (NEW)
+**Priority:** P0 (Blocker)  
+**Status:** 🔴  
+**Story Points:** 3  
+**Dependencies:** JZ-005A
+
+**Description:**  
+Create and manage production secrets in Google Secret Manager (GSM) and wire them into Cloud Run as environment variables for the OAuth token service and intake agent integrations.
+
+**Acceptance Criteria:**
+- [ ] Secrets created in GSM (staging + prod):
+  - `GOOGLE_OAUTH_CLIENT_SECRET`
+  - `OPENAI_API_KEY`
+  - `ANTHROPIC_API_KEY`
+- [ ] Grant Cloud Run runtime service account `roles/secretmanager.secretAccessor` for the above secrets
+- [ ] Cloud Run service configured to mount secrets as environment variables (deploy workflow or infra script)
+- [ ] CI/CD uses environment-specific secrets (no secrets in repo, no plaintext in workflows)
+- [ ] Rotation plan documented (who, how, cadence); emergency rotation steps included
+- [ ] `README.md` / `OAUTH_SETUP.md` updated with `gcloud` commands to create, grant, version, and attach secrets
+- [ ] Local development remains `.env`-driven; `.env` stays gitignored
+- [ ] Validation: successful `/oauth/google/exchange` with real client secret from GSM (staging)
 
 ---
 
