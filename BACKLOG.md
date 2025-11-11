@@ -365,7 +365,7 @@ Implement encrypted local storage for sensitive user profile data using IndexedD
 
 ### JZ-008: AI-Powered Resume Parser (AGENTIC)
 **Priority:** P0  
-**Status:** 🔴  
+**Status:** 🟢 COMPLETE  
 **Story Points:** 8  
 **Dependencies:** JZ-007
 
@@ -378,27 +378,32 @@ Spin up the **Intake Agent**—a chat-first conversational experience that colle
 - [x] Conversation timeline renders full history with scrollback, inline attachment tiles, and agent/assistant status bubbles.
 - [x] Streaming status indicators mirror Sider.ai: e.g. “Parsing resume…”, “Summarizing experience…”, “Encrypting & syncing…”.
 - [x] User replies like “later” or “skip” defer the task; Intake Agent acknowledges and queues a reminder without writing to the vault.
-- [x] Resume text extraction pipeline (pdf.js, mammoth.js) feeds GPT-4o with JSON schema instructions (ProfileVault structure + skills/technologies).
+- [x] Resume text extraction pipeline (pdf.js, mammoth.js) feeds Claude 3 Haiku with JSON schema instructions (ProfileVault structure + skills/technologies); falls back to OpenAI GPT‑4o‑mini, then heuristic.
 - [x] Model response persisted to vault via existing encryption layer; raw resume stored as encrypted blob.
-- [x] AI output preview rendered in chat with confidence notes and quick “apply updates” / “edit manually” controls.
+- [x] AI output preview rendered in chat with confidence notes; confidence clamped to 0–1; empty sections/fields display helpful hints; quick “Apply updates” / “Edit manually” controls.
+- [x] User actions (“Apply updates”, “Edit manually”) are recorded as user messages in chat history.
 - [x] Prompt templates, field mappings, and follow-up rules are data-driven (configurable JSON/Zod schemas)—no hardcoded question strings in components.
 - [x] Robust error handling and recovery prompts for unreadable files or model failures.
 
+**Implementation Notes (MVP1):**
+- Primary model: Anthropic Claude 3 Haiku for structured JSON accuracy; fallback to OpenAI GPT‑4o‑mini; final fallback to local heuristic.
+- API route `POST /intake/parse` orchestrates LLM selection, schema coercion, and logging.
+- IndexedDB writes are sequential to avoid transaction-close errors; resume ArrayBuffer cloned to avoid detachment.
+- CORS tightened; development allows configured origins only.
+
 **AI Implementation:**
 ```typescript
-const extraction = await openai.chat.completions.create({
-  model: "gpt-4o",
-  messages: [{
-    role: "system",
-    content: "Extract structured data from resume. Handle any format."
-  }, {
-    role: "user",
-    content: resumeText
-  }],
-  response_format: { 
-    type: "json_schema",
-    json_schema: ProfileVaultSchema 
-  }
+// From UI → API
+await fetch(`${API_URL}/intake/parse`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    resumeText,
+    resumeMetadata,
+    conversation,
+    knownFields,
+    missingFields
+  })
 });
 ```
 
