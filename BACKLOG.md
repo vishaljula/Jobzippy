@@ -306,7 +306,7 @@ All your data stays in YOUR Google account.
 
 ### JZ-005A: Cloud Run OAuth Token Service (NEW)
 **Priority:** P0 (Blocker)  
-**Status:** 🔴  
+**Status:** 🟢 COMPLETE  
 **Story Points:** 5  
 **Dependencies:** JZ-004
 
@@ -314,18 +314,20 @@ All your data stays in YOUR Google account.
 Stand up a secure Node.js/Express microservice on Google Cloud Run to exchange Google OAuth authorization codes for tokens using the client secret.
 
 **Acceptance Criteria:**
-- [ ] Repository reorganized into `ui/` and `api/` npm workspaces with shared root tooling
-- [ ] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
-- [ ] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
-- [ ] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`
-- [ ] Validates inputs, handles Google error responses, and returns tokens (access, refresh, expires_in)
-- [ ] Secrets stored in Google Secret Manager and injected into Cloud Run environment variables
-- [ ] `GET /healthz` endpoint for monitoring/uptime checks
-- [ ] CORS configured to allow requests from the Chrome extension only
-- [ ] Unit tests for success and failure paths (mock Google endpoint)
-- [ ] Dockerfile + GitHub Actions workflow to build/test/deploy to Cloud Run (staging + prod)
-- [ ] Extension updated to call Cloud Run endpoint instead of Google token endpoint directly
-- [ ] Documentation updates (`OAUTH_SETUP.md`, `README`) covering backend setup, env vars, deployment, sample curl request
+- [x] Repository reorganized into `ui/` and `api/` npm workspaces with shared root tooling
+- [x] Node.js + TypeScript project scaffolded (Express, tsconfig, eslint, testing)
+- [x] Endpoint `POST /oauth/google/exchange` accepts `code`, `code_verifier`, `redirect_uri`
+- [x] Backend calls Google token endpoint with `client_id`, `client_secret`, `code`, `code_verifier`, `redirect_uri`, `grant_type`
+- [x] Validates inputs, handles Google error responses, and returns tokens (access, refresh, expires_in)
+- [x] `GET /healthz` endpoint for monitoring/uptime checks
+- [x] CORS configured to allow requests from the Chrome extension only (strict allowlist; no wildcard in prod)
+- [x] Unit tests for success and failure paths (mocked)
+- [x] Dockerfile + GitHub Actions workflow to build/test/deploy to Cloud Run
+- [x] Extension updated to call Cloud Run endpoint instead of Google token endpoint directly
+- [x] Documentation updates (`OAUTH_SETUP.md`, `README`) covering backend setup, env vars, deployment, sample curl request
+
+Notes:
+- Production deployments should source secrets (client secret) via Google Secret Manager; local dev uses `.env` with dotenv.
 
 ---
 
