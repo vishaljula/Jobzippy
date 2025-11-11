@@ -265,7 +265,7 @@ Create the initial user onboarding experience with Google sign-in and welcome sc
 
 ### JZ-006A: OAuth Consent Screen Optimization (NEW)
 **Priority:** P1  
-**Status:** 🔴  
+**Status:** 🟢 **COMPLETE**  
 **Story Points:** 2  
 **Dependencies:** JZ-004
 
@@ -373,16 +373,16 @@ Implement encrypted local storage for sensitive user profile data using IndexedD
 Spin up the **Intake Agent**—a chat-first conversational experience that collects missing profile data, ingests resumes, and writes structured results into the vault via GPT-4 powered extraction.
 
 **Acceptance Criteria:**
-- [ ] Chat conversation drives onboarding (no standalone form). Intake Agent can initiate follow-up questions inside the same thread.
-- [ ] Single composer (text + attachment icon) supports drag & drop / file picker for PDF & DOCX resumes; attachment shows as capsule preview before send.
-- [ ] Conversation timeline renders full history with scrollback, inline attachment tiles, and agent/assistant status bubbles.
-- [ ] Streaming status indicators mirror Sider.ai: e.g. “Parsing resume…”, “Summarizing experience…”, “Encrypting & syncing…”.
-- [ ] User replies like “later” or “skip” defer the task; Intake Agent acknowledges and queues a reminder without writing to the vault.
-- [ ] Resume text extraction pipeline (pdf.js, mammoth.js) feeds GPT-4o with JSON schema instructions (ProfileVault structure + skills/technologies).
-- [ ] Model response persisted to vault via existing encryption layer; raw resume stored as encrypted blob.
-- [ ] AI output preview rendered in chat with confidence notes and quick “apply updates” / “edit manually” controls.
-- [ ] Prompt templates, field mappings, and follow-up rules are data-driven (configurable JSON/Zod schemas)—no hardcoded question strings in components.
-- [ ] Robust error handling and recovery prompts for unreadable files or model failures.
+- [x] Chat conversation drives onboarding (no standalone form). Intake Agent can initiate follow-up questions inside the same thread.
+- [x] Single composer (text + attachment icon) supports drag & drop / file picker for PDF & DOCX resumes; attachment shows as capsule preview before send.
+- [x] Conversation timeline renders full history with scrollback, inline attachment tiles, and agent/assistant status bubbles.
+- [x] Streaming status indicators mirror Sider.ai: e.g. “Parsing resume…”, “Summarizing experience…”, “Encrypting & syncing…”.
+- [x] User replies like “later” or “skip” defer the task; Intake Agent acknowledges and queues a reminder without writing to the vault.
+- [x] Resume text extraction pipeline (pdf.js, mammoth.js) feeds GPT-4o with JSON schema instructions (ProfileVault structure + skills/technologies).
+- [x] Model response persisted to vault via existing encryption layer; raw resume stored as encrypted blob.
+- [x] AI output preview rendered in chat with confidence notes and quick “apply updates” / “edit manually” controls.
+- [x] Prompt templates, field mappings, and follow-up rules are data-driven (configurable JSON/Zod schemas)—no hardcoded question strings in components.
+- [x] Robust error handling and recovery prompts for unreadable files or model failures.
 
 **AI Implementation:**
 ```typescript
@@ -1856,6 +1856,133 @@ Visualize apply → reply → interview → offer funnel.
 
 ### Sprint 10+ – Cloud Runner & Post-MVP
 - JZ-033, JZ-034, JZ-049-055
+
+---
+
+## Epic 16: UX Improvements
+
+### JZ-056: Chat "Jump to Latest" Button
+**Priority:** P2  
+**Status:** 🔴  
+**Story Points:** 1  
+**Dependencies:** JZ-008
+
+**Description:**  
+Add a floating "Jump to Latest" button in the chat interface to quickly scroll to the most recent message without manual scrolling.
+
+**Acceptance Criteria:**
+- [ ] Floating button appears when user scrolls up in chat history
+- [ ] Button positioned in bottom-right of chat area (above composer)
+- [ ] Clicking button smoothly scrolls to latest message
+- [ ] Button shows unread message count badge (optional)
+- [ ] Button auto-hides when at bottom of chat
+- [ ] Smooth fade-in/fade-out animation
+- [ ] Accessible (keyboard navigation, ARIA labels)
+- [ ] Mobile-responsive positioning
+
+**UI Design:**
+- Circular button with down arrow icon
+- Gradient background (matching brand colors)
+- Shadow for elevation
+- Pulse animation when new messages arrive
+
+**Technical Implementation:**
+```typescript
+const [showJumpButton, setShowJumpButton] = useState(false);
+
+const handleScroll = (e) => {
+  const { scrollTop, scrollHeight, clientHeight } = e.target;
+  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+  setShowJumpButton(!isNearBottom);
+};
+
+const jumpToLatest = () => {
+  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+};
+```
+
+---
+
+### JZ-057: Improve Resume Preview Layout
+**Priority:** P2  
+**Status:** 🔴  
+**Story Points:** 2  
+**Dependencies:** JZ-008
+
+**Description:**  
+Replace the grid layout for resume preview sections with a more elegant, professional display that handles variable content lengths gracefully.
+
+**Acceptance Criteria:**
+- [ ] Replace `grid gap-3 md:grid-cols-2` with better layout
+- [ ] **DECISION NEEDED:** Choose between Accordion, Tabs, or Carousel
+- [ ] Each section (Contact, Skills, Experience, Education) clearly visible
+- [ ] Smooth transitions/animations
+- [ ] Consistent heights regardless of content
+- [ ] Professional appearance matching modern AI tools
+- [ ] Mobile-responsive
+
+**UI Options to Consider:**
+
+1. **Accordion (Collapsible Sections)**
+   - All sections visible, expand/collapse individually
+   - Good for: Viewing multiple sections at once
+   - Example: Notion, Linear
+
+2. **Tabs Component** (@radix-ui/react-tabs - already installed!)
+   - One section visible at a time
+   - Switch between Contact, Skills, Experience, Education
+   - Good for: Focused viewing, cleaner interface
+   - Example: GitHub settings, VS Code
+
+3. **Carousel/Slider**
+   - Swipe/click through sections
+   - Good for: Mobile-first, interactive experience
+   - Would need: embla-carousel or swiper library
+
+4. **Vertical Stack**
+   - Simple full-width sections stacked
+   - Good for: Simplicity, no interaction needed
+
+**Question for User:** Accordion, Tabs, or Carousel? Which UX pattern do you prefer?
+
+**User Note:** Consider Carousel or Tab group instead of Accordion. Ask user preference before implementing.
+
+**Recommended:** Tabs (clean, focused, already have the component installed)
+
+---
+
+### JZ-058: Manual Edit Flow for Resume Data
+**Priority:** P1  
+**Status:** 🔴  
+**Story Points:** 5  
+**Dependencies:** JZ-008
+
+**Description:**  
+When user clicks "Edit manually", provide an actual inline editing interface in the chat instead of just showing a message.
+
+**Acceptance Criteria:**
+- [ ] "Edit manually" button opens inline editing UI in chat
+- [ ] Show editable form fields for all extracted data
+- [ ] Pre-populate with Claude's extracted values
+- [ ] Validate inputs (email format, phone format, etc.)
+- [ ] "Save changes" button to update draft
+- [ ] "Cancel" button to discard edits
+- [ ] After saving, show updated preview
+- [ ] User can then "Apply updates" to save to vault
+- [ ] Maintain chat context (don't navigate away)
+
+**UI Design:**
+- Inline form within chat message bubble
+- Clean input fields with labels
+- Validation feedback
+- Save/Cancel actions at bottom
+
+**Alternative Approach:**
+- Open modal dialog with full edit form
+- Side panel for editing
+- Dedicated edit page
+
+**Recommended:** Inline chat form (maintains conversational flow)
 
 ---
 

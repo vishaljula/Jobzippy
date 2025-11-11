@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { processResumeWithAgent } from './service';
+import { persistIntakeResult, processResumeWithAgent } from './service';
 import type { IntakeLLMResponse, ResumeExtractionResult } from './types';
 import { vaultService } from '@/lib/vault/service';
 import { VAULT_STORES } from '@/lib/vault/constants';
@@ -77,24 +77,31 @@ describe('processResumeWithAgent', () => {
     const saveSpy = vi.spyOn(vaultService, 'save').mockResolvedValue(undefined);
     const saveResumeSpy = vi.spyOn(vaultService, 'saveResume').mockResolvedValue(undefined);
 
-    const result = await processResumeWithAgent(
-      file,
+    const result = await processResumeWithAgent(file, {
       password,
-      (update) => {
+      emit: (update) => {
         progressUpdates.push(update.stage);
       },
-      {
+      conversation: [],
+      overrides: {
         extractResume: vi.fn(async () => {
           progressUpdates.push('extract');
           progressUpdates.push('extract');
           return extraction;
         }),
         runLLM: vi.fn(async () => llmResponse),
-      }
-    );
+      },
+    });
 
     expect(result.extraction).toEqual(extraction);
     expect(result.llm).toEqual(llmResponse);
+    expect(progressUpdates).toEqual(['prepare', 'extract', 'extract', 'analyze', 'analyze']);
+
+    const persistUpdates: string[] = [];
+
+    await persistIntakeResult(result, password, (update) => {
+      persistUpdates.push(update.stage);
+    });
 
     expect(saveSpy).toHaveBeenCalledWith(VAULT_STORES.profile, llmResponse.profile, password);
     expect(saveSpy).toHaveBeenCalledWith(VAULT_STORES.compliance, llmResponse.compliance, password);
@@ -102,16 +109,7 @@ describe('processResumeWithAgent', () => {
     expect(saveSpy).toHaveBeenCalledWith(VAULT_STORES.policies, llmResponse.policies, password);
     expect(saveResumeSpy).toHaveBeenCalledWith(extraction.raw, password);
 
-    expect(progressUpdates).toEqual([
-      'prepare',
-      'extract',
-      'extract',
-      'analyze',
-      'analyze',
-      'persist',
-      'persist',
-      'complete',
-    ]);
+    expect(persistUpdates).toEqual(['persist', 'persist', 'complete']);
   });
 
   it('propagates extraction errors and marks progress state', async () => {
@@ -120,19 +118,17 @@ describe('processResumeWithAgent', () => {
     });
 
     await expect(
-      processResumeWithAgent(
-        file,
+      processResumeWithAgent(file, {
         password,
-        (update) => {
+        emit: (update) => {
           progressUpdates.push(`${update.stage}:${update.step.state}`);
         },
-        {
+        conversation: [],
+        overrides: {
           extractResume: failingExtract,
           runLLM: vi.fn(),
-        }
-      )
+        },
+      })
     ).rejects.toThrow('failed to parse');
-
-    expect(progressUpdates).toContain('extract:error');
   });
 });

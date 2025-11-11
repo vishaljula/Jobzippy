@@ -98,6 +98,8 @@ Jobzippy/
   - `GOOGLE_OAUTH_CLIENT_SECRET`
   - `ALLOWED_ORIGINS` (comma-separated list, e.g. `chrome-extension://<id>`)
   - `PORT` (default 8787 locally; Cloud Run sets this automatically)
+  - `OPENAI_API_KEY` (required for GPT-4o parsing; leave unset to fall back to heuristics)
+  - `OPENAI_MODEL` (optional override, defaults to `gpt-4o-mini`)
 - Local development: `npm run dev --workspace=api`
 - Production entrypoint: `npm run start --workspace=api`
 
