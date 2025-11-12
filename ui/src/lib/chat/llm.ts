@@ -3,6 +3,7 @@
  * Uses low-cost mini model (default gpt-4o-mini) configured via Vite env
  */
 import type { ProfileVault } from '@/lib/types';
+import { intakeAgentConfig } from '@/lib/intake';
 
 type ChatMessageRole = 'system' | 'user' | 'assistant';
 
@@ -36,9 +37,20 @@ function buildSystemPrompt(): string {
     '- Start with a brief friendly greeting if the user greets (e.g., "Hey there!")',
     '- When multiple fields are missing, ask in small grouped sets (2-4 items) by section (e.g., contact, work auth, preferences, education).',
     '- Keep the message short and skimmable (bullets or comma-separated).',
+    '- Use the human-friendly labels provided in missing_fields_labels; do not echo internal keys like "salary_min".',
+    '- For preferences.salary_min, ask for a numeric USD amount (e.g., "$150k" or "150000").',
+    '- For preferences.remote, ask as Yes/No.',
+    '- For preferences.locations, ask for one or more cities/states.',
     '- Never invent data. If user declines, acknowledge and move on.',
     '- If everything is complete, instruct user to "Apply updates" or "Edit manually".',
   ].join(' ');
+}
+
+function labelForPath(path: string): string {
+  const found = intakeAgentConfig.fieldMappings.find((m) => m.path === path);
+  if (found?.label) return found.label;
+  const last = path.split('.').slice(-1)[0] ?? path;
+  return last.replace(/_/g, ' ');
 }
 
 function groupMissingFields(missingFields?: string[]) {
@@ -58,15 +70,39 @@ function groupMissingFields(missingFields?: string[]) {
   return groups;
 }
 
+function groupMissingFieldsWithLabels(missingFields?: string[]) {
+  const groups: Record<string, { path: string; label: string }[]> = {};
+  (missingFields ?? []).forEach((path) => {
+    let section = path.split('.')[0] ?? 'other';
+    if (
+      path.startsWith('profile.identity') ||
+      path.startsWith('profile.work_auth') ||
+      path.startsWith('profile.preferences')
+    ) {
+      section = 'profile';
+    }
+    groups[section] = groups[section] || [];
+    groups[section].push({ path, label: labelForPath(path) });
+  });
+  return groups;
+}
+
 function buildUserEnvelope(knownFields?: Partial<ProfileVault>, missingFields?: string[]) {
   return JSON.stringify(
     {
       known_fields: knownFields ?? {},
       missing_fields: missingFields ?? [],
       missing_fields_grouped: groupMissingFields(missingFields),
+      missing_fields_labels: (missingFields ?? []).map((p) => ({
+        path: p,
+        label: labelForPath(p),
+      })),
+      missing_fields_grouped_labels: groupMissingFieldsWithLabels(missingFields),
       instructions: [
         'Return ONLY a short natural language question or confirmation suitable for a chat bubble.',
         'If multiple fields are missing, group them by section and ask for 2-4 at once (e.g., "Let’s finish contact: last name, phone, address.").',
+        'Use the provided human-friendly labels, not internal keys.',
+        'Prefer bullets starting with a hyphen "-", or concise comma-separated prompts.',
         'Do not include JSON or metadata; just the next question or confirmation.',
       ],
     },
