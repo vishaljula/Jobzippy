@@ -114,41 +114,34 @@ function App() {
   const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
 
   // Choose between intake chat and onboarding chat (separate thread)
-  const isOnboardingChatActive = isAuthenticated && snapshot.status === 'in_progress';
+  // Route onboarding chat when onboarding is not started or in progress.
+  // If user explicitly skipped, stick with intake; if completed, stick with intake.
+  const isOnboardingChatActive =
+    isAuthenticated && (snapshot.status === 'in_progress' || snapshot.status === 'not_started');
 
-  const intakeAgent = useIntakeAgent({ enabled: isAuthenticated && !isOnboardingChatActive, user });
+  const intakeAgent = useIntakeAgent({ enabled: isAuthenticated, user });
   const onboardingAgent = useOnboardingChat({
-    enabled: isAuthenticated && isOnboardingChatActive,
+    enabled: isAuthenticated,
     user,
   });
 
-  const chatLoading = isOnboardingChatActive ? onboardingAgent.isLoading : intakeAgent.isLoading;
-  const isProcessing = isOnboardingChatActive
-    ? onboardingAgent.isProcessing
-    : intakeAgent.isProcessing;
-  const messages = isOnboardingChatActive ? onboardingAgent.messages : intakeAgent.messages;
-  const sendMessage = isOnboardingChatActive
-    ? onboardingAgent.sendMessage
-    : intakeAgent.sendMessage;
-  const applyDraft = isOnboardingChatActive ? onboardingAgent.applyDraft : intakeAgent.applyDraft;
-  const requestManualEdit = isOnboardingChatActive
-    ? onboardingAgent.requestManualEdit
-    : intakeAgent.requestManualEdit;
+  const chatLoading = onboardingAgent.isLoading || intakeAgent.isLoading;
+  const isProcessing = onboardingAgent.isProcessing || intakeAgent.isProcessing;
+  const applyDraft = onboardingAgent.applyDraft;
+  const requestManualEdit = onboardingAgent.requestManualEdit;
   const activeDraftMessageId = intakeAgent.activeDraftMessageId;
-  const hasOnboardingDraft = isOnboardingChatActive ? onboardingAgent.hasDraft : false;
+  const hasOnboardingDraft = onboardingAgent.hasDraft;
   const handleStartOver = isOnboardingChatActive ? onboardingAgent.startOver : undefined;
   const handleSaveContinue = isOnboardingChatActive ? onboardingAgent.saveAndContinue : undefined;
-  const retryFailedMessage = isOnboardingChatActive ? onboardingAgent.retryMessage : undefined;
+  const retryFailedMessage = onboardingAgent.retryMessage;
   const pendingAttachment = intakeAgent.pendingAttachment;
   const setPendingAttachment = intakeAgent.setPendingAttachment;
 
-  const sortedMessages = useMemo(
-    () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
-    [messages]
-  );
+  const sortedMessages = useMemo(() => {
+    const combined = [...onboardingAgent.messages, ...intakeAgent.messages];
+    combined.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return combined;
+  }, [intakeAgent.messages, onboardingAgent.messages]);
 
   useEffect(() => {
     if (!messagesEndRef.current) return;
@@ -158,18 +151,10 @@ function App() {
   }, [sortedMessages.length, chatLoading]);
 
   const handleAttachClick = () => {
-    if (isOnboardingChatActive) {
-      toast.info('Attachments are available in Intake chat.');
-      return;
-    }
     fileInputRef.current?.click();
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isOnboardingChatActive) {
-      toast.info('Attachments are available in Intake chat.');
-      return;
-    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -184,9 +169,6 @@ function App() {
   };
 
   const handleRemoveAttachment = () => {
-    if (isOnboardingChatActive) {
-      return;
-    }
     setQueuedFile(null);
     setPendingAttachment(null);
     if (fileInputRef.current) {
@@ -199,10 +181,16 @@ function App() {
     if (!composerValue.trim() && !queuedFile) return;
 
     try {
-      await sendMessage({
-        text: composerValue,
-        attachments: queuedFile ? [queuedFile] : [],
-      });
+      if (queuedFile) {
+        await intakeAgent.sendMessage({
+          text: composerValue,
+          attachments: [queuedFile],
+        });
+      } else {
+        await onboardingAgent.sendMessage({
+          text: composerValue,
+        });
+      }
     } finally {
       setComposerValue('');
       handleRemoveAttachment();
@@ -272,20 +260,10 @@ function App() {
 
     if (sortedMessages.length === 0) {
       return (
-        <>
-          {isOnboardingChatActive ? (
-            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-5 text-sm text-emerald-700">
-              Let&apos;s complete your profile. I&apos;ll ask a few quick questions based on
-              what&apos;s missing.
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
-              Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon
-              below. You can also start the conversation by telling Jobzippy what you need help
-              with.
-            </div>
-          )}
-        </>
+        <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-5 text-sm text-emerald-700">
+          Say hi and tell me your goals. I’ll ask for anything missing. Attach your resume anytime
+          to parse it.
+        </div>
       );
     }
 
@@ -518,7 +496,7 @@ function App() {
           disabled={isProcessing}
         />
       </div>
-      {!isOnboardingChatActive && (pendingAttachment || queuedFile) && (
+      {(pendingAttachment || queuedFile) && (
         <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2 text-xs text-indigo-500">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-indigo-500">
@@ -547,9 +525,7 @@ function App() {
       )}
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-wide text-slate-400">
-          {isOnboardingChatActive
-            ? 'Commands · Quick answers · One question at a time'
-            : 'Commands · Attach resumes · Slash actions'}
+          Commands · Attach resumes · Slash actions
         </span>
         <Button
           size="sm"
