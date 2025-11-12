@@ -211,6 +211,14 @@ export interface ExtensionStorage {
   lastSync?: string;
   intakeConversation?: IntakeConversationSnapshot;
   intakeDraft?: ProfileVault;
+  // Conversational onboarding (v1) - separate thread from intake
+  'onboardingConversation:v1'?: {
+    messages: IntakeMessage[];
+    deferredTasks: IntakeDeferredTask[];
+    lastUpdated: string;
+    userId?: string;
+  };
+  'onboardingDraft:v1'?: Partial<ProfileVault>;
 }
 
 // Job Filters

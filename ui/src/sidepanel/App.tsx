@@ -24,12 +24,16 @@ import { useOnboarding } from '@/lib/onboarding';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
 import { LayoutShell } from './LayoutShell';
 import { useIntakeAgent } from '@/lib/intake';
+import { useOnboardingChat } from '@/lib/onboarding/useOnboardingChat';
+import { createSheet, appendApplicationRow, updateApplicationStatus } from '@/lib/sheets';
+import { getStorage } from '@/lib/storage';
 import type {
   IntakeAttachment,
   IntakeMessage,
   IntakePreviewSection,
   IntakeStatusStep,
 } from '@/lib/types';
+import { toast } from 'sonner';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -53,12 +57,21 @@ function App() {
   const [queuedFile, setQueuedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [sheetId, setSheetId] = useState<string | undefined>(undefined);
+  const [lastSampleAppId, setLastSampleAppId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading) {
       setTimeout(() => setIsLoading(false), 300);
     }
   }, [authLoading]);
+
+  useEffect(() => {
+    void (async () => {
+      const id = (await getStorage('sheetId')) as string | undefined;
+      setSheetId(id);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -100,17 +113,34 @@ function App() {
 
   const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
 
-  const {
-    isLoading: chatLoading,
-    isProcessing,
-    messages,
-    pendingAttachment,
-    setPendingAttachment,
-    sendMessage,
-    applyDraft,
-    requestManualEdit,
-    activeDraftMessageId,
-  } = useIntakeAgent({ enabled: isAuthenticated, user });
+  // Choose between intake chat and onboarding chat (separate thread)
+  const isOnboardingChatActive = isAuthenticated && snapshot.status === 'in_progress';
+
+  const intakeAgent = useIntakeAgent({ enabled: isAuthenticated && !isOnboardingChatActive, user });
+  const onboardingAgent = useOnboardingChat({
+    enabled: isAuthenticated && isOnboardingChatActive,
+    user,
+  });
+
+  const chatLoading = isOnboardingChatActive ? onboardingAgent.isLoading : intakeAgent.isLoading;
+  const isProcessing = isOnboardingChatActive
+    ? onboardingAgent.isProcessing
+    : intakeAgent.isProcessing;
+  const messages = isOnboardingChatActive ? onboardingAgent.messages : intakeAgent.messages;
+  const sendMessage = isOnboardingChatActive
+    ? onboardingAgent.sendMessage
+    : intakeAgent.sendMessage;
+  const applyDraft = isOnboardingChatActive ? onboardingAgent.applyDraft : intakeAgent.applyDraft;
+  const requestManualEdit = isOnboardingChatActive
+    ? onboardingAgent.requestManualEdit
+    : intakeAgent.requestManualEdit;
+  const activeDraftMessageId = intakeAgent.activeDraftMessageId;
+  const hasOnboardingDraft = isOnboardingChatActive ? onboardingAgent.hasDraft : false;
+  const handleStartOver = isOnboardingChatActive ? onboardingAgent.startOver : undefined;
+  const handleSaveContinue = isOnboardingChatActive ? onboardingAgent.saveAndContinue : undefined;
+  const retryFailedMessage = isOnboardingChatActive ? onboardingAgent.retryMessage : undefined;
+  const pendingAttachment = intakeAgent.pendingAttachment;
+  const setPendingAttachment = intakeAgent.setPendingAttachment;
 
   const sortedMessages = useMemo(
     () =>
@@ -128,10 +158,18 @@ function App() {
   }, [sortedMessages.length, chatLoading]);
 
   const handleAttachClick = () => {
+    if (isOnboardingChatActive) {
+      toast.info('Attachments are available in Intake chat.');
+      return;
+    }
     fileInputRef.current?.click();
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isOnboardingChatActive) {
+      toast.info('Attachments are available in Intake chat.');
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -146,6 +184,9 @@ function App() {
   };
 
   const handleRemoveAttachment = () => {
+    if (isOnboardingChatActive) {
+      return;
+    }
     setQueuedFile(null);
     setPendingAttachment(null);
     if (fileInputRef.current) {
@@ -231,10 +272,20 @@ function App() {
 
     if (sortedMessages.length === 0) {
       return (
-        <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
-          Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon below.
-          You can also start the conversation by telling Jobzippy what you need help with.
-        </div>
+        <>
+          {isOnboardingChatActive ? (
+            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-5 text-sm text-emerald-700">
+              Let&apos;s complete your profile. I&apos;ll ask a few quick questions based on
+              what&apos;s missing.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
+              Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon
+              below. You can also start the conversation by telling Jobzippy what you need help
+              with.
+            </div>
+          )}
+        </>
       );
     }
 
@@ -253,6 +304,7 @@ function App() {
             }
             onEditPreview={activeDraftMessageId === message.id ? requestManualEdit : undefined}
             isPreviewProcessing={isProcessing && activeDraftMessageId === message.id}
+            onRetry={retryFailedMessage}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -288,6 +340,114 @@ function App() {
             )}
           </div>
         </div>
+        {isAuthenticated && (
+          <div className="flex flex-wrap items-center gap-2">
+            {!sheetId ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-slate-200 text-xs text-slate-600"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const { sheetId: id, url } = await createSheet();
+                      setSheetId(id);
+                      toast.success('Job Log Sheet created', {
+                        description: 'Your sheet is ready in Google Drive.',
+                        action: {
+                          label: 'Open',
+                          onClick: () => {
+                            window.open(url, '_blank');
+                          },
+                        },
+                      });
+                    } catch (e) {
+                      toast.error('Failed to create sheet');
+                    }
+                  })();
+                }}
+              >
+                Create My Job Log Sheet
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => {
+                  window.open(`https://docs.google.com/spreadsheets/d/${sheetId}`, '_blank');
+                }}
+              >
+                View My Sheet
+              </Button>
+            )}
+            {import.meta.env.DEV && sheetId && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-200 text-xs text-slate-600"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const appId = crypto.randomUUID();
+                        setLastSampleAppId(appId);
+                        await appendApplicationRow({
+                          app_id: appId,
+                          date_applied: new Date().toISOString(),
+                          platform: 'LinkedIn',
+                          job_title: 'Senior Software Engineer',
+                          company: 'Acme Corp',
+                          location: 'Remote',
+                          job_url: 'https://example.com/job',
+                          status: 'applied',
+                          notes: 'Sample row from dev button',
+                          salary: '$150k',
+                          match_score: 87,
+                          visa_sponsor_flag: 'UNKNOWN',
+                        });
+                        toast.success('Sample row appended');
+                      } catch (e) {
+                        toast.error('Failed to append sample row');
+                      }
+                    })();
+                  }}
+                >
+                  Append Sample Row
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-200 text-xs text-slate-600"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        if (!lastSampleAppId) {
+                          toast.info('No sample app_id yet. Append a sample row first.');
+                          return;
+                        }
+                        await updateApplicationStatus([
+                          {
+                            app_id: lastSampleAppId,
+                            status: 'replied',
+                            email_subject: 'Re: Senior Software Engineer',
+                            email_from: 'recruiter@example.com',
+                            last_email_at: new Date().toISOString(),
+                          },
+                        ]);
+                        toast.success('Marked sample as replied');
+                      } catch (e) {
+                        toast.error('Failed to mark as replied');
+                      }
+                    })();
+                  }}
+                >
+                  Mark Row as Replied
+                </Button>
+              </>
+            )}
+          </div>
+        )}
         {conversationBody}
       </section>
     </div>
@@ -295,6 +455,46 @@ function App() {
 
   const composerContent = isAuthenticated ? (
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur">
+      {isOnboardingChatActive && hasOnboardingDraft && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2">
+          <span className="text-[11px] text-emerald-700">Draft ready to apply</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await applyDraft();
+                  } catch (e) {
+                    toast.error('Failed to apply updates.');
+                  }
+                })();
+              }}
+              disabled={isProcessing}
+            >
+              Edit manually
+            </Button>
+            <Button
+              size="sm"
+              className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await applyDraft();
+                  } catch (e) {
+                    toast.error('Failed to apply updates.');
+                  }
+                })();
+              }}
+              disabled={isProcessing}
+            >
+              Apply updates
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <button
           type="button"
@@ -318,7 +518,7 @@ function App() {
           disabled={isProcessing}
         />
       </div>
-      {(pendingAttachment || queuedFile) && (
+      {!isOnboardingChatActive && (pendingAttachment || queuedFile) && (
         <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2 text-xs text-indigo-500">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-indigo-500">
@@ -347,7 +547,9 @@ function App() {
       )}
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-wide text-slate-400">
-          Commands · Attach resumes · Slash actions
+          {isOnboardingChatActive
+            ? 'Commands · Quick answers · One question at a time'
+            : 'Commands · Attach resumes · Slash actions'}
         </span>
         <Button
           size="sm"
@@ -382,11 +584,37 @@ function App() {
     <>
       <Toaster position="top-right" />
       <LayoutShell
-        title="Jobzippy"
-        subtitle="Your agentic AI for job search"
+        title={isOnboardingChatActive ? 'Onboarding' : 'Jobzippy'}
+        subtitle={
+          isOnboardingChatActive
+            ? 'Conversational setup · Prefill from resume · Vault sync'
+            : 'Your agentic AI for job search'
+        }
         statusLabel={statusLabel}
         headerActions={
           <div className="flex items-center gap-2">
+            {isOnboardingChatActive && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleStartOver}
+                  disabled={isProcessing}
+                >
+                  Start Over
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleSaveContinue}
+                  disabled={isProcessing}
+                >
+                  Save & Continue
+                </Button>
+              </>
+            )}
             {isAuthenticated && (
               <Button
                 variant="ghost"
@@ -611,11 +839,13 @@ function ChatMessage({
   onApplyPreview,
   onEditPreview,
   isPreviewProcessing,
+  onRetry,
 }: {
   message: IntakeMessage;
   onApplyPreview?: () => void;
   onEditPreview?: () => void;
   isPreviewProcessing?: boolean;
+  onRetry?: (id: string) => void;
 }) {
   const isAssistant = message.role !== 'user';
   const alignment = isAssistant ? 'items-start' : 'items-end';
@@ -657,6 +887,18 @@ function ChatMessage({
       >
         <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
         {message.attachments && <AttachmentChips attachments={message.attachments} />}
+        {!!message.metadata?.retryable && !!onRetry && (
+          <div className="mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+              onClick={() => onRetry(message.id)}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
       </div>
       <span className="text-[10px] uppercase tracking-wide text-slate-300">
         {formatTimestamp(message.createdAt)}
