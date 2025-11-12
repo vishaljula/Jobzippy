@@ -32,11 +32,30 @@ function buildSystemPrompt(): string {
     'Your job is to help the user complete their profile by asking precise, concise questions.',
     'Rules:',
     '- Ask only about fields listed in missing_fields.',
-    '- Ask ONE question at a time.',
     '- Prefer short, friendly phrasing. No long intros.',
+    '- Start with a brief friendly greeting if the user greets (e.g., "Hey there!")',
+    '- When multiple fields are missing, ask in small grouped sets (2-4 items) by section (e.g., contact, work auth, preferences, education).',
+    '- Keep the message short and skimmable (bullets or comma-separated).',
     '- Never invent data. If user declines, acknowledge and move on.',
     '- If everything is complete, instruct user to "Apply updates" or "Edit manually".',
   ].join(' ');
+}
+
+function groupMissingFields(missingFields?: string[]) {
+  const groups: Record<string, string[]> = {};
+  (missingFields ?? []).forEach((path) => {
+    let section = path.split('.')[0] ?? 'other';
+    if (
+      path.startsWith('profile.identity') ||
+      path.startsWith('profile.work_auth') ||
+      path.startsWith('profile.preferences')
+    ) {
+      section = 'profile';
+    }
+    groups[section] = groups[section] || [];
+    groups[section].push(path);
+  });
+  return groups;
 }
 
 function buildUserEnvelope(knownFields?: Partial<ProfileVault>, missingFields?: string[]) {
@@ -44,8 +63,10 @@ function buildUserEnvelope(knownFields?: Partial<ProfileVault>, missingFields?: 
     {
       known_fields: knownFields ?? {},
       missing_fields: missingFields ?? [],
+      missing_fields_grouped: groupMissingFields(missingFields),
       instructions: [
-        'Return ONLY a short natural language question or confirmation line suitable for a chat bubble.',
+        'Return ONLY a short natural language question or confirmation suitable for a chat bubble.',
+        'If multiple fields are missing, group them by section and ask for 2-4 at once (e.g., "Let’s finish contact: last name, phone, address.").',
         'Do not include JSON or metadata; just the next question or confirmation.',
       ],
     },

@@ -142,14 +142,20 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
     setIsLoading(true);
 
     void (async () => {
-      const [snapshot, loadedDraft] = await Promise.all([
+      const [snapshot, loadedDraft, intakeDraft] = await Promise.all([
         getStorage(SNAPSHOT_KEY as never),
         getStorage(DRAFT_KEY as never),
+        getStorage('intakeDraft' as never),
       ]);
 
       if (cancelled) return;
 
-      const initialDraft = (loadedDraft as Partial<ProfileVault> | undefined) ?? null;
+      // Merge any prior onboarding draft with intake draft (from resume parse) for better prefill
+      const mergedDraft: Partial<ProfileVault> = {
+        ...((loadedDraft as Partial<ProfileVault> | undefined) ?? {}),
+        ...((intakeDraft as Partial<ProfileVault> | undefined) ?? {}),
+      };
+      const initialDraft = Object.keys(mergedDraft).length ? mergedDraft : null;
       setDraft(initialDraft);
 
       if (snapshot && (snapshot as OnboardingThreadSnapshot).messages) {
@@ -175,9 +181,11 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
         if (compliance) known.compliance = compliance;
         if (history) known.history = history;
         if (policies) known.policies = policies;
-        setBaselineKnown(known);
+        // If vault is empty but we have a draft, use draft values as known context
+        const baseline = Object.keys(known).length > 0 ? known : (initialDraft ?? {});
+        setBaselineKnown(baseline);
 
-        const missing = computeMissingFields(known);
+        const missing = computeMissingFields(baseline);
         const welcome: IntakeMessage = {
           id: uuid(),
           role: 'assistant',
@@ -185,12 +193,7 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
           content:
             missing.length === 0
               ? "Great news—your profile looks complete. You can say 'Apply updates' to sync any changes or 'Edit manually'."
-              : `I'll help complete your profile. First, let's fill what's missing.\nMissing: ${missing
-                  .slice(0, 5)
-                  .join(', ')}${missing.length > 5 ? '…' : ''}\nWhat is your ${
-                  intakeAgentConfig.fieldMappings.find((m) => m.path === missing[0])?.label ??
-                  missing[0]
-                }?`,
+              : `Let’s finish a few details. I’ll ask in small groups for speed.`,
           createdAt: new Date().toISOString(),
         };
 
