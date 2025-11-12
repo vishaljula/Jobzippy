@@ -88,6 +88,55 @@ function computeMissingFields(known?: Partial<ProfileVault>): string[] {
     .map((m) => m.path);
 }
 
+function labelForPath(path: string): string {
+  const found = intakeAgentConfig.fieldMappings.find((m) => m.path === path);
+  if (found?.label) return found.label;
+  const last = path.split('.').slice(-1)[0] ?? path;
+  return last.replace(/_/g, ' ');
+}
+
+function groupMissingForPrompt(missing: string[]) {
+  const groups: Record<string, string[]> = {
+    Contact: [],
+    Preferences: [],
+    'Work authorization': [],
+    Compliance: [],
+    History: [],
+  };
+  missing.forEach((p) => {
+    if (p.startsWith('profile.identity')) {
+      groups.Contact.push(p);
+    } else if (p.startsWith('profile.preferences')) {
+      groups.Preferences.push(p);
+    } else if (p.startsWith('profile.work_auth')) {
+      groups['Work authorization'].push(p);
+    } else if (p.startsWith('compliance.')) {
+      groups.Compliance.push(p);
+    } else if (p.startsWith('history.')) {
+      groups.History.push(p);
+    }
+  });
+  return groups;
+}
+
+function buildGroupedPrompt(missing: string[]): string {
+  const groups = groupMissingForPrompt(missing);
+  const order = ['Contact', 'Preferences', 'Work authorization', 'Compliance', 'History'] as const;
+  const firstGroup = order.find((name) => (groups[name] ?? []).length > 0);
+  if (!firstGroup) {
+    return "Looks complete. Say 'Apply updates' to sync, or 'Edit manually' to tweak first.";
+  }
+  const paths = (groups[firstGroup] ?? []).slice(0, 3);
+  const bullets = paths.map((p) => `- ${labelForPath(p)}`).join('\n');
+  return [
+    firstGroup === 'Contact'
+      ? 'Hey there! Let’s wrap your contact details:'
+      : `Hey there! Let’s finish ${firstGroup.toLowerCase()}:`,
+    bullets,
+    'You can answer in one line (comma-separated) or one by one.',
+  ].join('\n');
+}
+
 function reducer(state: OnboardingState, action: OnboardingAction): OnboardingState {
   switch (action.type) {
     case 'set_all':
@@ -236,6 +285,18 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
         ...(baselineKnown ?? {}),
         ...currentDraft,
       };
+      // Prefer deterministic, well-phrased grouped prompt locally; LLM is fallback
+      const deterministic = buildGroupedPrompt(missing);
+      if (deterministic) {
+        appendMessage({
+          id: uuid(),
+          role: 'assistant',
+          kind: 'text',
+          content: deterministic,
+          createdAt: new Date().toISOString(),
+        });
+        return;
+      }
       try {
         const history: ChatMessage[] = state.messages
           .filter((m) => m.kind === 'text')
@@ -245,25 +306,22 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
           knownFields: known,
           missingFields: missing,
         });
-        const msg: IntakeMessage = {
+        appendMessage({
           id: uuid(),
           role: 'assistant',
           kind: 'text',
           content,
           createdAt: new Date().toISOString(),
-        };
-        appendMessage(msg);
-        // track pending question if needed in future
+        });
       } catch (error) {
-        const failed: IntakeMessage = {
+        appendMessage({
           id: uuid(),
           role: 'assistant',
           kind: 'notice',
           content: 'Unable to generate the next question. Retry?',
           createdAt: new Date().toISOString(),
           metadata: { retryable: true },
-        };
-        appendMessage(failed);
+        });
         toast.error('Assistant failed to respond. You can retry.');
       }
     },
