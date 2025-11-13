@@ -202,10 +202,28 @@ export interface OnboardingSnapshot {
   updatedAt: string;
 }
 
+export interface OnboardingConversationSnapshot {
+  version: number;
+  messages: IntakeMessage[];
+  deferredTasks: IntakeDeferredTask[];
+  pendingFieldPath?: string | null;
+  missingFields: string[];
+  progress: {
+    completed: number;
+    total: number;
+    percentage: number;
+    status: 'idle' | 'collecting' | 'ready' | 'saving';
+  };
+  draft?: ProfileVault | null;
+  hasResume?: boolean;
+  lastUpdated: string;
+}
+
 export interface ExtensionStorage {
   version: string;
   installedAt: string;
   onboardingStatus?: OnboardingSnapshot;
+  onboardingConversations?: Record<string, OnboardingConversationSnapshot>;
   sheetId?: string;
   userId?: string;
   lastSync?: string;
