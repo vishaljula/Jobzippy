@@ -19,12 +19,43 @@ function init() {
 
   console.log('[Jobzippy] Initializing LinkedIn automation');
 
-  // Add visual indicator that extension is active
-  addActiveIndicator();
+  // Add visual indicator that extension is active (dev-only)
+  if (import.meta.env.DEV) {
+    addActiveIndicator();
+  }
+
+  // Notify side panel that LinkedIn is active
+  chrome.runtime
+    .sendMessage({ type: 'PAGE_ACTIVE', data: { platform: 'LinkedIn' } })
+    .catch(() => {});
+
+  // Report auth state heuristic
+  try {
+    const loggedIn = detectLoggedIn();
+    chrome.runtime
+      .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn } })
+      .catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  // Observe SPA route/content changes and re-emit AUTH_STATE on change
+  setupAuthObservers();
 
   // Listen for messages from background script
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     switch (message.type) {
+      case 'AUTH_PROBE':
+        try {
+          const loggedIn = detectLoggedIn();
+          chrome.runtime
+            .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn } })
+            .catch(() => {});
+          sendResponse({ status: 'ok' });
+        } catch {
+          sendResponse({ status: 'error' });
+        }
+        break;
       case 'START_AUTO_APPLY':
         console.log('[Jobzippy] Starting auto-apply on LinkedIn');
         // TODO: Implement auto-apply logic
@@ -107,6 +138,68 @@ async function clickEasyApply(jobElement: HTMLElement): Promise<boolean> {
   // TODO: Implement Easy Apply automation
   console.log('[Jobzippy] Clicking Easy Apply for job:', jobElement);
   return false;
+}
+
+function detectLoggedIn(): boolean {
+  // Heuristics: presence of login form elements or login routes => not logged in
+  const url = window.location.href;
+  if (/\/login|\/signin|auth/.test(url)) return false;
+  if (
+    document.querySelector(
+      'input[name="session_key"], input[name="username"], form[action*="login"]'
+    )
+  ) {
+    return false;
+  }
+  // Presence of global nav avatar or me-menu indicates logged-in
+  if (
+    document.querySelector(
+      'img.global-nav__me-photo, button.global-nav__me, a[href*="/mynetwork/"]'
+    )
+  ) {
+    return true;
+  }
+  // Default to true on jobs page unless clear login signals found
+  return true;
+}
+
+function setupAuthObservers() {
+  let lastState: boolean | null = null;
+  let timer: number | null = null;
+  const debounceCheck = () => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    timer = window.setTimeout(() => {
+      try {
+        const state = detectLoggedIn();
+        if (state !== lastState) {
+          lastState = state;
+          chrome.runtime
+            .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn: state } })
+            .catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }, 400);
+  };
+
+  // Initial capture
+  debounceCheck();
+
+  // Observe DOM changes for stable signed-in UI
+  const obs = new MutationObserver(debounceCheck);
+  obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+
+  // Hook history changes for SPA navigations
+  const origPush = history.pushState;
+  history.pushState = function (...args) {
+    const res = origPush.apply(history, args as any);
+    debounceCheck();
+    return res;
+  } as typeof history.pushState;
+  window.addEventListener('popstate', debounceCheck);
 }
 
 // Initialize when DOM is ready

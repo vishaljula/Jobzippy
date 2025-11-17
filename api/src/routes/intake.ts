@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { intakeRequestSchema, type IntakeRequestInput } from '../schemas/intake.js';
+import { type IntakeRequestInput, intakeRequestSchema } from '../schemas/intake.js';
 import { runIntakeAgent } from '../services/intake-agent.js';
 import type { IntakeRequestBody } from '../types/intake.js';
 

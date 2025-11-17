@@ -5,6 +5,46 @@
 
 console.log('[Jobzippy] Background service worker initialized');
 
+// -----------------------------------------------------------------------------
+// Lightweight Engine State (Story 1: Start/Stop lifecycle)
+// -----------------------------------------------------------------------------
+type EngineState = 'IDLE' | 'RUNNING';
+let engineState: EngineState = 'IDLE';
+let engineStatus: string = 'Idle';
+let engineInterval: number | null = null;
+
+function broadcastEngineState() {
+  chrome.runtime
+    .sendMessage({
+      type: 'ENGINE_STATE',
+      data: { state: engineState, status: engineStatus, ts: Date.now() },
+    })
+    .catch(() => {});
+}
+
+function startEngine() {
+  if (engineState === 'RUNNING') return;
+  engineState = 'RUNNING';
+  engineStatus = 'Starting…';
+  broadcastEngineState();
+  // Placeholder heartbeat to prove lifecycle and status updates
+  engineInterval = self.setInterval(() => {
+    engineStatus = 'Running…';
+    broadcastEngineState();
+  }, 5000);
+}
+
+function stopEngine() {
+  if (engineState === 'IDLE') return;
+  engineState = 'IDLE';
+  engineStatus = 'Stopped';
+  if (engineInterval) {
+    clearInterval(engineInterval);
+    engineInterval = null;
+  }
+  broadcastEngineState();
+}
+
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   console.log('[Jobzippy] Extension installed/updated:', details.reason);
@@ -32,6 +72,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log('[Jobzippy] Message received:', message);
 
   switch (message.type) {
+    case 'AUTH_PROBE_ALL':
+      // Probe active tabs for LinkedIn/Indeed to re-emit AUTH_STATE
+      try {
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (!tab.id || !tab.url) continue;
+            if (tab.url.includes('linkedin.com') || tab.url.includes('indeed.com')) {
+              chrome.tabs.sendMessage(tab.id, { type: 'AUTH_PROBE' }).catch(() => {});
+            }
+          }
+        });
+      } catch {
+        // ignore
+      }
+      sendResponse({ status: 'ok' });
+      break;
+    case 'START_AUTO_APPLY':
+      startEngine();
+      sendResponse({ status: 'success', state: engineState });
+      break;
+    case 'STOP_AUTO_APPLY':
+      stopEngine();
+      sendResponse({ status: 'success', state: engineState });
+      break;
+    case 'ENGINE_STATE':
+      sendResponse({ status: 'success', state: engineState, engineStatus });
+      break;
     case 'PING':
       sendResponse({ status: 'ok', timestamp: Date.now() });
       break;
@@ -71,6 +138,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
     default:
       console.log('[Jobzippy] Unknown alarm:', alarm.name);
+  }
+});
+
+// Probe auth state on tab updates (SPA or full navigations)
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  try {
+    if (
+      changeInfo.status === 'complete' &&
+      tab.url &&
+      (tab.url.includes('linkedin.com') || tab.url.includes('indeed.com'))
+    ) {
+      chrome.tabs.sendMessage(tabId, { type: 'AUTH_PROBE' }).catch(() => {});
+    }
+  } catch {
+    // ignore
   }
 });
 

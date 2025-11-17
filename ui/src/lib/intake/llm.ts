@@ -193,6 +193,7 @@ export async function runLocalIntakeLLM(
         remote: true,
         locations: [],
         salary_min: 0,
+        salary_currency: 'USD',
         start_date: '',
       },
     },

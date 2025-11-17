@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 
+import { API_CONFIG } from '@/lib/config';
 import { processResumeWithAgent } from '@/lib/intake/service';
 import type {
-  IntakeMessage,
   IntakeDeferredTask,
+  IntakeMessage,
+  OnboardingConversationSnapshot,
   ProfileVault,
   UserInfo,
-  OnboardingConversationSnapshot,
 } from '@/lib/types';
 import { getStorage, setStorage } from '@/lib/storage';
 import { deriveVaultPassword } from '@/lib/vault/utils';
@@ -15,6 +16,8 @@ import { vaultService } from '@/lib/vault/service';
 import { VAULT_STORES } from '@/lib/vault/constants';
 
 const SNAPSHOT_VERSION = 1;
+const CONVERSATION_LIMIT = 12;
+
 const DEFAULT_MESSAGES: IntakeMessage[] = [
   {
     id: uuid(),
@@ -26,87 +29,99 @@ const DEFAULT_MESSAGES: IntakeMessage[] = [
   },
 ];
 
+const SALARY_CURRENCY_FALLBACK = 'USD';
+
 const REQUIRED_FIELDS = [
+  { path: 'profile.identity.phone', parse: parsePhone, label: 'phone number' },
+  { path: 'profile.identity.address', parse: parseString, label: 'mailing address' },
+  { path: 'profile.preferences.locations', parse: parseLocations, label: 'preferred locations' },
+  { path: 'profile.preferences.salary_min', parse: parseSalary, label: 'minimum salary' },
   {
-    path: 'profile.identity.phone',
-    question: 'What phone number should recruiters use (digits only)?',
-    parse: parsePhone,
+    path: 'profile.preferences.salary_currency',
+    parse: parseCurrency,
+    label: 'salary currency',
   },
-  {
-    path: 'profile.identity.address',
-    question: 'What city/state are you based in?',
-    parse: parseString,
-  },
-  {
-    path: 'profile.preferences.locations',
-    question: 'List your preferred locations (comma-separated or type “remote”).',
-    parse: parseLocations,
-  },
-  {
-    path: 'profile.preferences.salary_min',
-    question: 'What minimum salary should I target (USD)?',
-    parse: parseSalary,
-  },
-  {
-    path: 'profile.work_auth.visa_type',
-    question: 'What visa or work authorization do you have?',
-    parse: parseString,
-  },
+  { path: 'profile.work_auth.visa_type', parse: parseString, label: 'visa / work authorization' },
   {
     path: 'profile.work_auth.sponsorship_required',
-    question: 'Do you need sponsorship now or in the future? (yes/no)',
     parse: parseBoolean,
+    label: 'sponsorship requirement',
   },
-  {
-    path: 'policies.salary',
-    question:
-      'When apps ask for salary expectations, should I answer, skip if optional, or ask you first?',
-    parse: parsePolicyPreference,
-  },
-  {
-    path: 'policies.relocation',
-    question: 'How should I answer relocation questions? (answer/skip/ask/never)',
-    parse: parsePolicyPreference,
-  },
-  {
-    path: 'compliance.veteran_status',
-    question: 'How should we answer veteran status questions? (yes/no/prefer not to say)',
-    parse: parseComplianceChoice,
-  },
+  { path: 'policies.salary', parse: parsePolicyPreference, label: 'salary disclosure policy' },
+  { path: 'policies.relocation', parse: parsePolicyPreference, label: 'relocation policy' },
+  { path: 'compliance.veteran_status', parse: parseComplianceChoice, label: 'veteran status' },
   {
     path: 'compliance.disability_status',
-    question: 'How should we answer disability questions? (yes/no/prefer not to say)',
     parse: parseComplianceChoice,
+    label: 'disability status',
   },
   {
     path: 'compliance.criminal_history_policy',
-    question:
-      'If an application asks about criminal history, should I answer, skip if optional, ask you first, or never answer?',
     parse: parsePolicyPreference,
+    label: 'criminal history policy',
   },
-];
+] as const;
 
-const DEFAULT_PROGRESS = {
+const VISA_REQUIRING_SPONSORSHIP = [
+  'h-1b',
+  'h1b',
+  'f-1',
+  'f1',
+  'f-1 opt',
+  'opt',
+  'stem opt',
+  'tn',
+  'l-1',
+  'o-1',
+  'e-3',
+  'j-1',
+] as const;
+
+const FIELD_PARSERS: Record<string, (value: string) => unknown | null> = REQUIRED_FIELDS.reduce(
+  (acc, field) => {
+    acc[field.path] = field.parse;
+    return acc;
+  },
+  {} as Record<string, (value: string) => unknown | null>
+);
+
+const FIELD_LABELS = REQUIRED_FIELDS.reduce<Record<string, string>>((acc, field) => {
+  acc[field.path] = field.label;
+  return acc;
+}, {});
+
+const createDefaultProgress = (): OnboardingConversationSnapshot['progress'] => ({
   completed: 0,
   total: REQUIRED_FIELDS.length,
   percentage: 0,
-  status: 'idle' as const,
-};
+  status: 'idle',
+});
 
 const DEFER_KEYWORDS = ['later', 'not now', 'maybe later', 'skip', 'not yet'];
 
 interface UseOnboardingChatOptions {
   enabled: boolean;
   user: UserInfo | null;
+  overrides?: {
+    processResume?: typeof processResumeWithAgent;
+  };
 }
 
-export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
+interface AssistantReply {
+  reply: string;
+  updates?: Array<{ path: string; value: string }>;
+  requestedField?: string | null;
+}
+
+export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingChatOptions) {
   const [messages, setMessages] = useState<IntakeMessage[]>(DEFAULT_MESSAGES);
   const [deferredTasks, setDeferredTasks] = useState<IntakeDeferredTask[]>([]);
   const [missingFields, setMissingFields] = useState<string[]>(REQUIRED_FIELDS.map((f) => f.path));
   const [pendingFieldPath, setPendingFieldPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProfileVault | null>(null);
-  const [progress, setProgress] = useState(DEFAULT_PROGRESS);
+  const [progress, setProgress] = useState<OnboardingConversationSnapshot['progress']>(() =>
+    createDefaultProgress()
+  );
   const [isLoading, setIsLoading] = useState(enabled);
   const [isThinking, setIsThinking] = useState(false);
   const [hasResume, setHasResume] = useState(false);
@@ -114,97 +129,16 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
   const [completedAt, setCompletedAt] = useState<string | null>(null);
   const vaultPassword = useMemo(() => deriveVaultPassword(user), [user]);
   const userKey = user?.sub ?? 'anonymous';
-
-  useEffect(() => {
-    if (!enabled) {
-      setIsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoading(true);
-
-    void (async () => {
-      const conversations = (await getStorage('onboardingConversations')) ?? {};
-      const snapshot = conversations[userKey];
-
-      if (cancelled) return;
-
-      if (snapshot?.version === SNAPSHOT_VERSION) {
-        setMessages(snapshot.messages.length ? snapshot.messages : DEFAULT_MESSAGES);
-        setDeferredTasks(snapshot.deferredTasks ?? []);
-        setMissingFields(snapshot.missingFields ?? REQUIRED_FIELDS.map((f) => f.path));
-        setPendingFieldPath(snapshot.pendingFieldPath ?? null);
-        setProgress(snapshot.progress ?? DEFAULT_PROGRESS);
-        setDraft(snapshot.draft ?? null);
-        setHasResume(Boolean(snapshot.hasResume));
-      } else {
-        setMessages(DEFAULT_MESSAGES);
-        setDeferredTasks([]);
-        setMissingFields(REQUIRED_FIELDS.map((f) => f.path));
-        setPendingFieldPath(null);
-        setProgress(DEFAULT_PROGRESS);
-        setDraft(null);
-        setHasResume(false);
-      }
-
-      if (!snapshot?.draft) {
-        try {
-          const existing = await loadVaultSnapshot(vaultPassword);
-          if (existing) {
-            setDraft(existing);
-            const remaining = computeMissingFields(existing);
-            setMissingFields(remaining);
-            updateProgressState(remaining.length, existing);
-            setHasResume(true);
-          }
-        } catch {
-          // ignore vault load errors in onboarding chat
-        }
-      }
-
-      setHydrated(true);
-      setIsLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, userKey]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    void persistSnapshot(userKey, {
-      version: SNAPSHOT_VERSION,
-      messages,
-      deferredTasks,
-      pendingFieldPath,
-      missingFields,
-      progress,
-      draft,
-      hasResume,
-      lastUpdated: new Date().toISOString(),
-    });
-  }, [
-    messages,
-    deferredTasks,
-    pendingFieldPath,
-    missingFields,
-    progress,
-    draft,
-    hasResume,
-    userKey,
-    hydrated,
-  ]);
+  const resumeProcessor = overrides?.processResume ?? processResumeWithAgent;
+  const lastPersistedDraftRef = useRef<string | null>(null);
 
   const updateProgressState = useCallback(
     (remaining: number, currentDraft: ProfileVault | null) => {
       const completed = Math.max(0, REQUIRED_FIELDS.length - remaining);
       const percentage = Math.round((completed / REQUIRED_FIELDS.length) * 100);
-      const nextStatus =
+      const nextStatus: OnboardingConversationSnapshot['progress']['status'] =
         remaining === 0 && currentDraft && hasResume
-          ? ('ready' as const)
+          ? 'ready'
           : completed === 0
             ? 'idle'
             : 'collecting';
@@ -218,57 +152,227 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
     [hasResume]
   );
 
+  useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    void (async () => {
+      const conversations = (await getStorage('onboardingConversations')) ?? {};
+      const snapshot = conversations[userKey] as OnboardingConversationSnapshot | undefined;
+
+      if (cancelled) return;
+
+      if (snapshot?.version === SNAPSHOT_VERSION) {
+        if (snapshot.draft) {
+          applyDerivedFieldsToDraft(snapshot.draft);
+        }
+        setMessages(snapshot.messages.length ? snapshot.messages : DEFAULT_MESSAGES);
+        setDeferredTasks(snapshot.deferredTasks ?? []);
+        setMissingFields(snapshot.missingFields ?? REQUIRED_FIELDS.map((f) => f.path));
+        setPendingFieldPath(snapshot.pendingFieldPath ?? null);
+        setProgress(snapshot.progress ?? createDefaultProgress());
+        setDraft(snapshot.draft ?? null);
+        setHasResume(Boolean(snapshot.hasResume));
+      } else {
+        setMessages(DEFAULT_MESSAGES);
+        setDeferredTasks([]);
+        setMissingFields(REQUIRED_FIELDS.map((f) => f.path));
+        setPendingFieldPath(null);
+        setProgress(createDefaultProgress());
+        setDraft(null);
+        setHasResume(false);
+      }
+
+      if (!snapshot?.draft) {
+        try {
+          const existing = await loadVaultSnapshot(vaultPassword);
+          if (existing) {
+            applyDerivedFieldsToDraft(existing);
+            setDraft(existing);
+            const remaining = computeMissingFields(existing);
+            setMissingFields(remaining);
+            updateProgressState(remaining.length, existing);
+            setHasResume(true);
+          }
+        } catch {
+          // ignore vault load errors
+        }
+      }
+
+      setHydrated(true);
+      setIsLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, updateProgressState, userKey, vaultPassword]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const snapshot: OnboardingConversationSnapshot = {
+      version: SNAPSHOT_VERSION,
+      messages,
+      deferredTasks,
+      pendingFieldPath,
+      missingFields,
+      progress,
+      draft,
+      hasResume,
+      lastUpdated: new Date().toISOString(),
+    };
+    void persistSnapshot(userKey, snapshot);
+  }, [
+    draft,
+    deferredTasks,
+    hasResume,
+    hydrated,
+    messages,
+    missingFields,
+    pendingFieldPath,
+    progress,
+    userKey,
+  ]);
+
+  useEffect(() => {
+    // Only recompute when a concrete draft exists. This preserves snapshot-provided
+    // progress/missingFields when the snapshot did not include a draft.
+    if (!hydrated || !draft) return;
+    const remaining = computeMissingFields(draft);
+    setMissingFields((prev) => (arraysEqual(prev, remaining) ? prev : remaining));
+    updateProgressState(remaining.length, draft);
+  }, [draft, hydrated, updateProgressState]);
+  const syncDraftToVault = useCallback(
+    async (currentDraft: ProfileVault) => {
+      const signature = hashDraft(currentDraft);
+      if (!signature || lastPersistedDraftRef.current === signature) {
+        return;
+      }
+      await persistDraftToVault(currentDraft, vaultPassword);
+      lastPersistedDraftRef.current = signature;
+    },
+    [vaultPassword]
+  );
+
+  useEffect(() => {
+    lastPersistedDraftRef.current = null;
+  }, [userKey]);
+
+  useEffect(() => {
+    if (!hydrated || !draft || !hasResume) return;
+    void syncDraftToVault(draft).catch((error) => {
+      console.error('[Onboarding] Failed to sync draft to vault', error);
+    });
+  }, [draft, hasResume, hydrated, syncDraftToVault]);
+
   const appendMessage = useCallback((message: IntakeMessage) => {
     setMessages((prev) => [...prev, message]);
   }, []);
 
-  const askNextField = useCallback(
-    (fields: string[]) => {
-      if (!fields.length) {
-        setPendingFieldPath(null);
-        return;
-      }
-      const path = fields[0];
-      setPendingFieldPath(path);
-      const config = REQUIRED_FIELDS.find((field) => field.path === path);
-      if (config) {
+  const runAssistantTurn = useCallback(
+    async (history: IntakeMessage[], knownDraft: ProfileVault | null, currentMissing: string[]) => {
+      const payload = {
+        conversation: buildConversationPayload(history),
+        knownFields: knownDraft ?? undefined,
+        missingFields: currentMissing,
+      };
+
+      try {
+        const reply = await requestAssistantReply(payload);
         appendMessage({
           id: uuid(),
           role: 'assistant',
           kind: 'text',
-          content: config.question,
+          content: reply.reply,
+          createdAt: new Date().toISOString(),
+        });
+
+        let updatedDraft: ProfileVault | null = null;
+        const invalidPaths: string[] = [];
+        if (reply.updates?.length) {
+          setDraft((prev) => {
+            const base = ensureDraft(knownDraft ?? prev);
+            let mutated = false;
+            reply.updates?.forEach(({ path, value }) => {
+              const parser = FIELD_PARSERS[path];
+              if (!parser) return;
+              const parsed = parser(value);
+              if (parsed === null || parsed === undefined) {
+                invalidPaths.push(path);
+                return;
+              }
+              setValueAtPath(base, path, parsed);
+              mutated = true;
+            });
+            if (applyDerivedFieldsToDraft(base)) {
+              mutated = true;
+            }
+            if (!mutated) {
+              return prev ?? base;
+            }
+            updatedDraft = { ...base };
+            return updatedDraft;
+          });
+        }
+
+        if (updatedDraft) {
+          const remaining = computeMissingFields(updatedDraft);
+          setMissingFields(remaining);
+          updateProgressState(remaining.length, updatedDraft);
+        }
+        if (invalidPaths.length) {
+          setMissingFields((prev) => addUniquePaths(prev, invalidPaths));
+          appendMessage({
+            id: uuid(),
+            role: 'assistant',
+            kind: 'notice',
+            content: buildValidationNotice(invalidPaths),
+            createdAt: new Date().toISOString(),
+          });
+          setPendingFieldPath(invalidPaths[0] ?? reply.requestedField ?? null);
+        } else {
+          setPendingFieldPath(reply.requestedField ?? null);
+        }
+      } catch (error) {
+        appendMessage({
+          id: uuid(),
+          role: 'assistant',
+          kind: 'notice',
+          content:
+            error instanceof Error
+              ? `I had trouble reaching the onboarding agent: ${error.message}`
+              : 'I had trouble reaching the onboarding agent. Please try again in a moment.',
           createdAt: new Date().toISOString(),
         });
       }
     },
-    [appendMessage]
+    [appendMessage, updateProgressState]
   );
 
   const handleResumeProcessing = useCallback(
     async (file: File) => {
       setIsThinking(true);
       try {
-        const conversationPayload = messages
-          .filter((message) => message.kind === 'text')
-          .slice(-6)
-          .map((message) => ({
-            role: message.role,
-            content: message.content,
-          }));
-
-        const result = await processResumeWithAgent(file, {
+        const conversation = buildConversationPayload(messages);
+        const result = await resumeProcessor(file, {
           password: vaultPassword,
           emit: () => {},
-          conversation: conversationPayload,
+          conversation,
         });
 
         const previewMessage: IntakeMessage = {
           id: uuid(),
           role: 'assistant',
           kind: 'preview',
-          content: result.llm.summary,
+          content: result.llm.summary ?? 'Here’s what I pulled from your resume.',
           createdAt: new Date().toISOString(),
-          previewSections: result.llm.previewSections,
+          previewSections: result.llm.previewSections ?? [],
           metadata: {
             confidence: result.llm.confidence,
             resumeMetadata: result.extraction.metadata,
@@ -276,28 +380,32 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
         };
 
         appendMessage(previewMessage);
-        setDraft({
-          profile: result.llm.profile,
-          compliance: result.llm.compliance,
-          history: result.llm.history,
-          policies: result.llm.policies,
-        });
-        setHasResume(true);
 
-        const remaining = computeMissingFields({
-          profile: result.llm.profile,
+        const nextDraft: ProfileVault = {
+          profile: {
+            ...result.llm.profile,
+            preferences: {
+              ...result.llm.profile.preferences,
+              salary_currency:
+                result.llm.profile.preferences?.salary_currency ?? SALARY_CURRENCY_FALLBACK,
+            },
+          },
           compliance: result.llm.compliance,
           history: result.llm.history,
           policies: result.llm.policies,
-        });
+        };
+
+        applyDerivedFieldsToDraft(nextDraft);
+        setDraft(nextDraft);
+        setHasResume(true);
+        const remaining = computeMissingFields(nextDraft);
         setMissingFields(remaining);
-        updateProgressState(remaining.length, {
-          profile: result.llm.profile,
-          compliance: result.llm.compliance,
-          history: result.llm.history,
-          policies: result.llm.policies,
-        });
-        askNextField(remaining);
+        updateProgressState(remaining.length, nextDraft);
+
+        if (remaining.length > 0) {
+          const historyAfterResume = [...messages, previewMessage];
+          await runAssistantTurn(historyAfterResume, nextDraft, remaining);
+        }
       } catch (error) {
         appendMessage({
           id: uuid(),
@@ -306,58 +414,14 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
           content:
             error instanceof Error
               ? `I couldn’t parse that resume: ${error.message}. Could you try a different PDF or DOCX?`
-              : 'I ran into an issue reading that file. Could you try a different format (PDF or DOCX)?',
+              : 'I hit an issue reading that file. Could you try a different format (PDF or DOCX)?',
           createdAt: new Date().toISOString(),
         });
       } finally {
         setIsThinking(false);
       }
     },
-    [appendMessage, messages, askNextField, updateProgressState, vaultPassword]
-  );
-
-  const handleFieldAnswer = useCallback(
-    (answer: string) => {
-      if (!pendingFieldPath) return;
-      const config = REQUIRED_FIELDS.find((field) => field.path === pendingFieldPath);
-      if (!config) return;
-
-      const parsed = config.parse(answer);
-      if (parsed === null || parsed === undefined || parsed === '') {
-        appendMessage({
-          id: uuid(),
-          role: 'assistant',
-          kind: 'notice',
-          content: 'I couldn’t quite parse that. Could you rephrase it clearly?',
-          createdAt: new Date().toISOString(),
-        });
-        return;
-      }
-
-      setDraft((prev) => {
-        const next = ensureDraft(prev);
-        setValueAtPath(next, config.path, parsed);
-        return { ...next };
-      });
-
-      const remaining = missingFields.filter((path) => path !== config.path);
-      setMissingFields(remaining);
-      updateProgressState(remaining.length, ensureDraft(draft));
-
-      appendMessage({
-        id: uuid(),
-        role: 'assistant',
-        kind: 'text',
-        content: `Got it — recorded ${formatValue(parsed)} for ${config.question}`,
-        createdAt: new Date().toISOString(),
-      });
-
-      setPendingFieldPath(null);
-      if (remaining.length > 0) {
-        askNextField(remaining);
-      }
-    },
-    [appendMessage, pendingFieldPath, missingFields, updateProgressState, draft, askNextField]
+    [appendMessage, messages, resumeProcessor, runAssistantTurn, updateProgressState, vaultPassword]
   );
 
   const sendMessage = useCallback(
@@ -366,11 +430,14 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
       if (!text.trim() && attachments.length === 0) return;
 
       const now = new Date().toISOString();
+      const normalizedText = text.trim();
+      const userContent =
+        normalizedText || (attachments.length ? `Uploaded ${attachments.length} file(s)` : '');
       const userMessage: IntakeMessage = {
         id: uuid(),
         role: 'user',
         kind: 'text',
-        content: text.trim(),
+        content: userContent || '(empty)',
         createdAt: now,
         attachments: attachments.length
           ? attachments.map((file) => ({
@@ -382,6 +449,8 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
             }))
           : undefined,
       };
+
+      const nextHistory = [...messages, userMessage];
       appendMessage(userMessage);
 
       if (attachments.length) {
@@ -389,10 +458,11 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
         return;
       }
 
-      if (DEFER_KEYWORDS.includes(text.trim().toLowerCase())) {
+      const normalized = text.trim().toLowerCase();
+      if (DEFER_KEYWORDS.includes(normalized)) {
         const task: IntakeDeferredTask = {
           id: uuid(),
-          prompt: pendingFieldPath ?? 'General onboarding follow-up',
+          prompt: pendingFieldPath ?? 'Review onboarding info later',
           createdAt: new Date().toISOString(),
           reason: 'user_requested_later',
         };
@@ -401,39 +471,41 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
           id: uuid(),
           role: 'assistant',
           kind: 'notice',
-          content: "No problem—I'll remind you about this later.",
+          content: "No problem—I'll remind you later when you're ready.",
           createdAt: new Date().toISOString(),
         });
         return;
       }
 
-      if (!hasResume && attachments.length === 0) {
+      if (!hasResume) {
         appendMessage({
           id: uuid(),
           role: 'assistant',
           kind: 'text',
-          content: 'Could you upload your resume first? I’ll use it to pre-fill everything.',
+          content:
+            "Let's start with your resume so I can pre-fill the basics. Could you upload it?",
           createdAt: new Date().toISOString(),
         });
         return;
       }
 
-      if (!pendingFieldPath && missingFields.length > 0) {
-        askNextField(missingFields);
-        return;
+      setIsThinking(true);
+      try {
+        await runAssistantTurn(nextHistory, draft, missingFields);
+      } finally {
+        setIsThinking(false);
       }
-
-      handleFieldAnswer(text);
     },
     [
       appendMessage,
+      draft,
+      enabled,
       handleResumeProcessing,
       hasResume,
-      pendingFieldPath,
+      messages,
       missingFields,
-      handleFieldAnswer,
-      askNextField,
-      enabled,
+      pendingFieldPath,
+      runAssistantTurn,
     ]
   );
 
@@ -444,15 +516,15 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
     setPendingFieldPath(null);
     setDraft(null);
     setHasResume(false);
-    setProgress(DEFAULT_PROGRESS);
+    setProgress(createDefaultProgress());
     setCompletedAt(null);
     await persistSnapshot(userKey, {
       version: SNAPSHOT_VERSION,
       messages: DEFAULT_MESSAGES,
       deferredTasks: [],
-      missingFields: REQUIRED_FIELDS.map((field) => field.path),
       pendingFieldPath: null,
-      progress: DEFAULT_PROGRESS,
+      missingFields: REQUIRED_FIELDS.map((field) => field.path),
+      progress: createDefaultProgress(),
       draft: null,
       hasResume: false,
       lastUpdated: new Date().toISOString(),
@@ -464,7 +536,11 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
 
     setProgress((prev) => ({ ...prev, status: 'saving' }));
     void (async () => {
-      await persistDraftToVault(draft, vaultPassword);
+      try {
+        await syncDraftToVault(draft);
+      } catch (error) {
+        console.error('[Onboarding] Failed to persist final draft', error);
+      }
       setProgress((prev) => ({ ...prev, status: 'ready' }));
       setCompletedAt(new Date().toISOString());
       appendMessage({
@@ -476,7 +552,7 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
         createdAt: new Date().toISOString(),
       });
     })();
-  }, [draft, missingFields.length, hasResume, vaultPassword, completedAt, appendMessage]);
+  }, [appendMessage, completedAt, draft, hasResume, missingFields.length, vaultPassword]);
 
   return {
     isLoading,
@@ -484,13 +560,51 @@ export function useOnboardingChat({ enabled, user }: UseOnboardingChatOptions) {
     messages,
     deferredTasks,
     progress,
+    pendingFieldPath,
     sendMessage,
+    uploadResume: handleResumeProcessing,
     startOver,
     hasResume,
     completedAt,
   } as const;
 }
 
+function buildConversationPayload(
+  history: IntakeMessage[]
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return history
+    .filter((message) => message.kind === 'text' || message.kind === 'notice')
+    .filter((message) => message.role === 'assistant' || message.role === 'user')
+    .map((message) => ({
+      role: message.role as 'user' | 'assistant',
+      content: message.content,
+    }))
+    .slice(-CONVERSATION_LIMIT);
+}
+
+async function requestAssistantReply(payload: {
+  conversation: Array<{ role: 'user' | 'assistant'; content: string }>;
+  knownFields?: ProfileVault | null;
+  missingFields: string[];
+}): Promise<AssistantReply> {
+  const response = await fetch(`${API_CONFIG.baseUrl}/onboarding/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      conversation: payload.conversation,
+      knownFields: payload.knownFields ?? undefined,
+      missingFields: payload.missingFields,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return (await response.json()) as AssistantReply;
+}
 async function loadVaultSnapshot(password: string): Promise<ProfileVault | null> {
   const [profile, compliance, history, policies] = await Promise.all([
     vaultService.load(VAULT_STORES.profile, password).catch(() => null),
@@ -503,11 +617,17 @@ async function loadVaultSnapshot(password: string): Promise<ProfileVault | null>
     return null;
   }
 
-  return {
+  const draft: ProfileVault = {
     profile: profile ?? {
       identity: { first_name: '', last_name: '', phone: '', email: '', address: '' },
       work_auth: { visa_type: '', sponsorship_required: false },
-      preferences: { remote: true, locations: [], salary_min: 0, start_date: '' },
+      preferences: {
+        remote: true,
+        locations: [],
+        salary_min: 0,
+        salary_currency: SALARY_CURRENCY_FALLBACK,
+        start_date: '',
+      },
     },
     compliance: compliance ?? {
       disability_status: 'prefer_not',
@@ -522,6 +642,8 @@ async function loadVaultSnapshot(password: string): Promise<ProfileVault | null>
       work_shift: 'ask_if_required',
     },
   };
+  applyDerivedFieldsToDraft(draft);
+  return draft;
 }
 
 async function persistDraftToVault(draft: ProfileVault, password: string) {
@@ -547,12 +669,21 @@ function computeMissingFields(draft: ProfileVault | null): string[] {
 }
 
 function ensureDraft(draft: ProfileVault | null): ProfileVault {
-  if (draft) return draft;
-  return {
+  if (draft) {
+    applyDerivedFieldsToDraft(draft);
+    return draft;
+  }
+  const emptyDraft: ProfileVault = {
     profile: {
       identity: { first_name: '', last_name: '', phone: '', email: '', address: '' },
       work_auth: { visa_type: '', sponsorship_required: false },
-      preferences: { remote: true, locations: [], salary_min: 0, start_date: '' },
+      preferences: {
+        remote: true,
+        locations: [],
+        salary_min: 0,
+        salary_currency: SALARY_CURRENCY_FALLBACK,
+        start_date: '',
+      },
     },
     compliance: {
       disability_status: 'prefer_not',
@@ -567,6 +698,8 @@ function ensureDraft(draft: ProfileVault | null): ProfileVault {
       work_shift: 'ask_if_required',
     },
   };
+  applyDerivedFieldsToDraft(emptyDraft);
+  return emptyDraft;
 }
 
 function getValueAtPath(source: unknown, path: string): unknown {
@@ -582,15 +715,17 @@ function getValueAtPath(source: unknown, path: string): unknown {
   }, source);
 }
 
-function setValueAtPath(target: Record<string, unknown>, path: string, value: unknown) {
+function setValueAtPath(target: unknown, path: string, value: unknown) {
+  if (!target || typeof target !== 'object') return;
   const segments = path.split('.');
-  let cursor: Record<string, unknown> = target;
+  let cursor: Record<string, unknown> = target as Record<string, unknown>;
   segments.forEach((segment, index) => {
     if (index === segments.length - 1) {
       cursor[segment] = value;
       return;
     }
-    if (!cursor[segment] || typeof cursor[segment] !== 'object') {
+    const nextCursor = cursor[segment];
+    if (!nextCursor || typeof nextCursor !== 'object') {
       cursor[segment] = {};
     }
     cursor = cursor[segment] as Record<string, unknown>;
@@ -600,7 +735,7 @@ function setValueAtPath(target: Record<string, unknown>, path: string, value: un
 function isValueMissing(value: unknown): boolean {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string') return value.trim().length === 0;
-  if (typeof value === 'number') return Number.isNaN(value);
+  if (typeof value === 'number') return Number.isNaN(value) || value <= 0;
   if (Array.isArray(value)) return value.length === 0;
   if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0;
   return false;
@@ -609,7 +744,7 @@ function isValueMissing(value: unknown): boolean {
 function parsePhone(input: string): string | null {
   const digits = input.replace(/[^\d]/g, '');
   if (digits.length < 10) return null;
-  return digits;
+  return formatPhoneDigits(digits);
 }
 
 function parseString(input: string): string | null {
@@ -621,25 +756,70 @@ function parseLocations(input: string): string[] | null {
   const normalized = input.trim();
   if (!normalized) return null;
   if (normalized.toLowerCase() === 'remote') return ['Remote'];
-  return normalized
+  const formatted = normalized
     .split(',')
-    .map((token) => token.trim())
-    .filter(Boolean);
+    .map((token) => formatLocationToken(token))
+    .filter((token): token is string => Boolean(token));
+  if (!formatted.length) {
+    return null;
+  }
+  return Array.from(new Set(formatted));
 }
 
+const SALARY_SUFFIX_MULTIPLIERS: Record<string, number> = {
+  k: 1_000,
+  m: 1_000_000,
+  b: 1_000_000_000,
+  thousand: 1_000,
+  million: 1_000_000,
+  billion: 1_000_000_000,
+};
+
 function parseSalary(input: string): number | null {
-  const normalized = input.replace(/[,$]/g, '').toLowerCase();
-  const match = normalized.match(/(\d+)(k)?/);
-  if (!match) return null;
-  const value = Number(match[1]);
-  if (Number.isNaN(value)) return null;
-  return match[2] ? value * 1000 : value;
+  if (!input) return null;
+  const normalized = input.replace(/[$,]/g, '').toLowerCase();
+  const regex = /(\d+(?:\.\d+)?)(?:\s*(k|m|b|thousand|million|billion))?/g;
+  const matches: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+  // eslint-disable-next-line no-cond-assign
+  while ((match = regex.exec(normalized)) !== null) {
+    matches.push(match);
+  }
+  if (!matches.length) {
+    return null;
+  }
+  const [first] = matches;
+  if (!first || !first[1]) {
+    return null;
+  }
+  const fallbackSuffix = first[2] ?? matches[1]?.[2];
+  const multiplier = fallbackSuffix ? (SALARY_SUFFIX_MULTIPLIERS[fallbackSuffix] ?? 1) : 1;
+  const value = Number(first[1]);
+  if (Number.isNaN(value)) {
+    return null;
+  }
+  const computed = value * multiplier;
+  if (!Number.isFinite(computed)) {
+    return null;
+  }
+  return Math.round(computed);
+}
+
+function parseCurrency(input: string): string | null {
+  const trimmed = input.trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
 }
 
 function parseBoolean(input: string): boolean | null {
   const normalized = input.trim().toLowerCase();
-  if (['yes', 'y', 'true', 'yeah', 'yup'].includes(normalized)) return true;
-  if (['no', 'n', 'false', 'nope'].includes(normalized)) return false;
+  if (!normalized) return null;
+  if (['yes', 'y', 'true', 'yeah', 'yup', 'sure', 'affirmative'].includes(normalized)) return true;
+  if (['no', 'n', 'false', 'nope', 'nah', 'negative'].includes(normalized)) return false;
+  if (normalized.startsWith('y')) return true;
+  if (normalized.startsWith('n')) return false;
   return null;
 }
 
@@ -649,34 +829,113 @@ function parsePolicyPreference(
   const normalized = input.trim().toLowerCase();
   if (normalized.includes('skip')) return 'skip_if_optional';
   if (normalized.includes('ask')) return 'ask_if_required';
-  if (normalized.includes('never')) return 'never';
+  if (normalized.includes('never') || normalized.includes('decline')) return 'never';
   if (
     normalized.includes('answer') ||
     normalized.includes('reply') ||
-    normalized.includes('go ahead')
+    normalized.includes('go ahead') ||
+    normalized.includes('share')
   ) {
     return 'answer';
+  }
+  if (normalized.includes('only if required') || normalized.includes('only if needed')) {
+    return 'ask_if_required';
   }
   return null;
 }
 
 function parseComplianceChoice(input: string): 'yes' | 'no' | 'prefer_not' | null {
   const normalized = input.trim().toLowerCase();
-  if (normalized.startsWith('y')) return 'yes';
+  if (normalized.startsWith('y') || normalized.includes('affirm')) return 'yes';
   if (normalized.startsWith('n')) return 'no';
-  if (normalized.includes('prefer')) return 'prefer_not';
+  if (normalized.includes('prefer') || normalized.includes('skip')) return 'prefer_not';
   return null;
 }
 
-function formatValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.length ? value.join(', ') : '(empty)';
+function visaImpliesSponsorship(visaType?: string): boolean {
+  if (!visaType) return false;
+  const normalized = visaType.trim().toLowerCase();
+  return VISA_REQUIRING_SPONSORSHIP.some((keyword) => normalized.includes(keyword));
+}
+
+function applyDerivedFieldsToDraft(draft: ProfileVault | null): boolean {
+  if (!draft) return false;
+  let mutated = false;
+  const visaType = draft.profile?.work_auth?.visa_type;
+  if (visaImpliesSponsorship(visaType)) {
+    if (!draft.profile.work_auth) {
+      draft.profile.work_auth = { visa_type: visaType ?? '', sponsorship_required: true };
+      mutated = true;
+    } else if (!draft.profile.work_auth.sponsorship_required) {
+      draft.profile.work_auth.sponsorship_required = true;
+      mutated = true;
+    }
   }
-  if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No';
+  const preferences = draft.profile?.preferences;
+  if (preferences && !preferences.salary_currency) {
+    preferences.salary_currency = SALARY_CURRENCY_FALLBACK;
+    mutated = true;
   }
-  if (typeof value === 'number') {
-    return value.toLocaleString();
+  return mutated;
+}
+
+function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
-  return String(value ?? '(empty)');
+  return true;
+}
+
+function hashDraft(draft: ProfileVault | null): string | null {
+  if (!draft) return null;
+  try {
+    return JSON.stringify(draft);
+  } catch {
+    return null;
+  }
+}
+
+function addUniquePaths(existing: string[], additions: string[]): string[] {
+  let changed = false;
+  const next = new Set(existing);
+  additions.forEach((path) => {
+    if (!next.has(path)) {
+      next.add(path);
+      changed = true;
+    }
+  });
+  return changed ? Array.from(next) : existing;
+}
+
+function buildValidationNotice(paths: string[]): string {
+  const labels = paths.map((path) => FIELD_LABELS[path] ?? path);
+  const formatted =
+    labels.length === 1
+      ? (labels[0] ?? 'that answer')
+      : `${labels.slice(0, -1).join(', ')} and ${labels.slice(-1)}`;
+  return `I couldn’t quite understand your ${formatted}. Could you rephrase or clarify?`;
+}
+
+function formatPhoneDigits(digits: string): string {
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  if (digits.startsWith('1') && digits.length === 11) {
+    return `+${digits}`;
+  }
+  return digits.startsWith('+') ? digits : `+${digits}`;
+}
+
+function formatLocationToken(token: string): string | null {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase() === 'remote') return 'Remote';
+  return trimmed
+    .split(' ')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(' ');
 }

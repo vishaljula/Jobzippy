@@ -19,12 +19,41 @@ function init() {
 
   console.log('[Jobzippy] Initializing Indeed automation');
 
-  // Add visual indicator that extension is active
-  addActiveIndicator();
+  // Add visual indicator that extension is active (dev-only)
+  if (import.meta.env.DEV) {
+    addActiveIndicator();
+  }
+
+  // Notify side panel that Indeed is active
+  chrome.runtime.sendMessage({ type: 'PAGE_ACTIVE', data: { platform: 'Indeed' } }).catch(() => {});
+
+  // Report auth state heuristic
+  try {
+    const loggedIn = detectLoggedIn();
+    chrome.runtime
+      .sendMessage({ type: 'AUTH_STATE', data: { platform: 'Indeed', loggedIn } })
+      .catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  // Observe SPA route/content changes and re-emit AUTH_STATE on change
+  setupAuthObservers();
 
   // Listen for messages from background script
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     switch (message.type) {
+      case 'AUTH_PROBE':
+        try {
+          const loggedIn = detectLoggedIn();
+          chrome.runtime
+            .sendMessage({ type: 'AUTH_STATE', data: { platform: 'Indeed', loggedIn } })
+            .catch(() => {});
+          sendResponse({ status: 'ok' });
+        } catch {
+          sendResponse({ status: 'error' });
+        }
+        break;
       case 'START_AUTO_APPLY':
         console.log('[Jobzippy] Starting auto-apply on Indeed');
         // TODO: Implement auto-apply logic
@@ -106,6 +135,69 @@ async function clickApplyNow(jobElement: HTMLElement): Promise<boolean> {
   // TODO: Implement Apply Now automation
   console.log('[Jobzippy] Clicking Apply Now for job:', jobElement);
   return false;
+}
+
+function detectLoggedIn(): boolean {
+  const url = window.location.href;
+  // Explicit login routes
+  if (/\/account\/login|\/signin|auth/.test(url)) return false;
+  // If we see a clear Profile menu or avatar, assume logged in
+  if (
+    document.querySelector(
+      '#gnav-ProfileMenu, a[data-gnav-element-name="Profile"], button[id^="gnav-Profile"], [data-gnav-element-name="AccountMenu"]'
+    )
+  ) {
+    return true;
+  }
+  // If we see clear sign-in CTA, assume not logged in
+  if (
+    document.querySelector(
+      'a[data-gnav-element-name="SignIn"], a[href*="/account/login"], form[action*="login"]'
+    )
+  ) {
+    return false;
+  }
+  // Conservative default: treat as not logged in unless we see profile evidence
+  return false;
+}
+
+function setupAuthObservers() {
+  let lastState: boolean | null = null;
+  let timer: number | null = null;
+  const debounceCheck = () => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    timer = window.setTimeout(() => {
+      try {
+        const state = detectLoggedIn();
+        if (state !== lastState) {
+          lastState = state;
+          chrome.runtime
+            .sendMessage({ type: 'AUTH_STATE', data: { platform: 'Indeed', loggedIn: state } })
+            .catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }, 400);
+  };
+
+  // Initial capture
+  debounceCheck();
+
+  // Observe DOM changes (nav bar/login widgets update without URL change)
+  const obs = new MutationObserver(debounceCheck);
+  obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+
+  // Hook history changes for SPA navigations
+  const origPush = history.pushState;
+  history.pushState = function (...args) {
+    const res = origPush.apply(history, args as any);
+    debounceCheck();
+    return res;
+  } as typeof history.pushState;
+  window.addEventListener('popstate', debounceCheck);
 }
 
 // Initialize when DOM is ready

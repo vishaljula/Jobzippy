@@ -33,7 +33,7 @@ export function ChatComposer({
   isProcessing,
   hint = 'Press Enter to send · Shift+Enter for newline',
 }: ChatComposerProps) {
-  const isSendDisabled = disabled || (value.trim().length === 0 && !attachment);
+  const isSendDisabled = disabled || isProcessing || (value.trim().length === 0 && !attachment);
 
   return (
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur">

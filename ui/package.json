@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --watch --mode development",
+    "build:dev": "tsc && cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --mode development --minify false --sourcemap true",
     "build": "tsc && cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build",
     "preview": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite preview",
     "lint": "eslint . --ext .ts,.tsx",

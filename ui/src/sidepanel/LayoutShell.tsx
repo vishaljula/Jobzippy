@@ -6,6 +6,9 @@ interface NavItem {
   key: string;
   icon: LucideIcon;
   label: string;
+  onClick?: () => void;
+  active?: boolean;
+  highlight?: boolean;
 }
 
 interface AvatarProps {
@@ -21,6 +24,7 @@ interface LayoutShellProps {
   history: ReactNode;
   composer: ReactNode;
   navItems: readonly NavItem[];
+  secondaryNavItems?: readonly NavItem[];
   avatar?: AvatarProps | null;
   railFooter?: ReactNode;
   footerNote?: ReactNode;
@@ -34,6 +38,7 @@ export function LayoutShell({
   history,
   composer,
   navItems,
+  secondaryNavItems,
   avatar,
   railFooter,
   footerNote,
@@ -83,18 +88,63 @@ export function LayoutShell({
             <div className="h-11 w-11 rounded-2xl border border-slate-200 bg-slate-100 shadow-sm" />
           )}
           <div className="flex flex-col items-center gap-4 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            {navItems.map(({ key, icon: Icon, label }) => (
-              <div
+            {navItems.map(({ key, icon: Icon, label, onClick, active, highlight }) => (
+              <button
                 key={key}
-                className="flex flex-col items-center gap-1 text-slate-400 transition-colors hover:text-indigo-500"
+                type="button"
+                onClick={onClick}
+                className={`flex flex-col items-center gap-1 focus:outline-none ${
+                  highlight ? 'text-indigo-500' : 'text-slate-400 hover:text-indigo-500'
+                }`}
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:scale-105 hover:border-indigo-200">
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border bg-white shadow-sm transition hover:scale-105 hover:border-indigo-200 ${
+                    active ? 'border-indigo-200 text-indigo-500' : 'border-slate-200'
+                  }`}
+                  style={
+                    highlight
+                      ? {
+                          boxShadow: '0 0 12px rgba(99,102,241,0.45)',
+                        }
+                      : undefined
+                  }
+                >
                   <Icon className="h-5 w-5" strokeWidth={2} />
                 </div>
                 <span>{label}</span>
-              </div>
+              </button>
             ))}
           </div>
+          {secondaryNavItems?.length ? (
+            <div className="mt-4 flex flex-col items-center gap-3 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+              {secondaryNavItems.map(({ key, icon: Icon, label, onClick, active, highlight }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={onClick}
+                  className={`flex flex-col items-center gap-1 focus:outline-none ${
+                    highlight ? 'text-indigo-500' : 'text-slate-400 hover:text-indigo-500'
+                  }`}
+                >
+                  <div
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl border bg-white shadow-sm transition hover:scale-105 hover:border-indigo-200 ${
+                      active ? 'border-indigo-200 text-indigo-500' : 'border-slate-200'
+                    }`}
+                    style={
+                      highlight
+                        ? {
+                            boxShadow: '0 0 12px rgba(99,102,241,0.45)',
+                          }
+                        : undefined
+                    }
+                  >
+                    <Icon className="h-5 w-5" strokeWidth={2} />
+                  </div>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div>{railFooter}</div>
       </aside>

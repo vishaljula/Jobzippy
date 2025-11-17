@@ -41,7 +41,11 @@ export const intakeAgentConfig: IntakeAgentConfig = {
     },
     { path: 'profile.preferences.remote', label: 'Remote preference', section: 'profile' },
     { path: 'profile.preferences.locations', label: 'Preferred locations', section: 'profile' },
-    { path: 'profile.preferences.salary_min', label: 'Minimum salary', section: 'profile' },
+    {
+      path: 'profile.preferences.salary_min',
+      label: 'Minimum salary (local currency)',
+      section: 'profile',
+    },
     { path: 'profile.preferences.start_date', label: 'Start date', section: 'profile' },
     { path: 'compliance.veteran_status', label: 'Veteran status', section: 'compliance' },
     { path: 'compliance.disability_status', label: 'Disability status', section: 'compliance' },

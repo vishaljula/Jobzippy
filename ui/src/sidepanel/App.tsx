@@ -1,15 +1,26 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Rocket, LogOut, Settings, BarChart3, Shield, Bell, Loader2, Sparkles } from 'lucide-react';
+import {
+  Rocket,
+  LogOut,
+  Settings,
+  BarChart3,
+  Shield,
+  Bell,
+  ClipboardCheck,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
+import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
+import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
+import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
 import { LayoutShell } from './LayoutShell';
-import { useIntakeAgent } from '@/lib/intake';
-import { ChatComposer, ChatMessage } from '@/components/chat';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -29,10 +40,16 @@ function App() {
   } = useOnboarding(isAuthenticated);
   const [isLoading, setIsLoading] = useState(true);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [composerValue, setComposerValue] = useState('');
-  const [queuedFile, setQueuedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const onboardingInitRef = useRef(false);
+  const [manualWizardOpen, setManualWizardOpen] = useState(false);
+  const [navHighlight, setNavHighlight] = useState(false);
+  const prevWizardOpenRef = useRef(isWizardOpen);
+  const [showTutorial, setShowTutorial] = useState(false);
+  // Engine state/status
+  const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING'>('IDLE');
+  const [engineStatus, setEngineStatus] = useState<string>('Idle');
+  const [authNeeded, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
+  const [preflightPending, setPreflightPending] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -43,6 +60,8 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) {
       setIsWizardOpen(false);
+      onboardingInitRef.current = false;
+      setManualWizardOpen(false);
       return;
     }
 
@@ -50,121 +69,255 @@ function App() {
       return;
     }
 
-    if (snapshot.status === 'in_progress') {
+    if (snapshot.status === 'not_started') {
+      if (!onboardingInitRef.current) {
+        onboardingInitRef.current = true;
+        void begin();
+      }
+      setIsWizardOpen(true);
+    } else if (snapshot.status === 'in_progress') {
       setIsWizardOpen(true);
     } else {
-      setIsWizardOpen(false);
+      setIsWizardOpen(manualWizardOpen);
+      onboardingInitRef.current = false;
+      if (!manualWizardOpen) {
+        setManualWizardOpen(false);
+      }
     }
-  }, [isAuthenticated, onboardingLoading, snapshot.status]);
+  }, [begin, isAuthenticated, onboardingLoading, manualWizardOpen, snapshot.status]);
 
   const handleResumeOnboarding = useCallback(() => {
-    if (snapshot.status === 'completed') {
-      setIsWizardOpen(false);
-      return;
-    }
-    if (snapshot.status === 'not_started') {
+    if (snapshot.status === 'not_started' && !onboardingInitRef.current) {
+      onboardingInitRef.current = true;
       void begin();
     }
+    setManualWizardOpen(true);
     setIsWizardOpen(true);
   }, [begin, snapshot.status]);
 
   const handleCompleteOnboarding = useCallback(async () => {
     await complete();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [complete]);
 
   const handleSkipOnboarding = useCallback(async () => {
     await skip();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [skip]);
 
   const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
 
-  const {
-    isLoading: chatLoading,
-    isProcessing,
-    messages,
-    pendingAttachment,
-    setPendingAttachment,
-    sendMessage,
-    applyDraft,
-    requestManualEdit,
-    activeDraftMessageId,
-  } = useIntakeAgent({ enabled: isAuthenticated, user });
-
-  const sortedMessages = useMemo(
-    () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
-    [messages]
-  );
-
   useEffect(() => {
-    if (!messagesEndRef.current) return;
-    messagesEndRef.current.scrollIntoView({
-      behavior: sortedMessages.length > 1 ? 'smooth' : 'auto',
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    if (isWizardOpen) {
+      setNavHighlight(false);
+    }
+    if (prevWizardOpenRef.current && !isWizardOpen) {
+      setNavHighlight(true);
+      timeout = setTimeout(() => setNavHighlight(false), 1200);
+    }
+    prevWizardOpenRef.current = isWizardOpen;
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [isWizardOpen]);
+
+  const onboardingNavItems = useMemo(() => {
+    if (!isAuthenticated) {
+      return [];
+    }
+    return [
+      {
+        key: 'onboarding',
+        icon: ClipboardCheck,
+        label: 'Onboarding',
+        onClick: handleResumeOnboarding,
+        active: isWizardOpen,
+        highlight: navHighlight,
+      },
+    ];
+  }, [handleResumeOnboarding, isAuthenticated, isWizardOpen, navHighlight]);
+
+  const {
+    jobs,
+    status: jobStatus,
+    refresh: refreshJobs,
+    error: jobError,
+  } = useJobMatches(isAuthenticated ? user : null);
+
+  // Listen for engine state broadcasts
+  useEffect(() => {
+    const handler = (message: any) => {
+      if (message?.type === 'ENGINE_STATE') {
+        setEngineState(message.data?.state ?? 'IDLE');
+        setEngineStatus(message.data?.status ?? 'Idle');
+      } else if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        const loggedIn = Boolean(message.data.loggedIn);
+        setAuthNeeded((prev) => ({
+          linkedin: p === 'LinkedIn' ? !loggedIn : prev.linkedin,
+          indeed: p === 'Indeed' ? !loggedIn : prev.indeed,
+        }));
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handler);
+    };
+  }, []);
+
+  // Poll engine status on mount
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'ENGINE_STATE' }, (resp) => {
+      if (resp?.state) {
+        setEngineState(resp.state);
+        if (resp.engineStatus) setEngineStatus(resp.engineStatus);
+      }
     });
-  }, [sortedMessages.length, chatLoading]);
+  }, []);
 
-  const composerAttachment = useMemo(() => {
-    if (pendingAttachment) {
-      return {
-        name: pendingAttachment.name,
-        size: pendingAttachment.size,
-        mimeType: pendingAttachment.mimeType,
-      };
-    }
-    if (queuedFile) {
-      return {
-        name: queuedFile.name,
-        size: queuedFile.size,
-        mimeType: queuedFile.type || 'application/octet-stream',
-      };
-    }
-    return null;
-  }, [pendingAttachment, queuedFile]);
+  const startAgent = useCallback(async () => {
+    // Preflight auth check: probe existing tabs, then open search URLs directly
+    setPreflightPending(true);
+    const required = { linkedin: true, indeed: true };
+    const received = { linkedin: false, indeed: false };
+    const results = { linkedin: false, indeed: false };
+    const openedTabIds: number[] = [];
 
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setQueuedFile(file);
-    setPendingAttachment({
-      id: 'pending',
-      kind: 'file',
-      name: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
-  };
-
-  const handleRemoveAttachment = () => {
-    setQueuedFile(null);
-    setPendingAttachment(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!isAuthenticated || isProcessing) return;
-    if (!composerValue.trim() && !queuedFile) return;
-
+    // Build search URLs first
+    let urls: { linkedin?: string; indeed?: string } = {};
     try {
-      await sendMessage({
-        text: composerValue,
-        attachments: queuedFile ? [queuedFile] : [],
-      });
-    } finally {
-      setComposerValue('');
-      handleRemoveAttachment();
+      const [{ deriveVaultPassword }, { vaultService }, { VAULT_STORES }, { buildSearchUrls }] =
+        await Promise.all([
+          import('@/lib/vault/utils'),
+          import('@/lib/vault/service'),
+          import('@/lib/vault/constants'),
+          import('@/lib/jobs/search'),
+        ]);
+      const password = deriveVaultPassword(user);
+      const [profile, history] = await Promise.all([
+        vaultService.load(VAULT_STORES.profile, password).catch(() => null),
+        vaultService.load(VAULT_STORES.history, password).catch(() => null),
+      ]);
+      urls = buildSearchUrls(profile, history);
+    } catch {
+      // ignore URL build errors; we'll still check auth
     }
-  };
+
+    // Open search URLs directly (they'll trigger auth checks via content scripts)
+    if (urls.linkedin) {
+      chrome.tabs.create({ url: urls.linkedin, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+    if (urls.indeed) {
+      chrome.tabs.create({ url: urls.indeed, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+
+    // Timeout fallback (5 seconds)
+    const timeout = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(handler);
+      setPreflightPending(false);
+      // If we didn't get responses, assume not logged in
+      const need = {
+        linkedin: required.linkedin && !results.linkedin,
+        indeed: required.indeed && !results.indeed,
+      };
+      setAuthNeeded(need);
+      const allMissing = need.linkedin && need.indeed;
+      if (!allMissing) {
+        chrome.runtime.sendMessage({ type: 'START_AUTO_APPLY' }, () => {});
+      }
+    }, 5000);
+
+    const handler = (message: any) => {
+      if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        if (p === 'LinkedIn') {
+          received.linkedin = true;
+          results.linkedin = Boolean(message.data.loggedIn);
+        }
+        if (p === 'Indeed') {
+          received.indeed = true;
+          results.indeed = Boolean(message.data.loggedIn);
+        }
+        if (received.linkedin && received.indeed) {
+          clearTimeout(timeout);
+          chrome.runtime.onMessage.removeListener(handler);
+          setPreflightPending(false);
+          const need = {
+            linkedin: required.linkedin && !results.linkedin,
+            indeed: required.indeed && !results.indeed,
+          };
+          setAuthNeeded(need);
+          // Allow starting if at least one platform is signed in
+          const allMissing = need.linkedin && need.indeed;
+          if (!allMissing) {
+            chrome.runtime.sendMessage({ type: 'START_AUTO_APPLY' }, () => {});
+          }
+        }
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+
+    // Probe existing tabs first (in case user already has tabs open)
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
+  }, [user]);
+  const stopAgent = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
+  }, []);
+
+  // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isAuthenticated || snapshot.status !== 'completed') {
+        if (!cancelled) setShowTutorial(false);
+        return;
+      }
+      try {
+        const [{ getStorage }, { deriveVaultPassword }, { vaultService }, { VAULT_STORES }] =
+          await Promise.all([
+            import('@/lib/storage'),
+            import('@/lib/vault/utils'),
+            import('@/lib/vault/service'),
+            import('@/lib/vault/constants'),
+          ]);
+        const dismissed = await getStorage('tutorialDismissed');
+        if (dismissed === true) {
+          if (!cancelled) setShowTutorial(false);
+          return;
+        }
+        const password = deriveVaultPassword(user);
+        const profile = await vaultService.load(VAULT_STORES.profile, password).catch(() => null);
+        if (!cancelled) {
+          setShowTutorial(Boolean(profile));
+        }
+      } catch {
+        if (!cancelled) setShowTutorial(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, snapshot.status, user]);
+
+  const handleDismissTutorial = useCallback(async () => {
+    try {
+      const { setStorage } = await import('@/lib/storage');
+      await setStorage('tutorialDismissed', true);
+    } finally {
+      setShowTutorial(false);
+    }
+  }, []);
 
   if (appLoading) {
     return (
@@ -177,18 +330,24 @@ function App() {
     );
   }
 
-  const statusLabel =
-    isAuthenticated && user ? (
-      <span className="flex items-center gap-2">
-        <span className="hidden md:inline text-slate-400">Signed in as</span>
-        <span className="font-medium text-slate-600">{user.given_name}</span>
+  const statusLabel = isAuthenticated ? (
+    <span className="flex items-center gap-2 text-slate-600">
+      <span
+        className={`h-2 w-2 rounded-full ${
+          engineState === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-300'
+        }`}
+      />
+      <span className="font-medium">
+        Agent: {engineState === 'RUNNING' ? 'Running' : 'Stopped'}
       </span>
-    ) : (
-      <span className="flex items-center gap-2 text-slate-500">
-        <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-        Not signed in
-      </span>
-    );
+      {engineStatus ? <span className="text-slate-400">({engineStatus})</span> : null}
+    </span>
+  ) : (
+    <span className="flex items-center gap-2 text-slate-500">
+      <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+      Not signed in
+    </span>
+  );
 
   const heroCard = (
     <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
@@ -209,114 +368,31 @@ function App() {
     </div>
   );
 
-  const conversationBody = (() => {
-    if (!isAuthenticated) {
-      return (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-6 text-sm text-slate-500">
-          Sign in to start chatting with Jobzippy. Upload your resume and the intake agent will
-          parse it in real time.
-        </div>
-      );
-    }
-
-    if (chatLoading) {
-      return (
-        <div className="flex h-48 items-center justify-center text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      );
-    }
-
-    if (sortedMessages.length === 0) {
-      return (
-        <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
-          Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon below.
-          You can also start the conversation by telling Jobzippy what you need help with.
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-5">
-        {sortedMessages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            onApplyPreview={
-              activeDraftMessageId === message.id
-                ? () => {
-                    void applyDraft();
-                  }
-                : undefined
-            }
-            onEditPreview={activeDraftMessageId === message.id ? requestManualEdit : undefined}
-            isPreviewProcessing={isProcessing && activeDraftMessageId === message.id}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-    );
-  })();
-
   const historyContent = (
     <div className="space-y-6">
       {!isAuthenticated && heroCard}
-      {isAuthenticated && snapshot.status === 'skipped' && (
-        <ResumeOnboardingCard onResume={handleResumeOnboarding} />
+      {isAuthenticated && (
+        <>
+          {snapshot.status === 'skipped' && (
+            <ResumeOnboardingCard onResume={handleResumeOnboarding} />
+          )}
+          <DashboardOverview
+            user={user}
+            onEditProfile={handleResumeOnboarding}
+            jobs={jobs}
+            jobStatus={jobStatus}
+            onRetry={refreshJobs}
+            jobError={jobError}
+          />
+        </>
       )}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700">Intake Agent</h3>
-            <p className="text-xs text-slate-400">
-              Chat-first intake · Resume parsing · Vault sync
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles className="h-4 w-4 text-indigo-500" />
-            <span>{isProcessing ? 'Processing…' : 'Live'}</span>
-            {isAuthenticated && snapshot.status !== 'completed' && (
-              <Button
-                size="sm"
-                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
-                onClick={handleResumeOnboarding}
-              >
-                Complete setup
-              </Button>
-            )}
-          </div>
-        </div>
-        {conversationBody}
-      </section>
     </div>
   );
 
-  const composerContent = isAuthenticated ? (
-    <>
-      <ChatComposer
-        value={composerValue}
-        onChange={setComposerValue}
-        onSubmit={() => {
-          void handleSubmit();
-        }}
-        disabled={isProcessing}
-        placeholder="Ask Jobzippy anything or paste a job note..."
-        attachment={composerAttachment}
-        onAttachClick={handleAttachClick}
-        onRemoveAttachment={handleRemoveAttachment}
-        isProcessing={isProcessing}
-      />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.doc,.docx"
-        hidden
-        onChange={handleFileChange}
-      />
-    </>
-  ) : (
-    <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-sm text-slate-500 shadow-sm">
-      Sign in to unlock the chat composer and let Jobzippy parse your resume in real time.
+  const composerContent = (
+    <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 text-sm text-slate-500 shadow-sm">
+      Jobzippy automatically searches and applies once your onboarding answers are synced. Use the
+      Onboarding button in the rail to update your profile via the chat agent at any time.
     </div>
   );
 
@@ -329,6 +405,87 @@ function App() {
         statusLabel={statusLabel}
         headerActions={
           <div className="flex items-center gap-2">
+            {isAuthenticated && (authNeeded.linkedin || authNeeded.indeed) && (
+              <div className="mr-2 hidden items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 md:flex">
+                <span>Sign in:</span>
+                {authNeeded.linkedin && (
+                  <a
+                    href="https://www.linkedin.com/jobs/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    LinkedIn
+                  </a>
+                )}
+                {authNeeded.linkedin && authNeeded.indeed && <span>·</span>}
+                {authNeeded.indeed && (
+                  <a
+                    href="https://www.indeed.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    Indeed
+                  </a>
+                )}
+              </div>
+            )}
+            {isAuthenticated && (
+              <>
+                {(() => {
+                  const missing = [
+                    authNeeded.linkedin ? 'LinkedIn' : null,
+                    authNeeded.indeed ? 'Indeed' : null,
+                  ].filter(Boolean) as string[];
+                  const totalNeeded = 2;
+                  const okCount = totalNeeded - missing.length;
+                  const variant =
+                    okCount === 0 ? 'red' : okCount === totalNeeded ? 'green' : 'amber';
+                  const borderClass =
+                    variant === 'green'
+                      ? 'border-emerald-300 hover:border-emerald-400'
+                      : variant === 'amber'
+                        ? 'border-amber-300 hover:border-amber-400'
+                        : 'border-rose-300 hover:border-rose-400';
+                  const icon =
+                    variant === 'green' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle
+                        className={`h-3.5 w-3.5 ${variant === 'amber' ? 'text-amber-600' : 'text-rose-600'}`}
+                      />
+                    );
+                  const title =
+                    missing.length === 0
+                      ? 'All platforms signed in'
+                      : `Not signed in: ${missing.join(', ')}`;
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span title={title}>{icon}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`text-xs ${borderClass}`}
+                        onClick={startAgent}
+                        disabled={engineState === 'RUNNING' || preflightPending}
+                      >
+                        {preflightPending ? 'Checking…' : 'Start Agent'}
+                      </Button>
+                    </div>
+                  );
+                })()}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={stopAgent}
+                  disabled={engineState === 'IDLE'}
+                >
+                  Stop Agent
+                </Button>
+              </>
+            )}
             {isAuthenticated && (
               <Button
                 variant="ghost"
@@ -344,6 +501,7 @@ function App() {
         history={historyContent}
         composer={composerContent}
         navItems={NAV_ITEMS}
+        secondaryNavItems={onboardingNavItems}
         avatar={
           user
             ? {
@@ -365,10 +523,22 @@ function App() {
       />
       <OnboardingWizard
         open={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
+        onClose={() => {
+          setIsWizardOpen(false);
+          setManualWizardOpen(false);
+        }}
         onComplete={handleCompleteOnboarding}
         onSkip={handleSkipOnboarding}
+        autoCloseOnComplete={!manualWizardOpen}
       />
+      <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
+      <TutorialCarousel open={false} onClose={() => {}} />
+      <TutorialCarousel
+        open={showTutorial && !isWizardOpen}
+        onClose={handleDismissTutorial}
+        onStart={startAgent}
+      />
+      {/* No bottom-right retry prompt by design; Start button itself conveys status */}
     </>
   );
 }

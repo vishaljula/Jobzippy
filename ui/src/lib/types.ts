@@ -19,6 +19,7 @@ export interface UserProfile {
     remote: boolean;
     locations: string[];
     salary_min: number;
+    salary_currency: string;
     start_date: string;
   };
 }
@@ -229,6 +230,7 @@ export interface ExtensionStorage {
   lastSync?: string;
   intakeConversation?: IntakeConversationSnapshot;
   intakeDraft?: ProfileVault;
+  tutorialDismissed?: boolean;
 }
 
 // Job Filters
