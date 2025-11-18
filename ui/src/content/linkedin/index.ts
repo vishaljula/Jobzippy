@@ -5,9 +5,23 @@
 
 console.log('[Jobzippy] LinkedIn content script loaded');
 
-// Check if we're on a LinkedIn jobs page
+// Check if we're on a LinkedIn jobs page (real or mock)
 const isJobsPage = () => {
-  return window.location.href.includes('linkedin.com/jobs');
+  const url = window.location.href;
+  const isMock = url.startsWith('http://localhost:') && url.includes('linkedin-jobs.html');
+  const isRealPage = url.includes('linkedin.com/jobs');
+  const result = isRealPage || isMock;
+  console.log(
+    '[Jobzippy] LinkedIn isJobsPage - url:',
+    url,
+    'isMock:',
+    isMock,
+    'isRealPage:',
+    isRealPage,
+    'result:',
+    result
+  );
+  return result;
 };
 
 // Initialize content script
@@ -32,15 +46,20 @@ function init() {
   // Report auth state heuristic
   try {
     const loggedIn = detectLoggedIn();
+    console.log('[Jobzippy] LinkedIn init - sending AUTH_STATE:', loggedIn);
     chrome.runtime
       .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn } })
-      .catch(() => {});
-  } catch {
-    // ignore
+      .then(() => console.log('[Jobzippy] LinkedIn AUTH_STATE sent successfully'))
+      .catch((err) => console.error('[Jobzippy] Error sending AUTH_STATE:', err));
+  } catch (err) {
+    console.error('[Jobzippy] Error in LinkedIn init auth check:', err);
   }
 
   // Observe SPA route/content changes and re-emit AUTH_STATE on change
   setupAuthObservers();
+
+  // User interaction detection (pause on click/keyboard)
+  setupUserInteractionDetection();
 
   // Listen for messages from background script
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -58,7 +77,7 @@ function init() {
         break;
       case 'START_AUTO_APPLY':
         console.log('[Jobzippy] Starting auto-apply on LinkedIn');
-        // TODO: Implement auto-apply logic
+        // Background script will send SCRAPE_JOBS commands
         sendResponse({ status: 'started' });
         break;
 
@@ -66,6 +85,64 @@ function init() {
         console.log('[Jobzippy] Stopping auto-apply on LinkedIn');
         sendResponse({ status: 'stopped' });
         break;
+
+      case 'SCRAPE_JOBS': {
+        console.log('[Jobzippy] Scraping jobs from LinkedIn page');
+        try {
+          // Wait a bit for page to be fully loaded
+          setTimeout(() => {
+            const jobs = scrapeJobCards();
+            const hasNextPage =
+              getNextPageUrl() !== null ||
+              document.querySelector('button[aria-label*="Next"]:not([disabled])') !== null;
+            const currentPage =
+              parseInt(new URLSearchParams(window.location.search).get('start') || '0', 10) / 25 +
+              1;
+
+            chrome.runtime
+              .sendMessage({
+                type: 'JOBS_SCRAPED',
+                data: {
+                  platform: 'LinkedIn',
+                  jobs: jobs.map((j) => ({ ...j, platform: 'LinkedIn' as const })),
+                  hasNextPage,
+                  currentPage,
+                },
+              })
+              .catch((err) => console.error('[Jobzippy] Error sending scraped jobs:', err));
+          }, 1000);
+          sendResponse({ status: 'ok' });
+        } catch (error) {
+          console.error('[Jobzippy] Error scraping jobs:', error);
+          sendResponse({ status: 'error', message: String(error) });
+        }
+        break;
+      }
+
+      case 'NAVIGATE_NEXT_PAGE': {
+        console.log('[Jobzippy] Navigating to next page on LinkedIn');
+        try {
+          const navigated = navigateToNextPage();
+          if (navigated) {
+            // Wait for navigation to complete, then notify
+            setTimeout(() => {
+              chrome.runtime
+                .sendMessage({
+                  type: 'PAGE_NAVIGATED',
+                  data: { platform: 'LinkedIn', url: window.location.href },
+                })
+                .catch(() => {});
+            }, 2000);
+            sendResponse({ status: 'ok', navigated: true });
+          } else {
+            sendResponse({ status: 'ok', navigated: false, hasNextPage: false });
+          }
+        } catch (error) {
+          console.error('[Jobzippy] Error navigating to next page:', error);
+          sendResponse({ status: 'error', message: String(error) });
+        }
+        break;
+      }
 
       default:
         sendResponse({ status: 'unknown_command' });
@@ -125,11 +202,227 @@ function addActiveIndicator() {
   }, 5000);
 }
 
-// Helper function to find Easy Apply jobs
+// Scrape job cards from current page
+function scrapeJobCards(): Array<{
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  description?: string;
+  salary?: string;
+  postedDate?: string;
+  applyType?: 'easy_apply' | 'external' | 'unknown';
+}> {
+  const jobs: Array<{
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    url: string;
+    description?: string;
+    salary?: string;
+    postedDate?: string;
+    applyType?: 'easy_apply' | 'external' | 'unknown';
+  }> = [];
+
+  // LinkedIn job cards - try multiple selectors for robustness
+  const jobSelectors = [
+    'li.jobs-search-results__list-item',
+    'div[data-job-id]',
+    'div.job-card-container',
+    'div.job-card-list__entity-lockup',
+  ];
+
+  let jobElements: NodeListOf<Element> | null = null;
+  for (const selector of jobSelectors) {
+    jobElements = document.querySelectorAll(selector);
+    if (jobElements.length > 0) break;
+  }
+
+  if (!jobElements || jobElements.length === 0) {
+    console.log('[Jobzippy] No job cards found on LinkedIn page');
+    return jobs;
+  }
+
+  jobElements.forEach((card, index) => {
+    try {
+      // Extract job ID
+      let jobId = card.getAttribute('data-job-id') || '';
+      if (!jobId) {
+        const link = card.querySelector<HTMLAnchorElement>('a[href*="/jobs/view/"]');
+        if (link?.href) {
+          const match = link.href.match(/\/jobs\/view\/(\d+)/);
+          jobId = match && match[1] ? match[1] : `linkedin-${index}-${Date.now()}`;
+        } else {
+          jobId = `linkedin-${index}-${Date.now()}`;
+        }
+      }
+
+      // Extract title
+      const titleEl =
+        card.querySelector<HTMLElement>(
+          'a.job-card-list__title-link, a[data-control-name="job_card_title_link"]'
+        ) ||
+        card.querySelector<HTMLElement>('h3.base-search-card__title') ||
+        card.querySelector<HTMLElement>('span.job-card-list__title');
+      const title = titleEl?.textContent?.trim() || '';
+
+      // Extract company
+      const companyEl =
+        card.querySelector<HTMLElement>(
+          'h4.base-search-card__subtitle, a.job-card-container__company-name'
+        ) || card.querySelector<HTMLElement>('span.job-card-container__company-name');
+      const company = companyEl?.textContent?.trim() || '';
+
+      // Extract location
+      const locationEl =
+        card.querySelector<HTMLElement>(
+          'span.job-card-container__metadata-item, span.job-card-container__primary-description'
+        ) || card.querySelector<HTMLElement>('li.job-card-container__metadata-item');
+      const location = locationEl?.textContent?.trim() || '';
+
+      // Extract URL
+      const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="/jobs/view/"]');
+      const url = linkEl?.href || window.location.href;
+
+      // Extract description snippet
+      const descEl = card.querySelector<HTMLElement>(
+        'p.job-card-list__description, p.base-search-card__snippet'
+      );
+      const description = descEl?.textContent?.trim();
+
+      // Extract salary
+      const salaryEl = card.querySelector<HTMLElement>('span.job-card-container__salary-info');
+      const salary = salaryEl?.textContent?.trim();
+
+      // Extract posted date
+      const dateEl = card.querySelector<HTMLElement>('time, span.job-card-container__listed-date');
+      const postedDate = dateEl?.getAttribute('datetime') || dateEl?.textContent?.trim();
+
+      // Detect apply type
+      let applyType: 'easy_apply' | 'external' | 'unknown' = 'unknown';
+      const easyApplyBtn = card.querySelector<HTMLElement>(
+        'button[aria-label*="Easy Apply"], button[aria-label*="easy apply"]'
+      );
+      const externalBtn = card.querySelector<HTMLElement>(
+        'a[href*="apply"]:not([aria-label*="Easy Apply"])'
+      );
+      if (easyApplyBtn) {
+        applyType = 'easy_apply';
+      } else if (externalBtn) {
+        applyType = 'external';
+      }
+
+      if (title && company) {
+        jobs.push({
+          id: jobId,
+          title,
+          company,
+          location,
+          url,
+          description,
+          salary,
+          postedDate,
+          applyType,
+        });
+      }
+    } catch (error) {
+      console.warn('[Jobzippy] Error scraping job card:', error);
+    }
+  });
+
+  return jobs;
+}
+
+// Check if there's a next page
+function getNextPageUrl(): string | null {
+  const nextButton = document.querySelector<HTMLButtonElement>(
+    'button[aria-label*="Next"], button[aria-label*="next"], button[data-test-pagination-page-btn-next]'
+  );
+  if (nextButton && !nextButton.disabled) {
+    return null; // Will trigger click instead
+  }
+
+  const nextLink = document.querySelector<HTMLAnchorElement>(
+    'a[aria-label*="Next"], a[aria-label*="next"], a[data-test-pagination-page-btn-next]'
+  );
+  if (nextLink && nextLink.href) {
+    return nextLink.href;
+  }
+
+  // Check current page number
+  const currentPageEl = document.querySelector<HTMLElement>(
+    'li[aria-current="page"], button[aria-current="page"]'
+  );
+  if (currentPageEl) {
+    const currentPage = parseInt(currentPageEl.textContent || '1', 10);
+    const nextPageEl = document.querySelector<HTMLElement>(
+      `button[data-test-pagination-page-btn="${currentPage + 1}"], li[data-test-pagination-page-btn="${currentPage + 1}"]`
+    );
+    if (nextPageEl) {
+      const link = nextPageEl.querySelector<HTMLAnchorElement>('a');
+      if (link?.href) return link.href;
+    }
+  }
+
+  return null;
+}
+
+// Navigate to next page
+function navigateToNextPage(): boolean {
+  const nextButton = document.querySelector<HTMLButtonElement>(
+    'button[aria-label*="Next"], button[aria-label*="next"], button[data-test-pagination-page-btn-next]'
+  );
+  if (nextButton && !nextButton.disabled) {
+    nextButton.click();
+    return true;
+  }
+
+  const nextLink = document.querySelector<HTMLAnchorElement>(
+    'a[aria-label*="Next"], a[aria-label*="next"], a[data-test-pagination-page-btn-next]'
+  );
+  if (nextLink) {
+    nextLink.click();
+    return true;
+  }
+
+  // Try finding next page number button
+  const currentPageEl = document.querySelector<HTMLElement>(
+    'li[aria-current="page"], button[aria-current="page"]'
+  );
+  if (currentPageEl) {
+    const currentPage = parseInt(currentPageEl.textContent || '1', 10);
+    const nextPageEl = document.querySelector<HTMLElement>(
+      `button[data-test-pagination-page-btn="${currentPage + 1}"], li[data-test-pagination-page-btn="${currentPage + 1}"]`
+    );
+    if (nextPageEl) {
+      const link = nextPageEl.querySelector<HTMLAnchorElement>('a');
+      const button = nextPageEl.querySelector<HTMLButtonElement>('button');
+      if (link) {
+        link.click();
+        return true;
+      }
+      if (button && !button.disabled) {
+        button.click();
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Helper function to find Easy Apply jobs (legacy, kept for compatibility)
 function findEasyApplyJobs(): HTMLElement[] {
   const jobs: HTMLElement[] = [];
-  // TODO: Implement job scraping logic
-  // This will depend on LinkedIn's DOM structure
+  const scraped = scrapeJobCards();
+  scraped.forEach((job) => {
+    if (job.applyType === 'easy_apply') {
+      const element = document.querySelector(`[data-job-id="${job.id}"], a[href*="${job.id}"]`);
+      if (element) jobs.push(element as HTMLElement);
+    }
+  });
   return jobs;
 }
 
@@ -141,8 +434,25 @@ async function clickEasyApply(jobElement: HTMLElement): Promise<boolean> {
 }
 
 function detectLoggedIn(): boolean {
-  // Heuristics: presence of login form elements or login routes => not logged in
+  // Mock pages (localhost URLs) are always "logged in"
   const url = window.location.href;
+  const isMockPage = url.startsWith('http://localhost:') && url.includes('linkedin-jobs.html');
+  console.log(
+    '[Jobzippy] LinkedIn detectLoggedIn - url:',
+    url,
+    'isMockPage:',
+    isMockPage,
+    'startsWith localhost:',
+    url.startsWith('http://localhost:'),
+    'includes linkedin-jobs.html:',
+    url.includes('linkedin-jobs.html')
+  );
+  if (isMockPage) {
+    console.log('[Jobzippy] LinkedIn mock page detected, returning loggedIn=true');
+    return true;
+  }
+
+  // Heuristics: presence of login form elements or login routes => not logged in
   if (/\/login|\/signin|auth/.test(url)) return false;
   if (
     document.querySelector(
@@ -202,6 +512,42 @@ function setupAuthObservers() {
   window.addEventListener('popstate', debounceCheck);
 }
 
+// User interaction detection (pause on click/keyboard)
+function setupUserInteractionDetection() {
+  let lastInteractionTime = 0;
+  const INTERACTION_THROTTLE = 1000; // Throttle to max once per second
+  let isTabActive = !document.hidden;
+
+  // Track tab visibility
+  document.addEventListener('visibilitychange', () => {
+    isTabActive = !document.hidden;
+  });
+
+  const handleInteraction = (event: Event) => {
+    // Only detect interactions when tab is active/visible
+    if (!isTabActive || document.hidden) return;
+
+    // Only detect trusted events (user actions, not programmatic)
+    // isTrusted is false for events created/dispatched by scripts
+    if (!event.isTrusted) {
+      return; // Ignore programmatic events from automation
+    }
+
+    const now = Date.now();
+    if (now - lastInteractionTime < INTERACTION_THROTTLE) return;
+    lastInteractionTime = now;
+
+    chrome.runtime
+      .sendMessage({ type: 'USER_INTERACTION', data: { platform: 'LinkedIn' } })
+      .catch(() => {});
+  };
+
+  // Listen for clicks
+  document.addEventListener('click', handleInteraction, true);
+  // Listen for keyboard input
+  document.addEventListener('keydown', handleInteraction, true);
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
@@ -210,4 +556,4 @@ if (document.readyState === 'loading') {
 }
 
 // Export for testing
-export { findEasyApplyJobs, clickEasyApply };
+export { findEasyApplyJobs, clickEasyApply, scrapeJobCards, getNextPageUrl, navigateToNextPage };

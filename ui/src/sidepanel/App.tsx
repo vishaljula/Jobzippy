@@ -13,6 +13,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
@@ -46,10 +47,14 @@ function App() {
   const prevWizardOpenRef = useRef(isWizardOpen);
   const [showTutorial, setShowTutorial] = useState(false);
   // Engine state/status
-  const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING'>('IDLE');
+  const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
   const [engineStatus, setEngineStatus] = useState<string>('Idle');
   const [authNeeded, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
   const [preflightPending, setPreflightPending] = useState(false);
+  const [tabToastId, setTabToastId] = useState<string | number | null>(null);
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
+  const countdownIntervalRef = useRef<number | null>(null);
+  const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
 
   useEffect(() => {
     if (!authLoading) {
@@ -164,13 +169,109 @@ function App() {
           linkedin: p === 'LinkedIn' ? !loggedIn : prev.linkedin,
           indeed: p === 'Indeed' ? !loggedIn : prev.indeed,
         }));
+      } else if (message?.type === 'TAB_ACTIVATED' || message?.type === 'SHOW_TAB_TOAST') {
+        // Show toast when user switches to search tab
+        const platform = message.data?.platform as 'LinkedIn' | 'Indeed';
+        console.log('[Jobzippy] TAB_ACTIVATED received:', { platform, engineState });
+        if (platform && engineState === 'RUNNING') {
+          const toastId = toast.info(
+            `Jobzippy is working on ${platform}. Your actions will pause automation and it will auto-resume.`,
+            {
+              duration: Infinity, // Stay visible while on tab
+              closeButton: true,
+              className: 'rounded-xl border-slate-200 shadow-lg',
+            }
+          );
+          setTabToastId(toastId);
+          console.log('[Jobzippy] Toast shown for', platform);
+        }
       }
     };
     chrome.runtime.onMessage.addListener(handler);
     return () => {
       chrome.runtime.onMessage.removeListener(handler);
     };
-  }, []);
+  }, [engineState]);
+
+  // Handle countdown when engine is paused
+  useEffect(() => {
+    // Clear existing countdown
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    if (engineState === 'PAUSED') {
+      // Start countdown from 8 seconds
+      setResumeCountdown(8);
+      countdownIntervalRef.current = window.setInterval(() => {
+        setResumeCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current);
+              countdownIntervalRef.current = null;
+            }
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      // Engine resumed or stopped
+      setResumeCountdown(null);
+      // Dismiss tab toast if engine stopped
+      if (engineState === 'IDLE' && tabToastId !== null) {
+        toast.dismiss(tabToastId);
+        setTabToastId(null);
+      }
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [engineState, tabToastId]);
+
+  // Update toast message with countdown
+  useEffect(() => {
+    const wasPaused = prevEngineStateRef.current === 'PAUSED';
+    const isNowRunning = engineState === 'RUNNING';
+    const justResumed = wasPaused && isNowRunning;
+
+    if (engineState === 'PAUSED' && resumeCountdown !== null && resumeCountdown > 0) {
+      if (tabToastId !== null) {
+        toast.loading(`Resume in ${resumeCountdown} seconds...`, {
+          id: tabToastId,
+          duration: Infinity,
+          closeButton: true,
+          className: 'rounded-xl border-slate-200 shadow-lg',
+        });
+      } else {
+        const toastId = toast.loading(`Resume in ${resumeCountdown} seconds...`, {
+          duration: Infinity,
+          closeButton: true,
+          className: 'rounded-xl border-slate-200 shadow-lg',
+        });
+        setTabToastId(toastId);
+      }
+    } else if (justResumed && tabToastId !== null) {
+      // Only show "resumed" when transitioning from PAUSED to RUNNING
+      toast.success('Jobzippy resumed', {
+        id: tabToastId,
+        duration: 2000,
+        closeButton: true,
+        className: 'rounded-xl border-slate-200 shadow-lg',
+      });
+      setTimeout(() => {
+        setTabToastId(null);
+      }, 2000);
+    }
+
+    // Update previous state
+    prevEngineStateRef.current = engineState;
+  }, [engineState, resumeCountdown, tabToastId]);
 
   // Poll engine status on mount
   useEffect(() => {

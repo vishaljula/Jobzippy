@@ -5,9 +5,23 @@
 
 console.log('[Jobzippy] Indeed content script loaded');
 
-// Check if we're on an Indeed jobs page
+// Check if we're on an Indeed jobs page (real or mock)
 const isJobsPage = () => {
-  return window.location.href.includes('indeed.com');
+  const url = window.location.href;
+  const isMock = url.startsWith('http://localhost:') && url.includes('indeed-jobs.html');
+  const isRealPage = url.includes('indeed.com') && url.includes('jobs');
+  const result = isRealPage || isMock;
+  console.log(
+    '[Jobzippy] Indeed isJobsPage - url:',
+    url,
+    'isMock:',
+    isMock,
+    'isRealPage:',
+    isRealPage,
+    'result:',
+    result
+  );
+  return result;
 };
 
 // Initialize content script
@@ -30,15 +44,20 @@ function init() {
   // Report auth state heuristic
   try {
     const loggedIn = detectLoggedIn();
+    console.log('[Jobzippy] Indeed init - sending AUTH_STATE:', loggedIn);
     chrome.runtime
       .sendMessage({ type: 'AUTH_STATE', data: { platform: 'Indeed', loggedIn } })
-      .catch(() => {});
-  } catch {
-    // ignore
+      .then(() => console.log('[Jobzippy] Indeed AUTH_STATE sent successfully'))
+      .catch((err) => console.error('[Jobzippy] Error sending AUTH_STATE:', err));
+  } catch (err) {
+    console.error('[Jobzippy] Error in Indeed init auth check:', err);
   }
 
   // Observe SPA route/content changes and re-emit AUTH_STATE on change
   setupAuthObservers();
+
+  // User interaction detection (pause on click/keyboard)
+  setupUserInteractionDetection();
 
   // Listen for messages from background script
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -56,7 +75,7 @@ function init() {
         break;
       case 'START_AUTO_APPLY':
         console.log('[Jobzippy] Starting auto-apply on Indeed');
-        // TODO: Implement auto-apply logic
+        // Background script will send SCRAPE_JOBS commands
         sendResponse({ status: 'started' });
         break;
 
@@ -64,6 +83,64 @@ function init() {
         console.log('[Jobzippy] Stopping auto-apply on Indeed');
         sendResponse({ status: 'stopped' });
         break;
+
+      case 'SCRAPE_JOBS': {
+        console.log('[Jobzippy] Scraping jobs from Indeed page');
+        try {
+          // Wait a bit for page to be fully loaded
+          setTimeout(() => {
+            const jobs = scrapeJobCards();
+            const hasNextPage =
+              getNextPageUrl() !== null ||
+              document.querySelector('a[aria-label="Next Page"]') !== null;
+            const currentPage =
+              parseInt(new URLSearchParams(window.location.search).get('start') || '0', 10) / 15 +
+              1;
+
+            chrome.runtime
+              .sendMessage({
+                type: 'JOBS_SCRAPED',
+                data: {
+                  platform: 'Indeed',
+                  jobs: jobs.map((j) => ({ ...j, platform: 'Indeed' as const })),
+                  hasNextPage,
+                  currentPage,
+                },
+              })
+              .catch((err) => console.error('[Jobzippy] Error sending scraped jobs:', err));
+          }, 1000);
+          sendResponse({ status: 'ok' });
+        } catch (error) {
+          console.error('[Jobzippy] Error scraping jobs:', error);
+          sendResponse({ status: 'error', message: String(error) });
+        }
+        break;
+      }
+
+      case 'NAVIGATE_NEXT_PAGE': {
+        console.log('[Jobzippy] Navigating to next page on Indeed');
+        try {
+          const navigated = navigateToNextPage();
+          if (navigated) {
+            // Wait for navigation to complete, then notify
+            setTimeout(() => {
+              chrome.runtime
+                .sendMessage({
+                  type: 'PAGE_NAVIGATED',
+                  data: { platform: 'Indeed', url: window.location.href },
+                })
+                .catch(() => {});
+            }, 2000);
+            sendResponse({ status: 'ok', navigated: true });
+          } else {
+            sendResponse({ status: 'ok', navigated: false, hasNextPage: false });
+          }
+        } catch (error) {
+          console.error('[Jobzippy] Error navigating to next page:', error);
+          sendResponse({ status: 'error', message: String(error) });
+        }
+        break;
+      }
 
       default:
         sendResponse({ status: 'unknown_command' });
@@ -123,10 +200,215 @@ function addActiveIndicator() {
   }, 5000);
 }
 
-// Helper function to find apply now jobs
+// Scrape job cards from current page
+function scrapeJobCards(): Array<{
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  description?: string;
+  salary?: string;
+  postedDate?: string;
+  applyType?: 'easy_apply' | 'external' | 'unknown';
+}> {
+  const jobs: Array<{
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    url: string;
+    description?: string;
+    salary?: string;
+    postedDate?: string;
+    applyType?: 'easy_apply' | 'external' | 'unknown';
+  }> = [];
+
+  // Indeed job cards - try multiple selectors
+  const jobSelectors = [
+    'div[data-jk]',
+    'div.job_seen_beacon',
+    'div.slider_item',
+    'td.resultContent',
+    'div.jobsearch-SerpJobCard',
+  ];
+
+  let jobElements: NodeListOf<Element> | null = null;
+  for (const selector of jobSelectors) {
+    jobElements = document.querySelectorAll(selector);
+    if (jobElements.length > 0) break;
+  }
+
+  if (!jobElements || jobElements.length === 0) {
+    console.log('[Jobzippy] No job cards found on Indeed page');
+    return jobs;
+  }
+
+  jobElements.forEach((card, index) => {
+    try {
+      // Extract job ID
+      let jobId = card.getAttribute('data-jk') || '';
+      if (!jobId) {
+        const link = card.querySelector<HTMLAnchorElement>('a[data-jk], a[href*="/viewjob"]');
+        if (link) {
+          const match = link.href.match(/jk=([^&]+)/);
+          jobId =
+            match && match[1]
+              ? match[1]
+              : link.getAttribute('data-jk') || `indeed-${index}-${Date.now()}`;
+        } else {
+          jobId = `indeed-${index}-${Date.now()}`;
+        }
+      }
+
+      // Extract title
+      const titleEl =
+        card.querySelector<HTMLElement>(
+          'a[data-jk], h2.jobTitle a, span[id*="jobTitle"] a, a.jobTitle'
+        ) || card.querySelector<HTMLElement>('h2.jobTitle');
+      const title = titleEl?.textContent?.trim() || '';
+
+      // Extract company
+      const companyEl =
+        card.querySelector<HTMLElement>(
+          'span[data-testid="company-name"], span.companyName, a[data-testid="company-name"]'
+        ) || card.querySelector<HTMLElement>('span.companyName');
+      const company = companyEl?.textContent?.trim() || '';
+
+      // Extract location
+      const locationEl =
+        card.querySelector<HTMLElement>(
+          'div[data-testid="attribute_snippet_testid"], div.companyLocation, span[data-testid="text-location"]'
+        ) || card.querySelector<HTMLElement>('div.companyLocation');
+      const location = locationEl?.textContent?.trim() || '';
+
+      // Extract URL
+      const linkEl = card.querySelector<HTMLAnchorElement>(
+        'a[data-jk], a[href*="/viewjob"], a.jobTitle'
+      );
+      let url = linkEl?.href || '';
+      if (!url && linkEl) {
+        url = new URL(linkEl.getAttribute('href') || '', window.location.origin).href;
+      }
+      if (!url) {
+        url = window.location.href;
+      }
+
+      // Extract description snippet
+      const descEl = card.querySelector<HTMLElement>('div.job-snippet, span.summary, div.summary');
+      const description = descEl?.textContent?.trim();
+
+      // Extract salary
+      const salaryEl = card.querySelector<HTMLElement>(
+        'span[data-testid="attribute_snippet_testid"], div.salary-snippet-container'
+      );
+      const salary = salaryEl?.textContent?.trim();
+
+      // Extract posted date
+      const dateEl = card.querySelector<HTMLElement>(
+        'span.date, span[data-testid="myJobsStateDate"]'
+      );
+      const postedDate = dateEl?.textContent?.trim();
+
+      // Detect apply type
+      let applyType: 'easy_apply' | 'external' | 'unknown' = 'unknown';
+      const indeedApplyBtn = card.querySelector<HTMLElement>(
+        'a[aria-label*="Apply"], button[aria-label*="Apply"]'
+      );
+      const externalBtn = card.querySelector<HTMLElement>(
+        'a[href*="apply"], a:contains("Apply on company website")'
+      );
+      if (indeedApplyBtn && !externalBtn) {
+        applyType = 'easy_apply';
+      } else if (externalBtn) {
+        applyType = 'external';
+      }
+
+      if (title && company) {
+        jobs.push({
+          id: jobId,
+          title,
+          company,
+          location,
+          url,
+          description,
+          salary,
+          postedDate,
+          applyType,
+        });
+      }
+    } catch (error) {
+      console.warn('[Jobzippy] Error scraping job card:', error);
+    }
+  });
+
+  return jobs;
+}
+
+// Check if there's a next page
+function getNextPageUrl(): string | null {
+  const nextButton = document.querySelector<HTMLAnchorElement>(
+    'a[aria-label="Next Page"], a[data-testid="pagination-page-next"]'
+  );
+  if (nextButton && nextButton.href) {
+    return nextButton.href;
+  }
+
+  // Check current page number
+  const currentPageEl = document.querySelector<HTMLElement>(
+    'b.pagination-list-current, a[aria-current="page"]'
+  );
+  if (currentPageEl) {
+    const currentPage = parseInt(currentPageEl.textContent || '1', 10);
+    const nextPageEl = document.querySelector<HTMLAnchorElement>(
+      `a[data-testid="pagination-page-${currentPage + 1}"]`
+    );
+    if (nextPageEl && nextPageEl.href) {
+      return nextPageEl.href;
+    }
+  }
+
+  return null;
+}
+
+// Navigate to next page
+function navigateToNextPage(): boolean {
+  const nextButton = document.querySelector<HTMLAnchorElement>(
+    'a[aria-label="Next Page"], a[data-testid="pagination-page-next"]'
+  );
+  if (nextButton) {
+    nextButton.click();
+    return true;
+  }
+
+  // Try finding next page number link
+  const currentPageEl = document.querySelector<HTMLElement>(
+    'b.pagination-list-current, a[aria-current="page"]'
+  );
+  if (currentPageEl) {
+    const currentPage = parseInt(currentPageEl.textContent || '1', 10);
+    const nextPageEl = document.querySelector<HTMLAnchorElement>(
+      `a[data-testid="pagination-page-${currentPage + 1}"]`
+    );
+    if (nextPageEl) {
+      nextPageEl.click();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Helper function to find apply now jobs (legacy, kept for compatibility)
 function findApplyNowJobs(): HTMLElement[] {
   const jobs: HTMLElement[] = [];
-  // TODO: Implement job scraping logic
+  const scraped = scrapeJobCards();
+  scraped.forEach((job) => {
+    if (job.applyType === 'easy_apply' || job.applyType === 'external') {
+      const element = document.querySelector(`[data-jk="${job.id}"], a[href*="${job.id}"]`);
+      if (element) jobs.push(element as HTMLElement);
+    }
+  });
   return jobs;
 }
 
@@ -138,7 +420,23 @@ async function clickApplyNow(jobElement: HTMLElement): Promise<boolean> {
 }
 
 function detectLoggedIn(): boolean {
+  // Mock pages (localhost URLs) are always "logged in"
   const url = window.location.href;
+  const isMockPage = url.startsWith('http://localhost:') && url.includes('indeed-jobs.html');
+  console.log(
+    '[Jobzippy] Indeed detectLoggedIn - url:',
+    url,
+    'isMockPage:',
+    isMockPage,
+    'startsWith localhost:',
+    url.startsWith('http://localhost:'),
+    'includes indeed-jobs.html:',
+    url.includes('indeed-jobs.html')
+  );
+  if (isMockPage) {
+    console.log('[Jobzippy] Indeed mock page detected, returning loggedIn=true');
+    return true;
+  }
   // Explicit login routes
   if (/\/account\/login|\/signin|auth/.test(url)) return false;
   // If we see a clear Profile menu or avatar, assume logged in
@@ -200,6 +498,42 @@ function setupAuthObservers() {
   window.addEventListener('popstate', debounceCheck);
 }
 
+// User interaction detection (pause on click/keyboard)
+function setupUserInteractionDetection() {
+  let lastInteractionTime = 0;
+  const INTERACTION_THROTTLE = 1000; // Throttle to max once per second
+  let isTabActive = !document.hidden;
+
+  // Track tab visibility
+  document.addEventListener('visibilitychange', () => {
+    isTabActive = !document.hidden;
+  });
+
+  const handleInteraction = (event: Event) => {
+    // Only detect interactions when tab is active/visible
+    if (!isTabActive || document.hidden) return;
+
+    // Only detect trusted events (user actions, not programmatic)
+    // isTrusted is false for events created/dispatched by scripts
+    if (!event.isTrusted) {
+      return; // Ignore programmatic events from automation
+    }
+
+    const now = Date.now();
+    if (now - lastInteractionTime < INTERACTION_THROTTLE) return;
+    lastInteractionTime = now;
+
+    chrome.runtime
+      .sendMessage({ type: 'USER_INTERACTION', data: { platform: 'Indeed' } })
+      .catch(() => {});
+  };
+
+  // Listen for clicks
+  document.addEventListener('click', handleInteraction, true);
+  // Listen for keyboard input
+  document.addEventListener('keydown', handleInteraction, true);
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
@@ -208,4 +542,4 @@ if (document.readyState === 'loading') {
 }
 
 // Export for testing
-export { findApplyNowJobs, clickApplyNow };
+export { findApplyNowJobs, clickApplyNow, scrapeJobCards, getNextPageUrl, navigateToNextPage };

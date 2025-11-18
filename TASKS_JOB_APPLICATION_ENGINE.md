@@ -7,7 +7,7 @@ Statuses:
 - 1) Start/Stop the engine – 🟢
 - 2) Login check (LinkedIn/Indeed) – 🟢
 - 3) Build search URLs from filters – 🟢
-- 4) Iterate search results – 🔴
+- 4) Iterate search results – 🟢
 - 5) Read job details – 🔴
 - 6) Decide apply/skip (+ external hand‑off) – 🔴
 - 7) Handle Easy Apply (baseline) – 🔴

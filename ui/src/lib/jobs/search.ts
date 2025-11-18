@@ -36,10 +36,53 @@ export interface SearchUrls {
   indeed?: string;
 }
 
+// Platform configuration for mock pages
+const MOCK_PLATFORMS = [
+  { name: 'linkedin', mockPath: 'linkedin-jobs.html' },
+  { name: 'indeed', mockPath: 'indeed-jobs.html' },
+] as const;
+
+const MOCK_SERVER_PORT = import.meta.env.VITE_MOCK_PORT || '3000';
+const MOCK_SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}`;
+
 export function buildSearchUrls(
   profile: ProfileVault['profile'] | null,
   history: History | null
 ): SearchUrls {
+  // Check if we should use mock pages (dev mode by default, or explicit override)
+  const useMockPages =
+    import.meta.env.VITE_USE_MOCK_PAGES === 'true'
+      ? true
+      : import.meta.env.VITE_USE_MOCK_PAGES === 'false'
+        ? false
+        : import.meta.env.MODE === 'development' || import.meta.env.DEV; // Default: true in dev, false in prod
+
+  console.log(
+    '[Jobzippy] buildSearchUrls - useMockPages:',
+    useMockPages,
+    'MODE:',
+    import.meta.env.MODE,
+    'DEV:',
+    import.meta.env.DEV
+  );
+
+  if (useMockPages) {
+    // Build localhost URLs dynamically from platform config
+    const urls: SearchUrls = {};
+    for (const platform of MOCK_PLATFORMS) {
+      const mockUrl = `${MOCK_SERVER_URL}/mocks/${platform.mockPath}`;
+      if (platform.name === 'linkedin') {
+        urls.linkedin = mockUrl;
+      } else if (platform.name === 'indeed') {
+        urls.indeed = mockUrl;
+      }
+    }
+    console.log('[Jobzippy] Using mock URLs:', urls);
+    return urls;
+  }
+
+  console.log('[Jobzippy] Using real URLs (useMockPages:', useMockPages, ')');
+
   const titles = deriveKeywords(profile, history);
   const locations = deriveLocations(profile);
   const remote = Boolean(profile?.preferences?.remote);
