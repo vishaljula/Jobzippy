@@ -85,7 +85,7 @@ function init() {
         break;
 
       case 'SCRAPE_JOBS': {
-        console.log('[Jobzippy] Scraping jobs from Indeed page');
+        console.log('[Jobzippy] Indeed received SCRAPE_JOBS command');
         try {
           // Wait a bit for page to be fully loaded
           setTimeout(() => {
@@ -510,22 +510,38 @@ function setupUserInteractionDetection() {
   });
 
   const handleInteraction = (event: Event) => {
+    console.log('[Jobzippy] Indeed interaction detected:', {
+      type: event.type,
+      isTrusted: event.isTrusted,
+      isTabActive,
+      documentHidden: document.hidden,
+    });
+
     // Only detect interactions when tab is active/visible
-    if (!isTabActive || document.hidden) return;
+    if (!isTabActive || document.hidden) {
+      console.log('[Jobzippy] Indeed interaction ignored - tab not active');
+      return;
+    }
 
     // Only detect trusted events (user actions, not programmatic)
     // isTrusted is false for events created/dispatched by scripts
     if (!event.isTrusted) {
+      console.log('[Jobzippy] Indeed interaction ignored - not trusted');
       return; // Ignore programmatic events from automation
     }
 
     const now = Date.now();
-    if (now - lastInteractionTime < INTERACTION_THROTTLE) return;
+    if (now - lastInteractionTime < INTERACTION_THROTTLE) {
+      console.log('[Jobzippy] Indeed interaction throttled');
+      return;
+    }
     lastInteractionTime = now;
 
+    console.log('[Jobzippy] Indeed sending USER_INTERACTION message');
     chrome.runtime
       .sendMessage({ type: 'USER_INTERACTION', data: { platform: 'Indeed' } })
-      .catch(() => {});
+      .then(() => console.log('[Jobzippy] Indeed USER_INTERACTION sent successfully'))
+      .catch((err) => console.error('[Jobzippy] Indeed USER_INTERACTION failed:', err));
   };
 
   // Listen for clicks

@@ -265,15 +265,27 @@ async function handleJobsScraped(
   state.jobsProcessed += jobs.length;
 
   // If there's a next page and we haven't hit limits, navigate to it
-  if (hasNextPage && state.tabId) {
-    // Add a small delay before navigating (human-like behavior)
+  // Skip navigation if no jobs were found (might be an error or empty page)
+  if (hasNextPage && state.tabId && jobs.length > 0) {
+    // Add a delay before navigating (human-like behavior + gives user time to interact)
     setTimeout(() => {
+      // Double-check engine is still running before navigating
       if (engineState === 'RUNNING' && state.isActive && state.tabId) {
+        console.log(`[Jobzippy] ${platform}: Sending NAVIGATE_NEXT_PAGE command`);
         chrome.tabs.sendMessage(state.tabId, { type: 'NAVIGATE_NEXT_PAGE' }).catch((err) => {
           console.error(`[Jobzippy] Error navigating ${platform} to next page:`, err);
         });
+      } else {
+        console.log(
+          `[Jobzippy] ${platform}: Skipping navigation - engine state:`,
+          engineState,
+          'isActive:',
+          state.isActive
+        );
       }
-    }, 2000);
+    }, 3000); // Increased from 2000 to 3000ms
+  } else if (jobs.length === 0) {
+    console.log(`[Jobzippy] ${platform}: No jobs found on page, skipping navigation`);
   } else {
     // No more pages for this platform
     console.log(`[Jobzippy] ${platform}: No more pages, iteration complete`);
@@ -323,7 +335,14 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 // Handle messages from content scripts and UI
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('[Jobzippy] Message received:', message);
+  console.log(
+    '[Jobzippy] Background received message:',
+    message.type,
+    'from:',
+    _sender.tab?.url || 'extension',
+    'data:',
+    message.data
+  );
 
   switch (message.type) {
     case 'AUTH_PROBE_ALL':
@@ -404,13 +423,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'USER_INTERACTION': {
       // User interacted with search tab - pause engine
+      const platform = message.data?.platform;
+      console.log(
+        '[Jobzippy] Background received USER_INTERACTION from',
+        platform,
+        'engineState:',
+        engineState
+      );
       if (engineState === 'RUNNING') {
+        console.log('[Jobzippy] Background pausing engine due to user interaction');
         engineState = 'PAUSED';
         engineStatus = 'Paused (user interaction detected)';
         broadcastEngineState();
         // Auto-resume after 8 seconds of inactivity
         setTimeout(() => {
           if (engineState === 'PAUSED') {
+            console.log('[Jobzippy] Background auto-resuming engine after 8 seconds');
             engineState = 'RUNNING';
             engineStatus = 'Resumed';
             broadcastEngineState();
@@ -422,6 +450,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             });
           }
         }, 8000);
+      } else {
+        console.log('[Jobzippy] Background ignoring USER_INTERACTION - engine not running');
       }
       sendResponse({ status: 'ok' });
       break;
