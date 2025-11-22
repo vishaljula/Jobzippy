@@ -4,14 +4,34 @@
  * (Greenhouse, Workday, Lever, iCIMS, Taleo, Motion Recruitment, etc.)
  *
  * Features:
+ * - Intelligent navigation state machine for multi-step flows
  * - Auto-closes cookie consent modals
- * - Finds and clicks "Apply" buttons
+ * - Finds and clicks "Apply" buttons through multiple pages
+ * - Handles Workday-style option modals (Autofill/Manual/Last Application)
  * - Detects application forms dynamically
  * - Handles simple checkbox CAPTCHA only
  * - Skips complex image/puzzle CAPTCHAs
+ * - Prevents infinite loops with navigation tracking
  */
 
 console.log('[Jobzippy] Universal ATS content script loaded');
+
+// Navigation state tracking
+interface NavigationState {
+  visitedUrls: Set<string>;
+  clickedElements: Set<string>;
+  navigationDepth: number;
+  maxDepth: number;
+  currentStep: 'initial' | 'intermediate' | 'options_modal' | 'account_creation' | 'form';
+}
+
+const navState: NavigationState = {
+  visitedUrls: new Set([window.location.href]),
+  clickedElements: new Set(),
+  navigationDepth: 0,
+  maxDepth: 5, // Prevent infinite loops
+  currentStep: 'initial',
+};
 
 // Auto-close common modals (cookie consent, etc.)
 async function closeModals() {
@@ -67,9 +87,132 @@ async function closeModals() {
   return false;
 }
 
+// Detect and handle Workday-style option modals
+async function handleWorkdayOptionsModal(): Promise<boolean> {
+  console.log('[ATS] Checking for Workday options modal...');
+
+  // Look for Workday modal with application options
+  const workdayModal = document.querySelector(
+    '[data-automation-id="wd-popup-frame"], .workday-popup'
+  );
+  if (!workdayModal) {
+    return false;
+  }
+
+  console.log('[ATS] Found Workday options modal');
+  navState.currentStep = 'options_modal';
+
+  // Priority order: Autofill > Manual > Last Application
+  const optionSelectors = [
+    {
+      selector: 'a[data-automation-id="autofillWithResume"], a[href*="autofillWithResume"]',
+      name: 'Autofill with Resume',
+    },
+    {
+      selector: 'a[data-automation-id="applyManually"], a[href*="applyManually"]',
+      name: 'Apply Manually',
+    },
+    {
+      selector: 'a[data-automation-id="useMyLastApplication"], a[href*="useMyLastApplication"]',
+      name: 'Use My Last Application',
+    },
+  ];
+
+  for (const option of optionSelectors) {
+    const element = workdayModal.querySelector(option.selector) as HTMLAnchorElement;
+    if (element) {
+      const elementId = `workday-option-${option.name}`;
+
+      // Check if we've already clicked this
+      if (navState.clickedElements.has(elementId)) {
+        console.log(`[ATS] Already clicked ${option.name}, skipping`);
+        continue;
+      }
+
+      console.log(`[ATS] Clicking Workday option: ${option.name}`);
+      navState.clickedElements.add(elementId);
+      navState.navigationDepth++;
+
+      element.click();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Detect if we're on an account creation/login page
+function detectAccountPage(): boolean {
+  const hasSignUp = document.querySelector(
+    'button:has-text("Sign Up"), button:has-text("Create Account"), a:has-text("Sign Up")'
+  );
+  const hasLogin = document.querySelector(
+    'button:has-text("Log In"), button:has-text("Sign In"), input[type="password"]'
+  );
+  const hasAccountForm = document.querySelector(
+    'form[action*="account"], form[action*="login"], form[action*="signup"]'
+  );
+
+  return !!(hasSignUp || hasLogin || hasAccountForm);
+}
+
+// Try to skip account creation (look for guest/continue without account options)
+async function trySkipAccountCreation(): Promise<boolean> {
+  console.log('[ATS] Looking for guest/skip account options...');
+
+  const guestSelectors = [
+    'button:has-text("Continue as Guest")',
+    'button:has-text("Skip")',
+    'button:has-text("Continue without account")',
+    'a:has-text("Continue as Guest")',
+    'a:has-text("Skip")',
+    '[data-automation-id*="guest"]',
+  ];
+
+  for (const selector of guestSelectors) {
+    try {
+      let elements: NodeListOf<HTMLElement>;
+
+      if (selector.includes(':has-text')) {
+        const text = selector.match(/has-text\("(.+?)"\)/)?.[1];
+        const tagName = selector.split(':')[0];
+        if (text && tagName) {
+          elements = document.querySelectorAll(tagName) as NodeListOf<HTMLElement>;
+          elements = Array.from(elements).filter((el) =>
+            el.textContent?.toLowerCase().includes(text.toLowerCase())
+          ) as any;
+        } else {
+          continue;
+        }
+      } else {
+        elements = document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+      }
+
+      if (elements.length > 0) {
+        console.log(`[ATS] Found guest option: ${selector}`);
+        (elements[0] as HTMLElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return true;
+      }
+    } catch (error) {
+      // Continue to next selector
+    }
+  }
+
+  console.log('[ATS] No guest option found - account creation required');
+  return false;
+}
+
 // Find and click "Apply" button
 async function findAndClickApplyButton(): Promise<boolean> {
   console.log('[ATS] Looking for Apply button...');
+
+  // Check navigation depth
+  if (navState.navigationDepth >= navState.maxDepth) {
+    console.log('[ATS] Max navigation depth reached, stopping');
+    return false;
+  }
 
   const applySelectors = [
     'button[aria-label*="Apply"]',
@@ -130,32 +273,102 @@ function detectApplicationForm(): boolean {
   return !!(hasFirstName && hasLastName && hasEmail && hasResume);
 }
 
-// Initialize: close modals, find apply button, detect form
+// Initialize: intelligent navigation through multi-step ATS flows
 async function initialize() {
-  console.log('[ATS] Initializing...');
+  console.log('[ATS] Initializing intelligent navigation...');
 
-  // Step 1: Close any modals
+  // Prevent re-initialization on same URL
+  if (navState.visitedUrls.has(window.location.href) && navState.navigationDepth > 0) {
+    console.log('[ATS] Already processed this URL');
+    return;
+  }
+
+  navState.visitedUrls.add(window.location.href);
+
+  // Step 1: Close any modals (cookie consent, etc.)
   await closeModals();
 
-  // Step 2: Check if form is already visible
+  // Step 2: Check for Workday options modal
+  const handledWorkdayModal = await handleWorkdayOptionsModal();
+  if (handledWorkdayModal) {
+    console.log('[ATS] Handled Workday options modal, waiting for next page...');
+    // The page will navigate, initialize will be called again
+    return;
+  }
+
+  // Step 3: Check if we're on account creation/login page
+  if (detectAccountPage()) {
+    console.log('[ATS] Detected account creation/login page');
+    navState.currentStep = 'account_creation';
+
+    // Try to skip account creation
+    const skipped = await trySkipAccountCreation();
+    if (skipped) {
+      console.log('[ATS] Successfully skipped account creation');
+      // Wait for next page
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Check if we now have a form
+      if (detectApplicationForm()) {
+        console.log('[ATS] Application form detected after skipping account');
+        navState.currentStep = 'form';
+        notifyBackgroundReady();
+        return;
+      }
+    } else {
+      // Account creation is required - notify user
+      console.log('[ATS] Account creation required - notifying background');
+      chrome.runtime.sendMessage({
+        type: 'ATS_ACCOUNT_REQUIRED',
+        url: window.location.href,
+        message:
+          'This application requires account creation. Please create an account manually and try again.',
+      });
+      return;
+    }
+  }
+
+  // Step 4: Check if application form is already visible
   if (detectApplicationForm()) {
     console.log('[ATS] Application form detected');
+    navState.currentStep = 'form';
     notifyBackgroundReady();
     return;
   }
 
-  // Step 3: Try to find and click Apply button
+  // Step 5: Try to find and click Apply button (intermediate pages)
   const clicked = await findAndClickApplyButton();
 
   if (clicked) {
-    // Wait for form to appear
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    navState.currentStep = 'intermediate';
+    console.log('[ATS] Clicked Apply button, waiting for next step...');
 
+    // Wait for navigation or modal
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Re-check for Workday modal after clicking Apply
+    const handledModalAfterClick = await handleWorkdayOptionsModal();
+    if (handledModalAfterClick) {
+      return;
+    }
+
+    // Check if form appeared
     if (detectApplicationForm()) {
       console.log('[ATS] Application form detected after clicking Apply');
+      navState.currentStep = 'form';
       notifyBackgroundReady();
+      return;
+    }
+
+    // Check if we're on account page
+    if (detectAccountPage()) {
+      console.log('[ATS] Navigated to account creation page');
+      navState.currentStep = 'account_creation';
+      return;
     }
   }
+
+  console.log('[ATS] Navigation complete, current step:', navState.currentStep);
 }
 
 // Detect ATS type
