@@ -119,6 +119,32 @@ function init() {
         break;
       }
 
+      case 'CLICK_JOB_CARD': {
+        const { jobId } = message.data;
+        console.log('[Jobzippy] LinkedIn received CLICK_JOB_CARD for:', jobId);
+        clickJobCard(jobId)
+          .then((details) => {
+            if (details) {
+              chrome.runtime
+                .sendMessage({
+                  type: 'JOB_DETAILS_SCRAPED',
+                  data: {
+                    platform: 'LinkedIn',
+                    jobId,
+                    ...details,
+                  },
+                })
+                .catch(() => {});
+            } else {
+              console.warn('[Jobzippy] Failed to scrape details for:', jobId);
+              // Send failure so background doesn't hang (or let timeout handle it)
+            }
+          })
+          .catch((err) => console.error('[Jobzippy] Error clicking job card:', err));
+        sendResponse({ status: 'processing' });
+        break;
+      }
+
       case 'NAVIGATE_NEXT_PAGE': {
         console.log('[Jobzippy] Navigating to next page on LinkedIn');
         try {
@@ -200,6 +226,85 @@ function addActiveIndicator() {
     indicator.style.opacity = '0';
     setTimeout(() => indicator.remove(), 300);
   }, 5000);
+}
+
+// Click job card and scrape details
+async function clickJobCard(jobId: string): Promise<{
+  description: string;
+  applyType: 'easy_apply' | 'external';
+}> {
+  console.log('[LinkedIn] Clicking job card:', jobId);
+
+  // Find the job card
+  const jobCard = document.querySelector(`[data-job-id="${jobId}"]`) as HTMLElement;
+  if (!jobCard) {
+    console.error('[LinkedIn] Job card not found:', jobId);
+    return { description: '', applyType: 'external' };
+  }
+
+  // Scroll into view
+  jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  // Find the title link and click it with preventDefault
+  const titleLink = jobCard.querySelector('.job-card-list__title-link') as HTMLAnchorElement;
+  if (titleLink) {
+    // Create and dispatch a click event that we can preventDefault on
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+
+    // Add a one-time listener to prevent navigation
+    const preventNav = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    titleLink.addEventListener('click', preventNav, { once: true, capture: true });
+
+    // Click the link
+    titleLink.dispatchEvent(clickEvent);
+
+    // Clean up listener just in case
+    setTimeout(() => titleLink.removeEventListener('click', preventNav, true), 100);
+  } else {
+    // Fallback: click the card itself
+    jobCard.click();
+  }
+
+  // Wait for details pane to load
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // Scrape the job description from the details pane
+  const detailsContainer = document.querySelector(
+    '.jobs-search__job-details--container, .jobs-details__main-content'
+  );
+  if (!detailsContainer) {
+    console.error('[LinkedIn] Details container not found');
+    return { description: '', applyType: 'external' };
+  }
+
+  // Get full description
+  const descriptionElement = detailsContainer.querySelector(
+    '.jobs-description, .jobs-description-content, #job-details'
+  );
+  const description = descriptionElement?.textContent?.trim() || '';
+
+  // Determine apply type - look for Easy Apply button
+  let easyApplyButton = detailsContainer.querySelector('button[aria-label*="Easy Apply"]');
+
+  // Fallback: check all buttons for "Easy Apply" text
+  if (!easyApplyButton) {
+    const buttons = Array.from(detailsContainer.querySelectorAll('button'));
+    easyApplyButton = buttons.find((btn) => btn.textContent?.includes('Easy Apply')) || null;
+  }
+
+  const applyType: 'easy_apply' | 'external' = easyApplyButton ? 'easy_apply' : 'external';
+
+  console.log('[LinkedIn] Scraped details:', { descriptionLength: description.length, applyType });
+
+  return { description, applyType };
 }
 
 // Scrape job cards from current page

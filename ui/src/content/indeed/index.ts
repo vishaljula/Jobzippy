@@ -117,6 +117,31 @@ function init() {
         break;
       }
 
+      case 'CLICK_JOB_CARD': {
+        const { jobId } = message.data;
+        console.log('[Jobzippy] Indeed received CLICK_JOB_CARD for:', jobId);
+        clickJobCard(jobId)
+          .then((details) => {
+            if (details) {
+              chrome.runtime
+                .sendMessage({
+                  type: 'JOB_DETAILS_SCRAPED',
+                  data: {
+                    platform: 'Indeed',
+                    jobId,
+                    ...details,
+                  },
+                })
+                .catch(() => {});
+            } else {
+              console.warn('[Jobzippy] Failed to scrape details for:', jobId);
+            }
+          })
+          .catch((err) => console.error('[Jobzippy] Error clicking job card:', err));
+        sendResponse({ status: 'processing' });
+        break;
+      }
+
       case 'NAVIGATE_NEXT_PAGE': {
         console.log('[Jobzippy] Navigating to next page on Indeed');
         try {
@@ -198,6 +223,87 @@ function addActiveIndicator() {
     indicator.style.opacity = '0';
     setTimeout(() => indicator.remove(), 300);
   }, 5000);
+}
+
+// Click job card and scrape details
+async function clickJobCard(
+  jobId: string
+): Promise<{ description: string; applyType: 'easy_apply' | 'external' }> {
+  console.log('[Indeed] Clicking job card:', jobId);
+
+  // Find the job card by data-jk attribute
+  let jobCard = document.querySelector(`[data-jk="${jobId}"]`) as HTMLElement;
+
+  // Fallback for mock pages
+  if (!jobCard && jobId.startsWith('mock-')) {
+    jobCard = document
+      .querySelector(`a[href*="${jobId}"]`)
+      ?.closest('.jobsearch-SerpJobCard') as HTMLElement;
+  }
+
+  if (!jobCard) {
+    console.error('[Indeed] Job card not found:', jobId);
+    return { description: '', applyType: 'external' };
+  }
+
+  // Scroll into view
+  jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  // Find the job title link and click it with preventDefault
+  const titleLink = jobCard.querySelector('.jobTitle a, h2 a') as HTMLAnchorElement;
+  if (titleLink) {
+    // Create and dispatch a click event that we can preventDefault on
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+
+    // Add a one-time listener to prevent navigation
+    const preventNav = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    titleLink.addEventListener('click', preventNav, { once: true, capture: true });
+
+    // Click the link
+    titleLink.dispatchEvent(clickEvent);
+
+    // Clean up listener just in case
+    setTimeout(() => titleLink.removeEventListener('click', preventNav, true), 100);
+  } else {
+    // Fallback: click the card itself
+    jobCard.click();
+  }
+
+  // Wait for details pane to load
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // Scrape the job description from the details pane
+  const detailsContainer = document.querySelector(
+    '#vjs-container, .jobsearch-ViewJobLayout-jobDisplay'
+  );
+  if (!detailsContainer) {
+    console.error('[Indeed] Details container not found');
+    return { description: '', applyType: 'external' };
+  }
+
+  // Get full description
+  const descriptionElement = detailsContainer.querySelector(
+    '#jobDescriptionText, .jobsearch-jobDescriptionText'
+  );
+  const description = descriptionElement?.textContent?.trim() || '';
+
+  // Determine apply type - Indeed uses specific button IDs
+  const indeedApplyButton = detailsContainer.querySelector(
+    '#indeedApplyButton, button[id*="apply"]'
+  );
+  const applyType: 'easy_apply' | 'external' = indeedApplyButton ? 'easy_apply' : 'external';
+
+  console.log('[Indeed] Scraped details:', { descriptionLength: description.length, applyType });
+
+  return { description, applyType };
 }
 
 // Scrape job cards from current page
@@ -315,9 +421,17 @@ function scrapeJobCards(): Array<{
       const indeedApplyBtn = card.querySelector<HTMLElement>(
         'a[aria-label*="Apply"], button[aria-label*="Apply"]'
       );
-      const externalBtn = card.querySelector<HTMLElement>(
-        'a[href*="apply"], a:contains("Apply on company website")'
-      );
+
+      // Check for external apply links - can't use :contains() in querySelector
+      let externalBtn = card.querySelector<HTMLElement>('a[href*="apply"]');
+
+      // Fallback: check all links for "Apply on company website" text
+      if (!externalBtn) {
+        const links = Array.from(card.querySelectorAll('a'));
+        externalBtn =
+          links.find((link) => link.textContent?.includes('Apply on company website')) || null;
+      }
+
       if (indeedApplyBtn && !externalBtn) {
         applyType = 'easy_apply';
       } else if (externalBtn) {

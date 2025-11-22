@@ -14,8 +14,18 @@ let engineStatus: string = 'Idle';
 let engineInterval: number | null = null;
 
 // -----------------------------------------------------------------------------
-// Story 4: Search Iteration & Limit Tracking
+// Story 4 & 5: Search Iteration, Queue & Processing
 // -----------------------------------------------------------------------------
+interface JobQueueItem {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  platform: 'LinkedIn' | 'Indeed';
+  applyType?: 'easy_apply' | 'external' | 'unknown';
+}
+
 interface PlatformState {
   platform: 'LinkedIn' | 'Indeed';
   tabId: number | null;
@@ -25,6 +35,9 @@ interface PlatformState {
   hasNextPage: boolean;
   searchUrl: string | null;
   isActive: boolean;
+  // Story 5: Job Queue
+  jobQueue: JobQueueItem[];
+  isProcessingJob: boolean;
 }
 
 interface DailyLimits {
@@ -49,6 +62,8 @@ const platformStates: Map<'LinkedIn' | 'Indeed', PlatformState> = new Map([
       hasNextPage: false,
       searchUrl: null,
       isActive: false,
+      jobQueue: [],
+      isProcessingJob: false,
     },
   ],
   [
@@ -62,6 +77,8 @@ const platformStates: Map<'LinkedIn' | 'Indeed', PlatformState> = new Map([
       hasNextPage: false,
       searchUrl: null,
       isActive: false,
+      jobQueue: [],
+      isProcessingJob: false,
     },
   ],
 ]);
@@ -154,6 +171,8 @@ async function startEngine() {
           state.searchUrl = tab.url;
           state.isActive = true;
           state.currentPage = 1;
+          state.jobQueue = [];
+          state.isProcessingJob = false;
 
           // Content scripts auto-inject via manifest, wait for initialization
           setTimeout(() => {
@@ -176,6 +195,8 @@ async function startEngine() {
             state.searchUrl = tab.url;
             state.isActive = true;
             state.currentPage = 1;
+            state.jobQueue = [];
+            state.isProcessingJob = false;
 
             // Content scripts auto-inject via manifest, wait for initialization
             setTimeout(() => {
@@ -203,7 +224,10 @@ async function startEngine() {
       const linkedinState = platformStates.get('LinkedIn');
       const indeedState = platformStates.get('Indeed');
       const totalScraped = (linkedinState?.jobsScraped || 0) + (indeedState?.jobsScraped || 0);
-      engineStatus = totalScraped > 0 ? `Scraped ${totalScraped} jobs…` : 'Running…';
+      const totalProcessed =
+        (linkedinState?.jobsProcessed || 0) + (indeedState?.jobsProcessed || 0);
+      engineStatus =
+        totalScraped > 0 ? `Processed ${totalProcessed}/${totalScraped} jobs…` : 'Running…';
       broadcastEngineState();
     }
   }, 5000);
@@ -221,21 +245,80 @@ function stopEngine() {
   platformStates.forEach((state) => {
     state.isActive = false;
     state.currentPage = 0;
+    state.jobQueue = [];
+    state.isProcessingJob = false;
   });
   broadcastEngineState();
+}
+
+// Process the next job in the queue
+async function processJobQueue(platform: 'LinkedIn' | 'Indeed') {
+  const state = platformStates.get(platform);
+  if (!state || !state.isActive || engineState !== 'RUNNING' || !state.tabId) return;
+
+  if (state.isProcessingJob) {
+    console.log(`[Jobzippy] ${platform}: Already processing a job, waiting...`);
+    return;
+  }
+
+  if (state.jobQueue.length === 0) {
+    // Queue empty, check if we should navigate to next page
+    console.log(`[Jobzippy] ${platform}: Job queue empty`);
+    if (state.hasNextPage) {
+      // Add a delay before navigating (human-like behavior + gives user time to interact)
+      setTimeout(() => {
+        // Double-check engine is still running before navigating
+        if (engineState === 'RUNNING' && state.isActive && state.tabId) {
+          console.log(`[Jobzippy] ${platform}: Sending NAVIGATE_NEXT_PAGE command`);
+          chrome.tabs.sendMessage(state.tabId, { type: 'NAVIGATE_NEXT_PAGE' }).catch((err) => {
+            console.error(`[Jobzippy] Error navigating ${platform} to next page:`, err);
+          });
+        }
+      }, 3000);
+    } else {
+      console.log(`[Jobzippy] ${platform}: No more pages, iteration complete`);
+      state.isActive = false;
+      engineStatus = `${platform}: Finished`;
+      broadcastEngineState();
+    }
+    return;
+  }
+
+  // Dequeue next job
+  const job = state.jobQueue.shift();
+  if (!job) return;
+
+  state.isProcessingJob = true;
+  console.log(`[Jobzippy] ${platform}: Processing job ${job.id} (${job.title})`);
+  engineStatus = `Checking: ${job.title}`;
+  broadcastEngineState();
+
+  // Send command to click job card
+  try {
+    chrome.tabs.sendMessage(state.tabId, {
+      type: 'CLICK_JOB_CARD',
+      data: { jobId: job.id, platform },
+    });
+
+    // Safety timeout: if we don't hear back in 10s, skip this job
+    setTimeout(() => {
+      if (state.isProcessingJob && engineState === 'RUNNING') {
+        console.warn(`[Jobzippy] ${platform}: Timeout waiting for details, skipping job ${job.id}`);
+        state.isProcessingJob = false;
+        processJobQueue(platform);
+      }
+    }, 10000);
+  } catch (err) {
+    console.error(`[Jobzippy] ${platform}: Error sending CLICK_JOB_CARD:`, err);
+    state.isProcessingJob = false;
+    processJobQueue(platform);
+  }
 }
 
 // Handle job scraping results and pagination
 async function handleJobsScraped(
   platform: 'LinkedIn' | 'Indeed',
-  jobs: Array<{
-    id: string;
-    title: string;
-    company: string;
-    location: string;
-    url: string;
-    platform: 'LinkedIn' | 'Indeed';
-  }>,
+  jobs: JobQueueItem[],
   hasNextPage: boolean,
   currentPage: number
 ) {
@@ -260,40 +343,14 @@ async function handleJobsScraped(
     return;
   }
 
-  // Process jobs (for now, just count them - actual processing in Story 5)
-  // TODO: In Story 5, we'll open job details and decide apply/skip
-  state.jobsProcessed += jobs.length;
+  // Add jobs to queue
+  state.jobQueue.push(...jobs);
+  console.log(
+    `[Jobzippy] ${platform}: Added ${jobs.length} jobs to queue. Queue size: ${state.jobQueue.length}`
+  );
 
-  // If there's a next page and we haven't hit limits, navigate to it
-  // Skip navigation if no jobs were found (might be an error or empty page)
-  if (hasNextPage && state.tabId && jobs.length > 0) {
-    // Add a delay before navigating (human-like behavior + gives user time to interact)
-    setTimeout(() => {
-      // Double-check engine is still running before navigating
-      if (engineState === 'RUNNING' && state.isActive && state.tabId) {
-        console.log(`[Jobzippy] ${platform}: Sending NAVIGATE_NEXT_PAGE command`);
-        chrome.tabs.sendMessage(state.tabId, { type: 'NAVIGATE_NEXT_PAGE' }).catch((err) => {
-          console.error(`[Jobzippy] Error navigating ${platform} to next page:`, err);
-        });
-      } else {
-        console.log(
-          `[Jobzippy] ${platform}: Skipping navigation - engine state:`,
-          engineState,
-          'isActive:',
-          state.isActive
-        );
-      }
-    }, 3000); // Increased from 2000 to 3000ms
-  } else if (jobs.length === 0) {
-    console.log(`[Jobzippy] ${platform}: No jobs found on page, skipping navigation`);
-  } else {
-    // No more pages for this platform
-    console.log(`[Jobzippy] ${platform}: No more pages, iteration complete`);
-    state.isActive = false;
-    state.hasNextPage = false;
-  }
-
-  broadcastEngineState();
+  // Start processing queue
+  processJobQueue(platform);
 }
 
 // Handle page navigation completion
@@ -390,14 +447,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'JOBS_SCRAPED': {
       const data = message.data as {
         platform: 'LinkedIn' | 'Indeed';
-        jobs: Array<{
-          id: string;
-          title: string;
-          company: string;
-          location: string;
-          url: string;
-          platform: 'LinkedIn' | 'Indeed';
-        }>;
+        jobs: JobQueueItem[];
         hasNextPage: boolean;
         currentPage: number;
       };
@@ -406,6 +456,57 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           (err) => {
             console.error('[Jobzippy] Error handling scraped jobs:', err);
           }
+        );
+      }
+      sendResponse({ status: 'ok' });
+      break;
+    }
+
+    case 'JOB_DETAILS_SCRAPED': {
+      // Story 5: Handle scraped details and decide next step
+      const data = message.data as {
+        platform: 'LinkedIn' | 'Indeed';
+        jobId: string;
+        description: string;
+        applyType: 'easy_apply' | 'external' | 'unknown';
+      };
+
+      const state = platformStates.get(data.platform);
+      if (state && state.isActive && engineState === 'RUNNING') {
+        console.log(
+          `[Jobzippy] ${data.platform}: Details received for ${data.jobId}. Type: ${data.applyType}`
+        );
+
+        // Heuristic Logic:
+        // 1. If Easy Apply -> Apply (Mock for now)
+        // 2. If External -> Skip
+
+        if (data.applyType === 'easy_apply') {
+          console.log(
+            `[Jobzippy] ${data.platform}: Found Easy Apply job! Simulating application...`
+          );
+          // TODO: Implement actual click logic for Easy Apply
+          state.jobsProcessed++;
+
+          // Update daily limits
+          if (dailyLimits) {
+            dailyLimits.total++;
+            if (data.platform === 'LinkedIn') dailyLimits.linkedin++;
+            else dailyLimits.indeed++;
+            chrome.storage.local.set({ dailyLimits });
+          }
+        } else {
+          console.log(`[Jobzippy] ${data.platform}: External apply, skipping.`);
+        }
+
+        // Move to next job
+        state.isProcessingJob = false;
+        // Add small delay before next job to be human-like
+        setTimeout(
+          () => {
+            processJobQueue(data.platform);
+          },
+          1500 + Math.random() * 1000
         );
       }
       sendResponse({ status: 'ok' });
@@ -445,7 +546,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             // Continue scraping active platforms
             platformStates.forEach((state) => {
               if (state.isActive && state.tabId) {
-                chrome.tabs.sendMessage(state.tabId, { type: 'SCRAPE_JOBS' }).catch(() => {});
+                // If we were processing a job, we might need to re-trigger or just check queue
+                if (state.jobQueue.length > 0 && !state.isProcessingJob) {
+                  processJobQueue(state.platform);
+                } else if (state.jobQueue.length === 0) {
+                  // If queue was empty, we might have been about to navigate
+                  chrome.tabs.sendMessage(state.tabId, { type: 'SCRAPE_JOBS' }).catch(() => {});
+                }
               }
             });
           }
@@ -584,6 +691,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
       console.log(`[Jobzippy] ${state.platform} search tab closed, stopping iteration`);
       state.isActive = false;
       state.tabId = null;
+      state.jobQueue = [];
+      state.isProcessingJob = false;
       broadcastEngineState();
     }
   });

@@ -36,7 +36,11 @@
     "https://www.ziprecruiter.com/*",
     "https://sheets.googleapis.com/*",
     "https://www.googleapis.com/*",
-    "https://accounts.google.com/*"
+    "https://accounts.google.com/*",
+    "https://*.greenhouse.io/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.lever.co/*",
+    "http://localhost:*/*"
   ],
   "content_scripts": [
     {
@@ -47,6 +51,19 @@
     {
       "matches": ["https://www.indeed.com/*", "http://localhost:*/mocks/indeed-jobs.html"],
       "js": ["content/content-indeed.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.lever.co/*",
+        "https://*.icims.com/*",
+        "https://*.taleo.net/*",
+        "http://localhost:*/mocks/greenhouse-apply.html",
+        "http://localhost:*/mocks/*-apply.html"
+      ],
+      "js": ["content/content-ats.js"],
       "run_at": "document_idle"
     }
   ],

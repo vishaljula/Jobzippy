@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,17 +12,20 @@
       padding: 20px;
       background: #f3f2ef;
     }
+
     .jobs-search-results {
       max-width: 1200px;
       margin: 0 auto;
     }
+
     .jobs-search-results__list-item {
       background: white;
       border-radius: 8px;
       padding: 20px;
       margin-bottom: 16px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
+
     .job-card-list__title-link {
       font-size: 18px;
       font-weight: 600;
@@ -30,21 +34,25 @@
       display: block;
       margin-bottom: 8px;
     }
+
     .base-search-card__subtitle {
       font-size: 14px;
       color: #666;
       margin-bottom: 8px;
     }
+
     .job-card-container__metadata-item {
       font-size: 14px;
       color: #666;
       margin-bottom: 8px;
     }
+
     .job-card-container__salary-info {
       font-size: 14px;
       color: #057642;
       font-weight: 500;
     }
+
     button {
       background: #0a66c2;
       color: white;
@@ -54,88 +62,121 @@
       cursor: pointer;
       margin-top: 12px;
     }
+
     .pagination {
       display: flex;
       justify-content: center;
       gap: 8px;
       margin-top: 32px;
     }
+
     .pagination button {
       background: white;
       color: #0a66c2;
       border: 1px solid #0a66c2;
     }
+
     .pagination button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   </style>
 </head>
+
 <body>
   <div class="jobs-search-results">
     <h1>LinkedIn Jobs - Mock Page (Dev Mode)</h1>
-    
-    <ul class="jobs-search-results__list">
-      <li class="jobs-search-results__list-item" data-job-id="123456">
-        <a href="/jobs/view/123456" class="job-card-list__title-link" data-control-name="job_card_title_link">
-          Senior Software Engineer
-        </a>
-        <h4 class="base-search-card__subtitle">TechCorp Inc.</h4>
-        <span class="job-card-container__metadata-item">San Francisco, CA • Remote</span>
-        <span class="job-card-container__salary-info">$150,000 - $200,000</span>
-        <button aria-label="Easy Apply">Easy Apply</button>
-      </li>
-      
-      <li class="jobs-search-results__list-item" data-job-id="123457">
-        <a href="/jobs/view/123457" class="job-card-list__title-link" data-control-name="job_card_title_link">
-          Product Manager
-        </a>
-        <h4 class="base-search-card__subtitle">StartupXYZ</h4>
-        <span class="job-card-container__metadata-item">New York, NY • Hybrid</span>
-        <span class="job-card-container__salary-info">$140,000 - $180,000</span>
-        <button aria-label="Easy Apply">Easy Apply</button>
-      </li>
-      
-      <li class="jobs-search-results__list-item" data-job-id="123458">
-        <a href="/jobs/view/123458" class="job-card-list__title-link" data-control-name="job_card_title_link">
-          Full Stack Developer
-        </a>
-        <h4 class="base-search-card__subtitle">DevSolutions LLC</h4>
-        <span class="job-card-container__metadata-item">Austin, TX • Remote</span>
-        <span class="job-card-container__salary-info">$130,000 - $170,000</span>
-        <a href="/jobs/apply/123458">Apply</a>
-      </li>
-      
-      <li class="jobs-search-results__list-item" data-job-id="123459">
-        <a href="/jobs/view/123459" class="job-card-list__title-link" data-control-name="job_card_title_link">
-          Data Scientist
-        </a>
-        <h4 class="base-search-card__subtitle">DataCo</h4>
-        <span class="job-card-container__metadata-item">Seattle, WA • On-site</span>
-        <span class="job-card-container__salary-info">$160,000 - $210,000</span>
-        <button aria-label="Easy Apply">Easy Apply</button>
-      </li>
-      
-      <li class="jobs-search-results__list-item" data-job-id="123460">
-        <a href="/jobs/view/123460" class="job-card-list__title-link" data-control-name="job_card_title_link">
-          DevOps Engineer
-        </a>
-        <h4 class="base-search-card__subtitle">CloudTech Systems</h4>
-        <span class="job-card-container__metadata-item">Boston, MA • Remote</span>
-        <span class="job-card-container__salary-info">$145,000 - $190,000</span>
-        <button aria-label="Easy Apply">Easy Apply</button>
-      </li>
-    </ul>
-    
-    <div class="pagination">
-      <button aria-label="Previous Page" disabled>Previous</button>
-      <button aria-current="page">1</button>
-      <button data-test-pagination-page-btn="2">2</button>
-      <button data-test-pagination-page-btn="3">3</button>
-      <button aria-label="Next Page" data-test-pagination-page-btn-next>Next</button>
-    </div>
-  </div>
-  <!-- Content scripts auto-inject via manifest.json for localhost URLs -->
-</body>
-</html>
 
+    <div style="display: flex; gap: 20px;">
+      <div style="flex: 1;">
+        <ul class="jobs-search-results__list">
+          <li class="jobs-search-results__list-item" data-job-id="123456">
+            <a href="/jobs/view/123456" class="job-card-list__title-link" data-control-name="job_card_title_link">
+              Senior Software Engineer
+            </a>
+            <h4 class="base-search-card__subtitle">TechCorp Inc.</h4>
+            <span class="job-card-container__metadata-item">San Francisco, CA • Remote</span>
+            <span class="job-card-container__salary-info">$150,000 - $200,000</span>
+            <button aria-label="Easy Apply">Easy Apply</button>
+          </li>
+
+          <li class="jobs-search-results__list-item" data-job-id="123457">
+            <a href="/jobs/view/123457" class="job-card-list__title-link" data-control-name="job_card_title_link">
+              Product Manager
+            </a>
+            <h4 class="base-search-card__subtitle">StartupXYZ</h4>
+            <span class="job-card-container__metadata-item">New York, NY • Hybrid</span>
+            <span class="job-card-container__salary-info">$140,000 - $180,000</span>
+            <button aria-label="Easy Apply">Easy Apply</button>
+          </li>
+
+          <li class="jobs-search-results__list-item" data-job-id="123458">
+            <a href="/jobs/view/123458" class="job-card-list__title-link" data-control-name="job_card_title_link">
+              Full Stack Developer
+            </a>
+            <h4 class="base-search-card__subtitle">DevSolutions LLC</h4>
+            <span class="job-card-container__metadata-item">Austin, TX • Remote</span>
+            <span class="job-card-container__salary-info">$130,000 - $170,000</span>
+          </li>
+        </ul>
+
+        <div class="pagination">
+          <button aria-label="Previous Page" disabled>Previous</button>
+          <button aria-current="page">1</button>
+          <button data-test-pagination-page-btn="2">2</button>
+          <button data-test-pagination-page-btn="3">3</button>
+          <button aria-label="Next Page" data-test-pagination-page-btn-next>Next</button>
+        </div>
+      </div>
+
+      <div class="jobs-search__job-details--container"
+        style="flex: 1; background: white; border-radius: 8px; padding: 20px; height: fit-content; position: sticky; top: 20px;">
+        <div class="jobs-details__main-content">
+          <h2 id="job-details-title">Select a job to view details</h2>
+          <div id="job-details">
+            <p>Click on a job card to see the description here.</p>
+          </div>
+          <div id="job-actions" style="margin-top: 20px;">
+            <!-- Buttons will appear here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.querySelectorAll('.jobs-search-results__list-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const title = item.querySelector('.job-card-list__title-link').textContent.trim();
+          const company = item.querySelector('.base-search-card__subtitle').textContent.trim();
+          const jobId = item.getAttribute('data-job-id');
+          const isEasyApply = item.querySelector('button[aria-label="Easy Apply"]');
+
+          const detailsContainer = document.querySelector('.jobs-details__main-content');
+          detailsContainer.querySelector('#job-details-title').textContent = title;
+          detailsContainer.querySelector('#job-details').innerHTML = `
+            <p><strong>${company}</strong> is hiring a ${title}.</p>
+            <p>This is a mock job description for testing purposes. It contains keywords like React, TypeScript, and Chrome Extensions.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+          `;
+
+          const actionsContainer = detailsContainer.querySelector('#job-actions');
+          if (isEasyApply) {
+            actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+          } else {
+            // External apply - opens Greenhouse ATS in new tab
+            actionsContainer.innerHTML = `
+              <a href="http://localhost:3000/mocks/greenhouse-apply.html?job=${jobId}" 
+                 target="_blank"
+                 data-testid="external-apply-button"
+                 style="background: white; color: #0a66c2; border: 1px solid #0a66c2; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 16px; display: inline-block; cursor: pointer;">
+                Apply
+              </a>
+            `;
+          }
+        });
+      });
+    </script>
+    <!-- Content scripts auto-inject via manifest.json for localhost URLs -->
+</body>
+
+</html>

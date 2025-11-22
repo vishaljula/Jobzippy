@@ -42,6 +42,7 @@ export default defineConfig({
         // Content scripts
         'content-linkedin': resolve(__dirname, 'src/content/linkedin/index.ts'),
         'content-indeed': resolve(__dirname, 'src/content/indeed/index.ts'),
+        'content-ats': resolve(__dirname, 'src/content/ats/index.ts'),
       },
       output: {
         entryFileNames: (chunkInfo) => {

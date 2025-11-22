@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply - Senior Software Engineer - Motion Recruitment</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .close-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            color: #666;
+            transition: color 0.2s;
+        }
+
+        .close-button:hover {
+            color: #000;
+        }
+
+        .form-container {
+            padding: 40px;
+        }
+
+        h3 {
+            font-size: 24px;
+            margin-bottom: 30px;
+            color: #1a1a1a;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .inputs-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+
+        .phone-input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .country-selector {
+            position: relative;
+            width: 100px;
+        }
+
+        .country-button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .country-button:hover {
+            border-color: #0066cc;
+        }
+
+        .flag-emoji {
+            width: 20px;
+            height: 15px;
+        }
+
+        .phone-input {
+            flex: 1;
+        }
+
+        .file-upload-box {
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            padding: 30px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-upload-box:hover {
+            border-color: #0066cc;
+            background: #f0f7ff;
+        }
+
+        .file-upload-title {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .file-upload-restrictions {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 15px;
+        }
+
+        .browse-button {
+            padding: 10px 20px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .browse-button:hover {
+            background: #0052a3;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .privacy-text {
+            font-size: 12px;
+            color: #666;
+            margin: 20px 0;
+        }
+
+        .privacy-text a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .privacy-text a:hover {
+            text-decoration: underline;
+        }
+
+        .recaptcha-container {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .recaptcha-box {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #f9f9f9;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .recaptcha-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .recaptcha-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .button-wrapper {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-clear {
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+
+        .btn-clear:hover {
+            background: #f5f5f5;
+        }
+
+        .btn-submit {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            background: #0052a3;
+        }
+
+        .btn-submit:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .file-name {
+            margin-top: 10px;
+            color: #0066cc;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body data-ats-type="motion-recruitment">
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-button" aria-label="Close modal" onclick="window.close()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 13.46 13.46">
+                    <path fill="currentColor"
+                        d="M1 13.46a1 1 0 0 1-.71-.29 1 1 0 0 1 0-1.42L11.75.29a1 1 0 1 1 1.42 1.42L1.71 13.17a1 1 0 0 1-.71.29">
+                    </path>
+                    <path fill="currentColor"
+                        d="M12.46 13.46a1 1 0 0 1-.71-.29L.29 1.71A1 1 0 0 1 1.71.29l11.46 11.46a1 1 0 0 1 0 1.42 1 1 0 0 1-.71.29">
+                    </path>
+                </svg>
+            </button>
+
+            <div class="form-container">
+                <h3>Submit Your Application</h3>
+
+                <form id="application-form">
+                    <div class="inputs-row">
+                        <div class="form-group">
+                            <label for="firstName">First Name:<span class="required"> *</span></label>
+                            <input type="text" id="firstName" name="firstName" placeholder="First Name" required
+                                autocomplete="given-name">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="lastName">Last Name:<span class="required"> *</span></label>
+                            <input type="text" id="lastName" name="lastName" placeholder="Last Name" required
+                                autocomplete="family-name">
+                        </div>
+                    </div>
+
+                    <div class="inputs-row">
+                        <div class="form-group">
+                            <label for="email">Email:<span class="required"> *</span></label>
+                            <input type="email" id="email" name="email" placeholder="Email Address" required
+                                autocomplete="email">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="phone">Phone Number:<span class="required"> *</span></label>
+                            <div class="phone-input-wrapper">
+                                <div class="country-selector">
+                                    <button type="button" class="country-button" id="country-selector">
+                                        <img class="flag-emoji"
+                                            src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f1fa-1f1f8.svg"
+                                            alt="US">
+                                        <span>▼</span>
+                                    </button>
+                                </div>
+                                <input type="tel" id="phone" name="phone" class="phone-input" placeholder="Phone Number"
+                                    required autocomplete="tel" value="+1 ">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload Your Resume:<span class="required"> *</span></label>
+                        <div class="file-upload-box" onclick="document.getElementById('resume').click()">
+                            <p class="file-upload-title">Choose a file or drag & drop it here</p>
+                            <p class="file-upload-restrictions">.doc, .docx, .pdf, .rtf, .odt, .html, .htm, up to 2MB
+                            </p>
+                            <button type="button" class="browse-button">Browse files</button>
+                        </div>
+                        <input type="file" id="resume" name="resume" class="file-input"
+                            accept=".doc,.docx,.pdf,.rtf,.odt,.html,.htm" required>
+                        <div class="file-name" id="file-name"></div>
+                    </div>
+
+                    <p class="privacy-text">
+                        By providing my personal information, I understand and agree to the company's
+                        <a href="https://motionrecruitment.com/privacy" target="_blank">Privacy Policy</a>.
+                    </p>
+
+                    <div class="recaptcha-container">
+                        <div class="recaptcha-box">
+                            <input type="checkbox" id="recaptcha" class="recaptcha-checkbox">
+                            <label for="recaptcha" class="recaptcha-text">I'm not a robot</label>
+                        </div>
+                    </div>
+
+                    <div class="button-wrapper">
+                        <button type="button" class="btn btn-clear"
+                            onclick="document.getElementById('application-form').reset()">Clear Form</button>
+                        <button type="submit" class="btn btn-submit" id="submit-btn" disabled>Submit</button>
+                    </div>
+
+                    <div class="success-message" id="success-message">
+                        ✓ Application submitted successfully! You can close this window.
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // File upload handling
+        document.getElementById('resume').addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name;
+            const fileNameDisplay = document.getElementById('file-name');
+            if (fileName) {
+                fileNameDisplay.textContent = `Selected: ${fileName}`;
+            }
+            checkFormValidity();
+        });
+
+        // reCAPTCHA handling
+        document.getElementById('recaptcha').addEventListener('change', function () {
+            checkFormValidity();
+        });
+
+        // Form validation
+        function checkFormValidity() {
+            const form = document.getElementById('application-form');
+            const recaptcha = document.getElementById('recaptcha');
+            const submitBtn = document.getElementById('submit-btn');
+
+            const isValid = form.checkValidity() && recaptcha.checked;
+            submitBtn.disabled = !isValid;
+        }
+
+        // Listen to all inputs
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', checkFormValidity);
+        });
+
+        // Form submission
+        document.getElementById('application-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            // Simulate submission
+            setTimeout(() => {
+                document.getElementById('success-message').style.display = 'block';
+                submitBtn.textContent = 'Application Submitted';
+
+                // Notify extension that application is complete
+                window.postMessage({ type: 'ATS_APPLICATION_COMPLETE' }, '*');
+            }, 1500);
+        });
+    </script>
+</body>
+
+</html>
