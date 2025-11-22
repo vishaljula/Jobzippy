@@ -4,19 +4,30 @@
  * (Greenhouse, Workday, Lever, iCIMS, Taleo, Motion Recruitment, etc.)
  *
  * Features:
- * - Intelligent navigation state machine for multi-step flows
+ * - Dynamic page classification with confidence scoring
+ * - Configurable rules for intelligent page detection
+ * - Adaptive navigation through multi-step flows
  * - Auto-closes cookie consent modals
- * - Finds and clicks "Apply" buttons through multiple pages
  * - Handles Workday-style option modals (Autofill/Manual/Last Application)
- * - Detects application forms dynamically
+ * - Skips account creation when possible
  * - Handles simple checkbox CAPTCHA only
- * - Skips complex image/puzzle CAPTCHAs
  * - Prevents infinite loops with navigation tracking
  */
 
 console.log('[Jobzippy] Universal ATS content script loaded');
 
-// Navigation state tracking
+// Import dynamic classifier
+import { intelligentNavigate, NavigationResult } from './navigator';
+
+/*
+ * LEGACY CODE (Preserved for reference)
+ * The following code was the original hardcoded implementation.
+ * It has been replaced by the dynamic classifier above.
+ * Keeping it here for reference and potential fallback.
+ */
+
+// Legacy navigation state tracking
+/*
 interface NavigationState {
   visitedUrls: Set<string>;
   clickedElements: Set<string>;
@@ -32,7 +43,15 @@ const navState: NavigationState = {
   maxDepth: 5, // Prevent infinite loops
   currentStep: 'initial',
 };
+*/
 
+/*
+ * LEGACY HELPER FUNCTIONS (Commented out - replaced by dynamic classifier)
+ * These functions were part of the original hardcoded implementation.
+ * They are preserved here for reference only.
+ */
+
+/*
 // Auto-close common modals (cookie consent, etc.)
 async function closeModals() {
   console.log('[ATS] Checking for modals to close...');
@@ -370,6 +389,55 @@ async function initialize() {
 
   console.log('[ATS] Navigation complete, current step:', navState.currentStep);
 }
+*/
+
+// ============================================================================
+// NEW DYNAMIC CLASSIFIER INTEGRATION
+// ============================================================================
+
+/**
+ * Initialize: Use dynamic classifier for intelligent navigation
+ */
+async function initialize() {
+  console.log('[ATS] Initializing with dynamic classifier...');
+
+  try {
+    // Use the intelligent navigation system
+    const result: NavigationResult = await intelligentNavigate();
+
+    if (result.success && result.finalClassification) {
+      console.log('[ATS] ✓ Successfully navigated to application form');
+      console.log(
+        '[ATS] Form confidence:',
+        `${(result.finalClassification.confidence * 100).toFixed(1)}%`
+      );
+
+      // Notify background that form is ready
+      notifyBackgroundReady();
+    } else {
+      // Navigation failed
+      console.log('[ATS] ✗ Navigation failed:', result.reason);
+      console.log('[ATS] Message:', result.message);
+
+      // Notify background about the failure
+      chrome.runtime.sendMessage({
+        type: 'ATS_NAVIGATION_FAILED',
+        reason: result.reason,
+        message: result.message,
+        url: window.location.href,
+      });
+    }
+  } catch (error) {
+    console.error('[ATS] Error during initialization:', error);
+
+    // Notify background about the error
+    chrome.runtime.sendMessage({
+      type: 'ATS_ERROR',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      url: window.location.href,
+    });
+  }
+}
 
 // Detect ATS type
 const detectATSType = (): string | null => {
@@ -399,11 +467,7 @@ const detectATSType = (): string | null => {
     return 'motion-recruitment';
   }
 
-  // Generic detection
-  if (detectApplicationForm()) {
-    return 'generic';
-  }
-
+  // Note: Generic detection removed - now handled by dynamic classifier
   return null;
 };
 
