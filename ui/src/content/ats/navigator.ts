@@ -12,6 +12,7 @@ import {
   hasGuestOption,
   logClassification,
 } from './page-classifier';
+import { createFormFillerFromVault } from './form-filler';
 
 // ============================================================================
 // NAVIGATION STATE
@@ -131,17 +132,60 @@ async function handlePageType(
 }
 
 /**
- * Handle application form (success!)
+ * Handle application form (fill and submit!)
  */
-function handleForm(classification: PageClassification): NavigationResult {
+async function handleForm(classification: PageClassification): Promise<NavigationResult> {
   console.log('[Navigator] ✓ Application form found!');
 
-  return {
-    success: true,
-    finalClassification: classification,
-    reason: 'form_found',
-    message: 'Application form detected and ready for auto-fill',
-  };
+  try {
+    // Create form filler from vault data
+    const filler = await createFormFillerFromVault();
+    if (!filler) {
+      console.error('[Navigator] Could not create form filler');
+      return {
+        success: false,
+        finalClassification: classification,
+        reason: 'unknown_page',
+        message: 'Could not load user data from vault',
+      };
+    }
+
+    // Fill the form
+    await filler.fillForm(classification);
+    console.log('[Navigator] ✓ Form filled successfully');
+
+    // Wait a bit for any validation
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Submit the form
+    const submitted = await submitForm(classification);
+
+    if (submitted) {
+      console.log('[Navigator] ✓ Form submitted successfully');
+      return {
+        success: true,
+        finalClassification: classification,
+        reason: 'form_found',
+        message: 'Application form filled and submitted',
+      };
+    } else {
+      console.warn('[Navigator] Form filled but not submitted');
+      return {
+        success: true,
+        finalClassification: classification,
+        reason: 'form_found',
+        message: 'Application form filled (manual submission required)',
+      };
+    }
+  } catch (error) {
+    console.error('[Navigator] Error handling form:', error);
+    return {
+      success: false,
+      finalClassification: classification,
+      reason: 'unknown_page',
+      message: `Error filling form: ${error}`,
+    };
+  }
 }
 
 /**
@@ -277,6 +321,46 @@ function handleUnknown(classification: PageClassification): NavigationResult {
     reason: 'unknown_page',
     message: 'Unable to classify this page. It may not be a supported ATS platform.',
   };
+}
+
+// ============================================================================
+// FORM SUBMISSION
+// ============================================================================
+
+/**
+ * Submit the form
+ */
+async function submitForm(classification: PageClassification): Promise<boolean> {
+  console.log('[Navigator] Attempting to submit form...');
+
+  // Find submit button
+  const submitAction = findBestAction(classification, 'submit');
+  if (!submitAction) {
+    console.warn('[Navigator] No submit button found');
+    return false;
+  }
+
+  // Check if form is valid (if it's in a form element)
+  const formElement = document.querySelector('form');
+  if (formElement && !formElement.checkValidity()) {
+    console.warn('[Navigator] Form validation failed');
+    formElement.reportValidity();
+    return false;
+  }
+
+  try {
+    // Click submit button
+    console.log('[Navigator] Clicking submit button...');
+    submitAction.element.click();
+
+    // Wait for submission
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    return true;
+  } catch (error) {
+    console.error('[Navigator] Error submitting form:', error);
+    return false;
+  }
 }
 
 // ============================================================================

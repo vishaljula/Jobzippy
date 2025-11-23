@@ -30,6 +30,18 @@ const NAV_ITEMS = [
   { key: 'alerts', icon: Bell, label: 'Alerts' },
 ] as const;
 
+interface ExtensionMessage {
+  type: string;
+  data?: {
+    state?: 'IDLE' | 'RUNNING' | 'PAUSED';
+    status?: string;
+    engineStatus?: string;
+    platform?: string;
+    loggedIn?: boolean;
+    [key: string]: unknown;
+  };
+}
+
 function App() {
   const { isAuthenticated, isLoading: authLoading, user, logout: handleLogout } = useAuth();
   const {
@@ -158,7 +170,7 @@ function App() {
 
   // Listen for engine state broadcasts
   useEffect(() => {
-    const handler = (message: any) => {
+    const handler = (message: ExtensionMessage) => {
       if (message?.type === 'ENGINE_STATE') {
         setEngineState(message.data?.state ?? 'IDLE');
         setEngineStatus(message.data?.status ?? 'Idle');
@@ -352,7 +364,7 @@ function App() {
       }
     }, 5000);
 
-    const handler = (message: any) => {
+    const handler = (message: ExtensionMessage) => {
       if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
         const p = message.data.platform as 'LinkedIn' | 'Indeed';
         if (p === 'LinkedIn') {

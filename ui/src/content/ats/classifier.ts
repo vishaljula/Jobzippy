@@ -186,11 +186,6 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
           return text.includes('create account') || text.includes('sign up');
         },
       },
-      {
-        type: 'selector',
-        selectors: ['button:has-text("Sign Up")', 'button:has-text("Create Account")'],
-        weight: 0.6,
-      },
     ],
   },
 

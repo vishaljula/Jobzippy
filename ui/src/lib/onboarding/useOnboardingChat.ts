@@ -171,6 +171,7 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
         if (snapshot.draft) {
           applyDerivedFieldsToDraft(snapshot.draft);
         }
+
         setMessages(snapshot.messages.length ? snapshot.messages : DEFAULT_MESSAGES);
         setDeferredTasks(snapshot.deferredTasks ?? []);
         setMissingFields(snapshot.missingFields ?? REQUIRED_FIELDS.map((f) => f.path));
@@ -552,7 +553,15 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
         createdAt: new Date().toISOString(),
       });
     })();
-  }, [appendMessage, completedAt, draft, hasResume, missingFields.length, vaultPassword]);
+  }, [
+    appendMessage,
+    completedAt,
+    draft,
+    hasResume,
+    missingFields.length,
+    vaultPassword,
+    syncDraftToVault,
+  ]);
 
   return {
     isLoading,
@@ -781,7 +790,6 @@ function parseSalary(input: string): number | null {
   const regex = /(\d+(?:\.\d+)?)(?:\s*(k|m|b|thousand|million|billion))?/g;
   const matches: RegExpExecArray[] = [];
   let match: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((match = regex.exec(normalized)) !== null) {
     matches.push(match);
   }

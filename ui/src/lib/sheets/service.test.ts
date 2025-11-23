@@ -32,7 +32,7 @@ vi.mock('@/lib/firebase/userRepository', () => {
 });
 
 vi.mock('@/lib/storage', async (orig) => {
-  const actual = await (orig as any)();
+  const actual = await (orig as () => Promise<Record<string, unknown>>)();
   return {
     ...actual,
     getStorage: vi.fn(async () => undefined),
@@ -172,7 +172,9 @@ describe('sheets/service', () => {
       expect(body.data[0].values[0][0]).toBe('replied');
       return Promise.resolve(new Response('{}', { status: 200 }));
     });
-    fetchMock.mockImplementationOnce(batchSpy as any);
+    fetchMock.mockImplementationOnce(
+      batchSpy as unknown as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    );
 
     await updateApplicationStatus([
       {

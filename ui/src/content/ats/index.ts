@@ -512,7 +512,7 @@ const findInput = (
 };
 
 // Auto-fill form with user data
-async function autoFillForm(userData: any) {
+async function autoFillForm(userData: Record<string, unknown>) {
   console.log('[ATS] Auto-filling form with user data');
 
   // Fill first name
@@ -522,7 +522,7 @@ async function autoFillForm(userData: any) {
     { label: 'first name' },
   ]);
   if (firstNameInput && userData.firstName) {
-    firstNameInput.value = userData.firstName;
+    firstNameInput.value = String(userData.firstName);
     firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
     firstNameInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -534,7 +534,7 @@ async function autoFillForm(userData: any) {
     { label: 'last name' },
   ]);
   if (lastNameInput && userData.lastName) {
-    lastNameInput.value = userData.lastName;
+    lastNameInput.value = String(userData.lastName);
     lastNameInput.dispatchEvent(new Event('input', { bubbles: true }));
     lastNameInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -548,7 +548,7 @@ async function autoFillForm(userData: any) {
     ]) || (document.querySelector('input[type="email"]') as HTMLInputElement);
 
   if (emailInput && userData.email) {
-    emailInput.value = userData.email;
+    emailInput.value = String(userData.email);
     emailInput.dispatchEvent(new Event('input', { bubbles: true }));
     emailInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -562,7 +562,7 @@ async function autoFillForm(userData: any) {
     ]) || (document.querySelector('input[type="tel"]') as HTMLInputElement);
 
   if (phoneInput && userData.phone) {
-    phoneInput.value = userData.phone;
+    phoneInput.value = String(userData.phone);
     phoneInput.dispatchEvent(new Event('input', { bubbles: true }));
     phoneInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -573,7 +573,7 @@ async function autoFillForm(userData: any) {
     { label: 'linkedin' },
   ]);
   if (linkedinInput && userData.linkedin) {
-    linkedinInput.value = userData.linkedin;
+    linkedinInput.value = String(userData.linkedin);
     linkedinInput.dispatchEvent(new Event('input', { bubbles: true }));
     linkedinInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -584,7 +584,7 @@ async function autoFillForm(userData: any) {
     { label: 'website' },
   ]);
   if (websiteInput && userData.website) {
-    websiteInput.value = userData.website;
+    websiteInput.value = String(userData.website);
     websiteInput.dispatchEvent(new Event('input', { bubbles: true }));
     websiteInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
