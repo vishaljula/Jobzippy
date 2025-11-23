@@ -107,47 +107,32 @@ export class AgentController {
   /**
    * Process a single job
    */
+  /**
+   * Process a single job by delegating to background script
+   */
   private async processJob(job: JobCard): Promise<void> {
     console.log('[AgentController] Processing job:', job.title, 'at', job.company);
     this.results.jobsProcessed++;
 
     try {
-      // 1. Click job card to view details
-      await this.clickJobCard(job);
-      await this.delay(1500);
+      // Send message to background to process this job in a new tab
+      // This ensures sequential processing and proper tab management
+      const response = await chrome.runtime.sendMessage({
+        type: 'PROCESS_JOB',
+        data: {
+          job,
+          platform: this.config.platform,
+        },
+      });
 
-      // 2. Click Apply button
-      const applyClicked = await this.clickApplyButton();
-      if (!applyClicked) {
-        console.warn('[AgentController] Could not click apply button for', job.id);
-        this.results.errors.push({ jobId: job.id, error: 'Apply button not found' });
-        return;
-      }
-
-      // 3. Wait for form/modal to appear
-      await this.delay(2000);
-
-      // 4. Fill and submit form using dynamic classifier
-      const submitted = await this.fillAndSubmitForm();
-
-      if (submitted) {
+      if (response && response.success) {
         console.log('[AgentController] ✓ Successfully applied to', job.title);
         this.results.jobsApplied++;
-
-        // Notify background script
-        chrome.runtime
-          .sendMessage({
-            type: 'JOB_APPLIED',
-            data: { job, platform: this.config.platform },
-          })
-          .catch(() => {});
       } else {
-        console.warn('[AgentController] Failed to submit application for', job.id);
-        this.results.errors.push({ jobId: job.id, error: 'Form submission failed' });
+        const error = response?.error || 'Unknown error';
+        console.warn('[AgentController] Failed to apply to', job.title, error);
+        this.results.errors.push({ jobId: job.id, error });
       }
-
-      // Close modal if still open
-      await this.closeModal();
     } catch (error) {
       console.error('[AgentController] Error processing job', job.id, error);
       this.results.errors.push({ jobId: job.id, error: String(error) });
@@ -165,186 +150,6 @@ export class AgentController {
     });
 
     return response?.jobs || [];
-  }
-
-  /**
-   * Click a job card
-   */
-  private async clickJobCard(job: JobCard): Promise<void> {
-    console.log('[AgentController] Clicking job card:', job.id);
-
-    if (this.config.platform === 'LinkedIn') {
-      await this.clickLinkedInJobCard(job);
-    } else if (this.config.platform === 'Indeed') {
-      await this.clickIndeedJobCard(job);
-    }
-  }
-
-  /**
-   * Click LinkedIn job card
-   */
-  private async clickLinkedInJobCard(job: JobCard): Promise<void> {
-    const card = document.querySelector(`[data-job-id="${job.id}"]`) as HTMLElement;
-    if (!card) {
-      throw new Error('Job card not found');
-    }
-
-    // Click the title link to avoid navigation
-    const titleLink = card.querySelector('.job-card-list__title-link') as HTMLAnchorElement;
-    if (titleLink) {
-      const clickEvent = new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-      });
-      titleLink.addEventListener('click', (e) => e.preventDefault(), { once: true, capture: true });
-      titleLink.dispatchEvent(clickEvent);
-    } else {
-      card.click();
-    }
-  }
-
-  /**
-   * Click Indeed job card
-   */
-  private async clickIndeedJobCard(job: JobCard): Promise<void> {
-    let card = document.querySelector(`[data-jk="${job.id}"]`) as HTMLElement;
-
-    // Fallback for mock pages
-    if (!card && job.id.startsWith('mock-')) {
-      card = document
-        .querySelector(`a[href*="${job.id}"]`)
-        ?.closest('.jobsearch-SerpJobCard') as HTMLElement;
-    }
-
-    if (!card) {
-      throw new Error('Job card not found');
-    }
-
-    // Click the title link
-    const titleLink = card.querySelector('.jobTitle a, h2 a') as HTMLAnchorElement;
-    if (titleLink) {
-      const clickEvent = new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-      });
-      titleLink.addEventListener('click', (e) => e.preventDefault(), { once: true, capture: true });
-      titleLink.dispatchEvent(clickEvent);
-    } else {
-      card.click();
-    }
-  }
-
-  /**
-   * Click Apply button
-   */
-  private async clickApplyButton(): Promise<boolean> {
-    console.log('[AgentController] Looking for Apply button...');
-
-    if (this.config.platform === 'LinkedIn') {
-      return await this.clickLinkedInApply();
-    } else if (this.config.platform === 'Indeed') {
-      return await this.clickIndeedApply();
-    }
-
-    return false;
-  }
-
-  /**
-   * Click LinkedIn Easy Apply button
-   */
-  private async clickLinkedInApply(): Promise<boolean> {
-    const selectors = [
-      'button[aria-label*="Easy Apply"]',
-      'button[data-testid*="easy-apply"]',
-      'button:has-text("Easy Apply")', // May not work in all browsers
-    ];
-
-    for (const selector of selectors) {
-      try {
-        const button = document.querySelector(selector) as HTMLButtonElement;
-        if (button && button.offsetParent !== null) {
-          console.log('[AgentController] Clicking Easy Apply button');
-          button.click();
-          return true;
-        }
-      } catch (e) {
-        // Selector not supported, try next
-      }
-    }
-
-    console.warn('[AgentController] Easy Apply button not found');
-    return false;
-  }
-
-  /**
-   * Click Indeed Apply button
-   */
-  private async clickIndeedApply(): Promise<boolean> {
-    const selectors = [
-      '#indeedApplyButton',
-      'button[id*="apply"]',
-      'button[data-testid*="apply"]',
-      '.apply-button',
-    ];
-
-    for (const selector of selectors) {
-      const button = document.querySelector(selector) as HTMLButtonElement;
-      if (button && button.offsetParent !== null) {
-        console.log('[AgentController] Clicking Apply button');
-        button.click();
-        return true;
-      }
-    }
-
-    console.warn('[AgentController] Apply button not found');
-    return false;
-  }
-
-  /**
-   * Fill and submit form using dynamic classifier
-   */
-  private async fillAndSubmitForm(): Promise<boolean> {
-    try {
-      // Import navigator (which uses classifier and form filler)
-      const { intelligentNavigate } = await import('./ats/navigator');
-
-      console.log('[AgentController] Starting intelligent navigation...');
-      const result = await intelligentNavigate();
-
-      return result.success;
-    } catch (error) {
-      console.error('[AgentController] Error in form filling:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Close modal if open
-   */
-  private async closeModal(): Promise<void> {
-    // Try to find and click close button
-    const closeSelectors = [
-      'button[aria-label="Close"]',
-      'button.close-button',
-      '.modal-overlay button[aria-label*="Close"]',
-    ];
-
-    for (const selector of closeSelectors) {
-      const closeBtn = document.querySelector(selector) as HTMLButtonElement;
-      if (closeBtn) {
-        closeBtn.click();
-        await this.delay(500);
-        return;
-      }
-    }
-
-    // Try clicking overlay
-    const overlay = document.querySelector('.modal-overlay') as HTMLElement;
-    if (overlay) {
-      overlay.click();
-    }
   }
 
   /**

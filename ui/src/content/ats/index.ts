@@ -412,8 +412,28 @@ async function initialize() {
         `${(result.finalClassification.confidence * 100).toFixed(1)}%`
       );
 
-      // Notify background that form is ready
-      notifyBackgroundReady();
+      // Notify background that job is complete
+      // If the result says "submitted", we are done.
+      // If it says "form_found" but not submitted, we might need manual intervention,
+      // but for now we'll mark it as complete so the agent can move on (or we could wait).
+
+      // Check if it was actually submitted
+      const isSubmitted = result.message?.includes('submitted');
+
+      if (isSubmitted) {
+        chrome.runtime.sendMessage({
+          type: 'JOB_COMPLETE',
+          result,
+        });
+      } else {
+        // Form found but not submitted (e.g. manual submission required)
+        // We still notify completion but with a different status if needed
+        // For now, let's assume we want to close the tab and move on if we can't submit
+        chrome.runtime.sendMessage({
+          type: 'JOB_COMPLETE',
+          result,
+        });
+      }
     } else {
       // Navigation failed
       console.log('[ATS] ✗ Navigation failed:', result.reason);
@@ -440,36 +460,36 @@ async function initialize() {
 }
 
 // Detect ATS type
-const detectATSType = (): string | null => {
-  const url = window.location.hostname;
-  const body = document.body;
+// const detectATSType = (): string | null => {
+//   const url = window.location.hostname;
+//   const body = document.body;
 
-  // Check for known ATS platforms
-  if (url.includes('greenhouse.io') || body.getAttribute('data-ats-type') === 'greenhouse') {
-    return 'greenhouse';
-  }
-  if (url.includes('myworkdayjobs.com') || url.includes('workday.com')) {
-    return 'workday';
-  }
-  if (url.includes('lever.co')) {
-    return 'lever';
-  }
-  if (url.includes('icims.com')) {
-    return 'icims';
-  }
-  if (url.includes('taleo.net')) {
-    return 'taleo';
-  }
-  if (
-    url.includes('motionrecruitment.com') ||
-    body.getAttribute('data-ats-type') === 'motion-recruitment'
-  ) {
-    return 'motion-recruitment';
-  }
+//   // Check for known ATS platforms
+//   if (url.includes('greenhouse.io') || body.getAttribute('data-ats-type') === 'greenhouse') {
+//     return 'greenhouse';
+//   }
+//   if (url.includes('myworkdayjobs.com') || url.includes('workday.com')) {
+//     return 'workday';
+//   }
+//   if (url.includes('lever.co')) {
+//     return 'lever';
+//   }
+//   if (url.includes('icims.com')) {
+//     return 'icims';
+//   }
+//   if (url.includes('taleo.net')) {
+//     return 'taleo';
+//   }
+//   if (
+//     url.includes('motionrecruitment.com') ||
+//     body.getAttribute('data-ats-type') === 'motion-recruitment'
+//   ) {
+//     return 'motion-recruitment';
+//   }
 
-  // Note: Generic detection removed - now handled by dynamic classifier
-  return null;
-};
+//   // Note: Generic detection removed - now handled by dynamic classifier
+//   return null;
+// };
 
 // Find input field using multiple strategies
 const findInput = (
@@ -695,17 +715,17 @@ async function submitForm() {
 }
 
 // Notify background script that ATS page is ready
-function notifyBackgroundReady() {
-  const atsType = detectATSType();
-  if (atsType) {
-    console.log('[ATS] Notifying background that ATS page is ready:', atsType);
-    chrome.runtime.sendMessage({
-      type: 'ATS_PAGE_READY',
-      atsType,
-      url: window.location.href,
-    });
-  }
-}
+// function notifyBackgroundReady() {
+//   const atsType = detectATSType();
+//   if (atsType) {
+//     console.log('[ATS] Notifying background that ATS page is ready:', atsType);
+//     chrome.runtime.sendMessage({
+//       type: 'ATS_PAGE_READY',
+//       atsType,
+//       url: window.location.href,
+//     });
+//   }
+// }
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

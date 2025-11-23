@@ -508,6 +508,73 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })();
       return true; // Keep channel open for async response
 
+    // ========================================================================
+    // JOB QUEUE MANAGEMENT
+    // ========================================================================
+    case 'PROCESS_JOB':
+      (async () => {
+        const { job, platform } = message.data;
+        console.log(`[Jobzippy] Received PROCESS_JOB for ${job.title} on ${platform}`);
+
+        try {
+          // 1. Create a new tab for the job
+          // We use the job URL from the job card
+          let jobUrl = job.url;
+
+          // If no URL in job card (e.g. some LinkedIn views), try to construct it or fail
+          if (!jobUrl) {
+            if (platform === 'LinkedIn') {
+              jobUrl = `https://www.linkedin.com/jobs/view/${job.id}`;
+            } else {
+              throw new Error('No URL provided for job');
+            }
+          }
+
+          const tab = await chrome.tabs.create({ url: jobUrl, active: true });
+          console.log(`[Jobzippy] Created tab ${tab.id} for job ${job.id}`);
+
+          // 2. Wait for tab to finish processing
+          // We'll listen for JOB_COMPLETE or ATS_NAVIGATION_FAILED from the content script
+          // This requires a temporary listener or a promise wrapper
+
+          const result = await new Promise((resolve) => {
+            const listener = (msg: any, sender: any) => {
+              if (sender.tab?.id === tab.id) {
+                if (
+                  msg.type === 'JOB_COMPLETE' ||
+                  msg.type === 'ATS_NAVIGATION_FAILED' ||
+                  msg.type === 'ATS_ERROR'
+                ) {
+                  chrome.runtime.onMessage.removeListener(listener);
+                  resolve(msg);
+                }
+              }
+            };
+
+            chrome.runtime.onMessage.addListener(listener);
+
+            // Timeout after 2 minutes
+            setTimeout(() => {
+              chrome.runtime.onMessage.removeListener(listener);
+              resolve({ success: false, error: 'Timeout waiting for job processing' });
+            }, 120000);
+          });
+
+          // 3. Close the tab
+          if (tab.id) {
+            await chrome.tabs.remove(tab.id);
+            console.log(`[Jobzippy] Closed tab ${tab.id}`);
+          }
+
+          // 4. Respond to AgentController
+          sendResponse({ success: true, result });
+        } catch (error) {
+          console.error('[Jobzippy] Error processing job:', error);
+          sendResponse({ success: false, error: String(error) });
+        }
+      })();
+      return true;
+
     case 'JOB_APPLIED':
       // TODO: Log application to Google Sheet
       console.log('[Jobzippy] Job applied:', message.data);
