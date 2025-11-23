@@ -1,3 +1,4 @@
+import React from 'react';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Clock, Loader2, Paperclip, Sparkles } from 'lucide-react';
 
@@ -133,11 +134,52 @@ function PreviewMessage({
   onEdit?: () => void;
   isApplying?: boolean;
 }) {
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editedSections, setEditedSections] = React.useState<IntakePreviewSection[]>([]);
+
   const sections = message.previewSections ?? [];
   const metadata = message.metadata ?? {};
 
+  React.useEffect(() => {
+    setEditedSections(sections);
+  }, [sections]);
+
+  const handleEditClick = () => {
+    setIsEditing(true);
+    onEdit?.();
+  };
+
+  const handleSaveClick = () => {
+    // Update the message with edited data
+    message.previewSections = editedSections;
+    setIsEditing(false);
+    onApply?.();
+  };
+
+  const handleCancelClick = () => {
+    setEditedSections(sections);
+    setIsEditing(false);
+  };
+
+  const handleFieldChange = (sectionId: string, fieldId: string, newValue: string) => {
+    setEditedSections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              fields: section.fields.map((field) =>
+                field.id === fieldId ? { ...field, value: newValue } : field
+              ),
+            }
+          : section
+      )
+    );
+  };
+
+  const displaySections = isEditing ? editedSections : sections;
+
   return (
-    <div className="space-y-4 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="w-full space-y-4 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-indigo-600">Resume parsed successfully</p>
@@ -151,36 +193,71 @@ function PreviewMessage({
       </div>
       <p className="text-sm text-slate-700">{message.content}</p>
       <div className="grid gap-3 md:grid-cols-2">
-        {sections.map((section) => (
-          <PreviewSection key={section.id} section={section} />
+        {displaySections.map((section) => (
+          <PreviewSection
+            key={section.id}
+            section={section}
+            isEditing={isEditing}
+            onFieldChange={(fieldId, value) => handleFieldChange(section.id, fieldId, value)}
+          />
         ))}
       </div>
       {(onApply || onEdit) && (
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
-            onClick={onEdit}
-            disabled={!onEdit}
-          >
-            Edit manually
-          </Button>
-          <Button
-            size="sm"
-            className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
-            onClick={onApply}
-            disabled={!onApply || isApplying}
-          >
-            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
-          </Button>
+          {isEditing ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+                onClick={handleCancelClick}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
+                onClick={handleSaveClick}
+              >
+                Save changes
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+                onClick={handleEditClick}
+                disabled={!onEdit}
+              >
+                Edit manually
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
+                onClick={onApply}
+                disabled={!onApply || isApplying}
+              >
+                {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function PreviewSection({ section }: { section: IntakePreviewSection }) {
+function PreviewSection({
+  section,
+  isEditing,
+  onFieldChange,
+}: {
+  section: IntakePreviewSection;
+  isEditing?: boolean;
+  onFieldChange?: (fieldId: string, value: string) => void;
+}) {
   const normalizedConfidence = Math.min(1, Math.max(0, section.confidence));
   const confidencePercent = Math.round(normalizedConfidence * 100);
 
@@ -199,7 +276,14 @@ function PreviewSection({ section }: { section: IntakePreviewSection }) {
           section.fields.map((field) => (
             <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
-              {Array.isArray(field.value) ? (
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
+                  onChange={(e) => onFieldChange?.(field.id, e.target.value)}
+                  className="mt-1 block w-full min-w-0 rounded border border-indigo-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              ) : Array.isArray(field.value) ? (
                 <p className="mt-1 text-sm text-slate-700">
                   {field.value.length > 0 ? field.value.join(', ') : '(empty)'}
                 </p>

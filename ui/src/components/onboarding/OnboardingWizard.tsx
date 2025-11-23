@@ -137,6 +137,10 @@ export function OnboardingWizard({
     toast.success('Resume data applied to profile');
   }, []);
 
+  const handleEditPreview = useCallback(() => {
+    // Edit mode is handled within ChatMessage component
+  }, []);
+
   if (!isMounted) return null;
 
   const attachmentPreview = queuedFile
@@ -275,6 +279,7 @@ export function OnboardingWizard({
                           onApplyPreview={
                             message.kind === 'preview' ? handleApplyPreview : undefined
                           }
+                          onEditPreview={message.kind === 'preview' ? handleEditPreview : undefined}
                         />
                       ))}
                       {isThinking && (
