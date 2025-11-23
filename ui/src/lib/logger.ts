@@ -15,6 +15,12 @@ class FileLogger {
 
   private connect(): void {
     try {
+      // Check if WebSocket is available (not in all contexts)
+      if (typeof WebSocket === 'undefined') {
+        console.warn('[Logger] WebSocket not available in this context, logging to console only');
+        return;
+      }
+
       this.ws = new WebSocket('ws://localhost:9999');
 
       this.ws.onopen = () => {
@@ -31,7 +37,10 @@ class FileLogger {
       this.ws.onclose = () => {
         console.log('[Logger] Disconnected from log server, will retry...');
         // Retry connection after 5 seconds
-        this.reconnectTimeout = window.setTimeout(() => this.connect(), 5000);
+        this.reconnectTimeout = globalThis.setTimeout(
+          () => this.connect(),
+          5000
+        ) as unknown as number;
       };
 
       this.ws.onerror = (error) => {
@@ -40,7 +49,10 @@ class FileLogger {
     } catch (error) {
       console.error('[Logger] Failed to connect to log server:', error);
       // Retry after 5 seconds
-      this.reconnectTimeout = window.setTimeout(() => this.connect(), 5000);
+      this.reconnectTimeout = globalThis.setTimeout(
+        () => this.connect(),
+        5000
+      ) as unknown as number;
     }
   }
 
