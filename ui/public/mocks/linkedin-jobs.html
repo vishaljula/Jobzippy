@@ -80,6 +80,113 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    .pagination button.active {
+      background: #0a66c2;
+      color: white;
+    }
+
+    /* Easy Apply Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .close-button {
+      background: none !important;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .modal-footer {
+      padding: 20px 24px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #0a66c2;
+      color: white;
+    }
   </style>
 </head>
 
@@ -89,43 +196,16 @@
 
     <div style="display: flex; gap: 20px;">
       <div style="flex: 1;">
-        <ul class="jobs-search-results__list">
-          <li class="jobs-search-results__list-item" data-job-id="123456">
-            <a href="/jobs/view/123456" class="job-card-list__title-link" data-control-name="job_card_title_link">
-              Senior Software Engineer
-            </a>
-            <h4 class="base-search-card__subtitle">TechCorp Inc.</h4>
-            <span class="job-card-container__metadata-item">San Francisco, CA • Remote</span>
-            <span class="job-card-container__salary-info">$150,000 - $200,000</span>
-            <button aria-label="Easy Apply">Easy Apply</button>
-          </li>
-
-          <li class="jobs-search-results__list-item" data-job-id="123457">
-            <a href="/jobs/view/123457" class="job-card-list__title-link" data-control-name="job_card_title_link">
-              Product Manager
-            </a>
-            <h4 class="base-search-card__subtitle">StartupXYZ</h4>
-            <span class="job-card-container__metadata-item">New York, NY • Hybrid</span>
-            <span class="job-card-container__salary-info">$140,000 - $180,000</span>
-            <button aria-label="Easy Apply">Easy Apply</button>
-          </li>
-
-          <li class="jobs-search-results__list-item" data-job-id="123458">
-            <a href="/jobs/view/123458" class="job-card-list__title-link" data-control-name="job_card_title_link">
-              Full Stack Developer
-            </a>
-            <h4 class="base-search-card__subtitle">DevSolutions LLC</h4>
-            <span class="job-card-container__metadata-item">Austin, TX • Remote</span>
-            <span class="job-card-container__salary-info">$130,000 - $170,000</span>
-          </li>
+        <ul class="jobs-search-results__list" id="jobsList">
+          <!-- Jobs will be dynamically inserted here -->
         </ul>
 
         <div class="pagination">
-          <button aria-label="Previous Page" disabled>Previous</button>
-          <button aria-current="page">1</button>
-          <button data-test-pagination-page-btn="2">2</button>
-          <button data-test-pagination-page-btn="3">3</button>
-          <button aria-label="Next Page" data-test-pagination-page-btn-next>Next</button>
+          <button id="prevBtn" aria-label="Previous Page">Previous</button>
+          <button class="page-btn active" data-page="1">1</button>
+          <button class="page-btn" data-page="2">2</button>
+          <button class="page-btn" data-page="3">3</button>
+          <button id="nextBtn" aria-label="Next Page">Next</button>
         </div>
       </div>
 
@@ -143,67 +223,203 @@
       </div>
     </div>
 
+    <!-- Easy Apply Modal -->
+    <div class="modal-overlay" id="easyApplyModal">
+      <div class="modal" role="dialog" aria-label="Easy Apply">
+        <div class="modal-header">
+          <div class="modal-title" id="modalCompanyName">Apply to Company</div>
+          <button class="close-button" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label>First name <span style="color: #d32f2f;">*</span></label>
+            <input type="text" name="firstName" autocomplete="given-name" required>
+          </div>
+          <div class="form-group">
+            <label>Last name <span style="color: #d32f2f;">*</span></label>
+            <input type="text" name="lastName" autocomplete="family-name" required>
+          </div>
+          <div class="form-group">
+            <label>Email <span style="color: #d32f2f;">*</span></label>
+            <input type="email" name="email" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label>Phone <span style="color: #d32f2f;">*</span></label>
+            <input type="tel" name="phone" autocomplete="tel" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="submitApplication">Submit application</button>
+        </div>
+      </div>
+    </div>
     <script>
-      // Prevent title links from navigating
-      document.querySelectorAll('.job-card-list__title-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
-          // Trigger the parent card's click instead
-          const card = link.closest('.jobs-search-results__list-item');
-          if (card) {
-            card.click();
-          }
+      // All 9 jobs data
+      const allJobs = [
+        // Page 1
+        { id: '123456', title: 'Senior Software Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', atsUrl: null },
+        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },
+        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html' },
+        // Page 2
+        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'motion-recruitment-apply.html' },
+        { id: '123460', title: 'DevOps Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Hybrid', salary: '$145,000 - $185,000', applyType: 'modal_apply', atsUrl: null },
+        { id: '123461', title: 'UX Designer', company: 'DesignHub', location: 'Los Angeles, CA', type: 'Remote', salary: '$120,000 - $150,000', applyType: 'external', atsUrl: 'indeed-apply.html' },
+        // Page 3
+        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },
+        { id: '123463', title: 'Frontend Developer', company: 'WebWorks', location: 'Portland, OR', type: 'Hybrid', salary: '$125,000 - $160,000', applyType: 'external', atsUrl: 'workday-apply.html' },
+        { id: '123464', title: 'ML Engineer', company: 'AI Innovations', location: 'San Jose, CA', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'easy_apply', atsUrl: 'linkedin-easy-apply.html' }
+      ];
+
+      let currentPage = 1;
+      const jobsPerPage = 3;
+
+      function renderJobs() {
+        const startIndex = (currentPage - 1) * jobsPerPage;
+        const endIndex = startIndex + jobsPerPage;
+        const pageJobs = allJobs.slice(startIndex, endIndex);
+
+        const jobsList = document.getElementById('jobsList');
+        jobsList.innerHTML = '';
+
+        pageJobs.forEach(job => {
+          const li = document.createElement('li');
+          li.className = 'jobs-search-results__list-item';
+          li.setAttribute('data-job-id', job.id);
+
+          li.innerHTML = `
+            <a href="/jobs/view/${job.id}" class="job-card-list__title-link" data-control-name="job_card_title_link">
+              ${job.title}
+            </a>
+            <h4 class="base-search-card__subtitle">${job.company}</h4>
+            <span class="job-card-container__metadata-item">${job.location} • ${job.type}</span>
+            <span class="job-card-container__salary-info">${job.salary}</span>
+            ${job.applyType === 'easy_apply' ? '<button aria-label="Easy Apply">Easy Apply</button>' : ''}
+          `;
+
+          jobsList.appendChild(li);
+        });
+
+        // Update pagination
+        document.querySelectorAll('.page-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
+        });
+        document.getElementById('prevBtn').disabled = currentPage === 1;
+        document.getElementById('nextBtn').disabled = currentPage === 3;
+
+        // Re-attach event listeners
+        attachJobCardListeners();
+      }
+
+      function attachJobCardListeners() {
+        // Prevent title links from navigating
+        document.querySelectorAll('.job-card-list__title-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const card = link.closest('.jobs-search-results__list-item');
+            if (card) {
+              card.click();
+            }
+          });
+        });
+
+        // Handle card clicks to show job details
+        document.querySelectorAll('.jobs-search-results__list-item').forEach(item => {
+          item.style.cursor = 'pointer';
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('button[aria-label="Easy Apply"]')) {
+              return;
+            }
+
+            const jobId = item.getAttribute('data-job-id');
+            const job = allJobs.find(j => j.id === jobId);
+            if (!job) return;
+
+            const detailsContainer = document.querySelector('.jobs-details__main-content');
+            detailsContainer.querySelector('#job-details-title').textContent = job.title;
+            detailsContainer.querySelector('#job-details').innerHTML = `
+              <p><strong>${job.company}</strong> is hiring a ${job.title}.</p>
+              <p>Location: ${job.location} (${job.type})</p>
+              <p>Salary: ${job.salary}</p>
+              <p>This is a mock job description for testing purposes. It contains keywords like React, TypeScript, and Chrome Extensions.</p>
+            `;
+
+            const actionsContainer = detailsContainer.querySelector('#job-actions');
+            if (job.applyType === 'modal_apply') {
+              // Open modal on same page
+              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+
+              const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
+              if (easyApplyBtn) {
+                easyApplyBtn.addEventListener('click', () => {
+                  document.getElementById('modalCompanyName').textContent = `Apply to ${job.company}`;
+                  document.getElementById('easyApplyModal').classList.add('active');
+                });
+              }
+            } else if (job.applyType === 'easy_apply') {
+              // Open new tab
+              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+
+              const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
+              if (easyApplyBtn) {
+                easyApplyBtn.addEventListener('click', () => {
+                  window.open(`http://localhost:3000/mocks/${job.atsUrl}?job=${jobId}`, '_blank');
+                });
+              }
+            } else {
+              // External ATS
+              actionsContainer.innerHTML = `
+                <a href="http://localhost:3000/mocks/${job.atsUrl}?job=${jobId}" 
+                   target="_blank"
+                   data-testid="external-apply-button"
+                   style="background: white; color: #0a66c2; border: 1px solid #0a66c2; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 16px; display: inline-block; cursor: pointer;">
+                  Apply
+                </a>
+              `;
+            }
+          });
+        });
+      }
+
+      // Pagination handlers
+      document.getElementById('prevBtn').addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          renderJobs();
+        }
+      });
+
+      document.getElementById('nextBtn').addEventListener('click', () => {
+        if (currentPage < 3) {
+          currentPage++;
+          renderJobs();
+        }
+      });
+
+      document.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentPage = parseInt(btn.dataset.page);
+          renderJobs();
         });
       });
 
-      // Handle card clicks to show job details
-      document.querySelectorAll('.jobs-search-results__list-item').forEach(item => {
-        item.style.cursor = 'pointer';
-        item.addEventListener('click', (e) => {
-          // Don't trigger if clicking the Easy Apply button on the card
-          if (e.target.closest('button[aria-label="Easy Apply"]')) {
-            return;
-          }
+      // Initial render
+      renderJobs();
 
-          const title = item.querySelector('.job-card-list__title-link').textContent.trim();
-          const company = item.querySelector('.base-search-card__subtitle').textContent.trim();
-          const jobId = item.getAttribute('data-job-id');
-          const isEasyApply = item.querySelector('button[aria-label="Easy Apply"]');
+      // Modal event listeners
+      document.querySelector('.close-button').addEventListener('click', () => {
+        document.getElementById('easyApplyModal').classList.remove('active');
+      });
 
-          const detailsContainer = document.querySelector('.jobs-details__main-content');
-          detailsContainer.querySelector('#job-details-title').textContent = title;
-          detailsContainer.querySelector('#job-details').innerHTML = `
-            <p><strong>${company}</strong> is hiring a ${title}.</p>
-            <p>This is a mock job description for testing purposes. It contains keywords like React, TypeScript, and Chrome Extensions.</p>
-            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
-          `;
-
-          const actionsContainer = detailsContainer.querySelector('#job-actions');
-          if (isEasyApply) {
-            actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
-            
-            // Add click handler for Easy Apply button in details panel
-            const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
-            if (easyApplyBtn) {
-              easyApplyBtn.addEventListener('click', () => {
-                window.open(`http://localhost:3000/mocks/linkedin-easy-apply.html?job=${jobId}`, '_blank');
-              });
-            }
-          } else {
-            // External apply - opens Greenhouse ATS in new tab
-            actionsContainer.innerHTML = `
-              <a href="http://localhost:3000/mocks/greenhouse-apply.html?job=${jobId}" 
-                 target="_blank"
-                 data-testid="external-apply-button"
-                 style="background: white; color: #0a66c2; border: 1px solid #0a66c2; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 16px; display: inline-block; cursor: pointer;">
-                Apply
-              </a>
-            `;
-          }
-        });
+      document.getElementById('submitApplication').addEventListener('click', () => {
+        console.log('[LinkedIn Easy Apply] Application submitted via modal');
+        alert('Application submitted successfully!');
+        document.getElementById('easyApplyModal').classList.remove('active');
       });
     </script>
     <!-- Content scripts auto-inject via manifest.json for localhost URLs -->
 </body>
 
 </html>
+```

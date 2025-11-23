@@ -267,10 +267,9 @@
 
 <body>
     <div class="job-details">
-        <h1>Senior Software Engineer</h1>
-        <div class="company">Google · Mountain View, CA</div>
-        <p style="margin: 16px 0; color: #666;">
-            We're looking for an experienced software engineer to join our team...
+        <h1 id="jobTitle">Loading...</h1>
+        <div class="company" id="jobCompany"></div>
+        <p style="margin: 16px 0; color: #666;" id="jobDescription">
         </p>
         <button class="apply-button" aria-label="Easy Apply" data-testid="easy-apply-button">
             Easy Apply
@@ -403,6 +402,76 @@
     </div>
 
     <script>
+        // Job data mapping
+        const jobData = {
+            '123456': {
+                title: 'Senior Software Engineer',
+                company: 'TechCorp Inc.',
+                location: 'San Francisco, CA',
+                description: 'We are looking for an experienced Senior Software Engineer to join our team. You will work on cutting-edge technologies including React, TypeScript, and cloud infrastructure.'
+            },
+            '123457': {
+                title: 'Product Manager',
+                company: 'StartupXYZ',
+                location: 'New York, NY',
+                description: 'Join our product team to drive innovation and build products that millions of users love. Experience with agile methodologies and user research required.'
+            },
+            '123458': {
+                title: 'Full Stack Developer',
+                company: 'DevSolutions LLC',
+                location: 'Austin, TX',
+                description: 'Looking for a Full Stack Developer proficient in modern web technologies. You will build scalable applications using Node.js, React, and PostgreSQL.'
+            },
+            '123459': {
+                title: 'Data Scientist',
+                company: 'DataCorp',
+                location: 'Seattle, WA',
+                description: 'Join our data science team to build ML models and derive insights from large datasets. Experience with Python, TensorFlow, and statistical analysis required.'
+            },
+            '123460': {
+                title: 'DevOps Engineer',
+                company: 'CloudTech',
+                location: 'Boston, MA',
+                description: 'We need a DevOps Engineer to manage our cloud infrastructure and CI/CD pipelines. Experience with AWS, Kubernetes, and Terraform is essential.'
+            },
+            '123461': {
+                title: 'UX Designer',
+                company: 'DesignHub',
+                location: 'Los Angeles, CA',
+                description: 'Create beautiful and intuitive user experiences for our products. You will conduct user research, create wireframes, and collaborate with engineers.'
+            },
+            '123462': {
+                title: 'Backend Engineer',
+                company: 'ServerSide Inc.',
+                location: 'Denver, CO',
+                description: 'Build robust backend systems and APIs. You will work with microservices architecture, databases, and distributed systems.'
+            },
+            '123463': {
+                title: 'Frontend Developer',
+                company: 'WebWorks',
+                location: 'Portland, OR',
+                description: 'Develop modern web applications using React, Vue, or Angular. You will create responsive UIs and work closely with designers and backend engineers.'
+            },
+            '123464': {
+                title: 'ML Engineer',
+                company: 'AI Innovations',
+                location: 'San Jose, CA',
+                description: 'Build and deploy machine learning models at scale. Experience with PyTorch, MLOps, and production ML systems required.'
+            }
+        };
+
+        // Get job ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const jobId = urlParams.get('job');
+        const job = jobData[jobId] || jobData['123456']; // Default to first job
+
+        // Populate job details
+        document.getElementById('jobTitle').textContent = job.title;
+        document.getElementById('jobCompany').textContent = `${job.company} · ${job.location}`;
+        document.getElementById('jobDescription').textContent = job.description;
+        document.title = `${job.title} - LinkedIn Easy Apply`;
+        document.querySelector('.modal-title').textContent = `Apply to ${job.company}`;
+
         let currentStep = 1;
         const totalSteps = 4;
         const formData = {};
