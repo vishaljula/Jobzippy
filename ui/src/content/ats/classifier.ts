@@ -78,9 +78,32 @@ export interface Indicator {
 // ============================================================================
 
 export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
-  // Cookie consent or options modal
+  // Application form inside a modal (check this BEFORE generic modal)
+  form_modal: {
+    priority: 1, // Higher priority than generic modal
+    minConfidence: 0.7,
+    indicators: [
+      {
+        type: 'combination',
+        weight: 1.0,
+        check: (doc) => {
+          const hasModal = doc.querySelector('[role="dialog"], .modal, .popup, .modal-overlay');
+          if (!hasModal) return false;
+
+          const hasInputs =
+            hasModal.querySelectorAll(
+              'input[type="text"], input[type="email"], input[type="tel"], textarea'
+            ).length || 0;
+          // Form modal if: has modal + has at least 2 inputs
+          return hasInputs >= 2;
+        },
+      },
+    ],
+  },
+
+  // Cookie consent or options modal (generic, lower priority)
   modal: {
-    priority: 1,
+    priority: 2, // Lower priority than form_modal
     minConfidence: 0.6,
     indicators: [
       { type: 'selector', selectors: ['[role="dialog"]', '[aria-modal="true"]'], weight: 0.8 },
@@ -104,29 +127,6 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
         type: 'selector',
         selectors: ['button[aria-label*="Close" i]', '.close-button'],
         weight: 0.4,
-      },
-    ],
-  },
-
-  // Application form inside a modal
-  form_modal: {
-    priority: 2,
-    minConfidence: 0.7,
-    indicators: [
-      {
-        type: 'combination',
-        weight: 1.0,
-        check: (doc) => {
-          const hasModal = doc.querySelector('[role="dialog"], .modal, .popup, .modal-overlay');
-          if (!hasModal) return false;
-
-          const hasInputs =
-            hasModal.querySelectorAll(
-              'input[type="text"], input[type="email"], input[type="tel"], textarea'
-            ).length || 0;
-          // Form modal if: has modal + has at least 2 inputs
-          return hasInputs >= 2;
-        },
       },
     ],
   },

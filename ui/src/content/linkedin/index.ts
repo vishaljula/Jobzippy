@@ -44,6 +44,14 @@ class AgentController {
   }
 
   async start(): Promise<AgentResult> {
+    // Add separator for new agent run
+    logger.log('AgentController', '='.repeat(80));
+    logger.log('AgentController', '========== STARTING AGENT ==========');
+    logger.log('AgentController', `Platform: ${this.config.platform}`);
+    logger.log('AgentController', `Max applications: ${this.config.maxApplications}`);
+    logger.log('AgentController', `Timestamp: ${new Date().toISOString()}`);
+    logger.log('AgentController', '='.repeat(80));
+
     console.log('[AgentController] ========== STARTING AGENT ==========');
     logger.log('AgentController', '========== STARTING AGENT ==========');
     logger.log('AgentController', `Platform: ${this.config.platform}`);

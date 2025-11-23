@@ -26,7 +26,8 @@
     "test:coverage": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "log-server": "node log-server.js"
+    "log-server": "node log-server.js",
+    "clear-logs": "echo '=== Agent Logs - '$(date -u +\"%Y-%m-%dT%H:%M:%S.000Z\")' ===' > agent-logs.txt && echo 'Logs cleared!'"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
