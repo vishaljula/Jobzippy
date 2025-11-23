@@ -154,6 +154,13 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
 
       try {
         const reply = await requestAssistantReply(payload);
+
+        // Log LLM response
+        logger.log('Onboarding', `🤖 Assistant: "${reply.reply}"`);
+        if (reply.requestedField) {
+          logger.log('Onboarding', `📋 Requested field: ${reply.requestedField}`);
+        }
+
         appendMessage({
           id: uuid(),
           role: 'assistant',
@@ -536,6 +543,9 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
             }))
           : undefined,
       };
+
+      // Log user message
+      logger.log('Onboarding', `👤 User: "${userContent}"`);
 
       const nextHistory = [...messages, userMessage];
       appendMessage(userMessage);
