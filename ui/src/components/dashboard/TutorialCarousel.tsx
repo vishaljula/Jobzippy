@@ -80,7 +80,9 @@ export function TutorialCarousel({ open, onClose, onStart }: TutorialCarouselPro
       <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
         <div className="relative bg-gradient-to-br from-primary-500 to-secondary-500 px-6 py-5 text-white">
           <DialogHeader className="space-y-1">
-            <DialogTitle className="text-white">Before we start</DialogTitle>
+            <DialogTitle className="text-white">
+              🎉 Onboarding Complete! Ready to start?
+            </DialogTitle>
             <DialogDescription className="text-white/80">
               A quick guide to get the best results with Jobzippy
             </DialogDescription>
