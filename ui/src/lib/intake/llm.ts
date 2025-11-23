@@ -155,10 +155,19 @@ function extractEducation(text: string) {
   return education.slice(0, 3);
 }
 
+function cleanText(text: string): string {
+  // Fix spaced out characters (e.g. "A D I T Y A" -> "ADITYA")
+  // Look for patterns of single chars separated by spaces, length > 3
+  return text.replace(/(\b[A-Z]\s){3,}[A-Z]\b/g, (match) => {
+    return match.replace(/\s/g, '');
+  });
+}
+
 export async function runLocalIntakeLLM(
   extraction: ResumeExtractionResult
 ): Promise<IntakeLLMResponse> {
-  const lines = extraction.text
+  const cleanedText = cleanText(extraction.text);
+  const lines = cleanedText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);

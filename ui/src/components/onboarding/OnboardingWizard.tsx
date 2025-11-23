@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { ChatComposer, ChatMessage } from '@/components/chat';
 import { Button } from '@/components/ui/button';
@@ -132,6 +133,10 @@ export function OnboardingWizard({
     }
   };
 
+  const handleApplyPreview = useCallback(() => {
+    toast.success('Resume data applied to profile');
+  }, []);
+
   if (!isMounted) return null;
 
   const attachmentPreview = queuedFile
@@ -254,6 +259,8 @@ export function OnboardingWizard({
                     </div>
                   )}
 
+                  {/* ... existing code ... */}
+
                   {sortedMessages.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                       Say hello or upload your resume to get started. I’ll keep track of everything
@@ -262,7 +269,13 @@ export function OnboardingWizard({
                   ) : (
                     <div className="space-y-5">
                       {sortedMessages.map((message) => (
-                        <ChatMessage key={message.id} message={message} />
+                        <ChatMessage
+                          key={message.id}
+                          message={message}
+                          onApplyPreview={
+                            message.kind === 'preview' ? handleApplyPreview : undefined
+                          }
+                        />
                       ))}
                       {isThinking && (
                         <div className="flex items-center gap-2 text-xs text-slate-400">

@@ -473,9 +473,40 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'GET_PROFILE':
-      // TODO: Fetch encrypted profile from IndexedDB
-      sendResponse({ status: 'success', profile: null });
-      break;
+      // Handle async profile fetching
+      (async () => {
+        try {
+          // Get user info to derive password
+          const storage = await chrome.storage.local.get('user_info');
+          const user = storage.user_info;
+
+          if (!user) {
+            console.warn('[Jobzippy] No user info found in storage');
+            sendResponse({ status: 'error', message: 'User not logged in' });
+            return;
+          }
+
+          // Import dynamically to avoid top-level await issues if any
+          const { deriveVaultPassword } = await import('../lib/vault/utils');
+          const { vaultService } = await import('../lib/vault/index');
+          const { VAULT_STORES } = await import('../lib/vault/constants');
+
+          const password = deriveVaultPassword(user);
+          const profile = await vaultService.load(VAULT_STORES.profile, password);
+
+          console.log('[Jobzippy] Profile loaded for content script:', profile ? 'yes' : 'no');
+          sendResponse({ status: 'success', profile });
+        } catch (error) {
+          console.error('[Jobzippy] Error loading profile:', error);
+          // Log to file via logger if possible, or just console
+          logger.error('Background', 'Error loading profile', error);
+          sendResponse({
+            status: 'error',
+            message: `Failed to load profile: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      })();
+      return true; // Keep channel open for async response
 
     case 'JOB_APPLIED':
       // TODO: Log application to Google Sheet

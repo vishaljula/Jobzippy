@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
+import { logger } from '@/lib/logger';
+
+// ... imports
 
 import { API_CONFIG } from '@/lib/config';
 import { processResumeWithAgent } from '@/lib/intake/service';
@@ -10,10 +13,15 @@ import type {
   ProfileVault,
   UserInfo,
 } from '@/lib/types';
+import type { IntakeConversationMessage } from '@/lib/intake/types';
+
+// ... (existing imports)
+
 import { getStorage, setStorage } from '@/lib/storage';
 import { deriveVaultPassword } from '@/lib/vault/utils';
 import { vaultService } from '@/lib/vault/service';
 import { VAULT_STORES } from '@/lib/vault/constants';
+import { mergeExtractedData } from './utils';
 
 const SNAPSHOT_VERSION = 1;
 const CONVERSATION_LIMIT = 12;
@@ -132,6 +140,91 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
   const resumeProcessor = overrides?.processResume ?? processResumeWithAgent;
   const lastPersistedDraftRef = useRef<string | null>(null);
 
+  const appendMessage = useCallback((message: IntakeMessage) => {
+    setMessages((prev) => [...prev, message]);
+  }, []);
+
+  const runAssistantTurn = useCallback(
+    async (history: IntakeMessage[], knownDraft: ProfileVault | null, currentMissing: string[]) => {
+      const payload = {
+        conversation: buildConversationPayload(history),
+        knownFields: knownDraft ?? undefined,
+        missingFields: currentMissing,
+      };
+
+      try {
+        const reply = await requestAssistantReply(payload);
+        appendMessage({
+          id: uuid(),
+          role: 'assistant',
+          kind: 'text',
+          content: reply.reply,
+          createdAt: new Date().toISOString(),
+        });
+
+        let updatedDraft: ProfileVault | null = null;
+        const invalidPaths: string[] = [];
+        if (reply.updates?.length) {
+          setDraft((prev) => {
+            const base = ensureDraft(knownDraft ?? prev);
+            let mutated = false;
+            reply.updates?.forEach(({ path, value }) => {
+              const parser = FIELD_PARSERS[path];
+              if (!parser) return;
+              const parsed = parser(value);
+              if (parsed === null || parsed === undefined) {
+                invalidPaths.push(path);
+                return;
+              }
+              setValueAtPath(base, path, parsed);
+              mutated = true;
+            });
+            if (applyDerivedFieldsToDraft(base)) {
+              mutated = true;
+            }
+            if (!mutated) {
+              return prev ?? base;
+            }
+            updatedDraft = { ...base };
+            return updatedDraft;
+          });
+        }
+
+        if (updatedDraft) {
+          const remaining = computeMissingFields(updatedDraft);
+          setMissingFields(remaining);
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          updateProgressState(remaining.length, updatedDraft);
+        }
+        if (invalidPaths.length) {
+          setMissingFields((prev) => addUniquePaths(prev, invalidPaths));
+          appendMessage({
+            id: uuid(),
+            role: 'assistant',
+            kind: 'notice',
+            content: buildValidationNotice(invalidPaths),
+            createdAt: new Date().toISOString(),
+          });
+          setPendingFieldPath(invalidPaths[0] ?? reply.requestedField ?? null);
+        } else {
+          setPendingFieldPath(reply.requestedField ?? null);
+        }
+      } catch (error) {
+        appendMessage({
+          id: uuid(),
+          role: 'assistant',
+          kind: 'notice',
+          content:
+            error instanceof Error
+              ? `I had trouble reaching the onboarding agent: ${error.message}`
+              : 'I had trouble reaching the onboarding agent. Please try again in a moment.',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    },
+    [appendMessage]
+  );
+
   const updateProgressState = useCallback(
     (remaining: number, currentDraft: ProfileVault | null) => {
       const completed = Math.max(0, REQUIRED_FIELDS.length - remaining);
@@ -150,6 +243,146 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
       });
     },
     [hasResume]
+  );
+
+  const handleResumeProcessing = useCallback(
+    async (file: File) => {
+      setIsThinking(true);
+      try {
+        logger.log('Onboarding', `Processing resume: ${file.name} (${file.size} bytes)`);
+
+        // Convert file to base64 for storage
+        const buffer = await file.arrayBuffer();
+
+        // Save resume blob to vault immediately
+        if (vaultPassword) {
+          // vaultService.saveResume expects ArrayBuffer
+          await vaultService.saveResume(buffer, vaultPassword);
+          logger.log('Onboarding', 'Resume blob saved to vault');
+        }
+
+        // Prepare conversation history for the agent
+        const conversation: IntakeConversationMessage[] = messages.map((m) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        }));
+
+        const extractedData = await resumeProcessor(file, {
+          password: vaultPassword || '', // Should be available if we are here
+          emit: (update) => {
+            // Optional: handle progress updates if we want to show granular status
+            logger.log('Onboarding', 'Resume processing update', update);
+          },
+          conversation,
+        });
+        logger.log('Onboarding', 'Resume extraction result', extractedData);
+
+        // Merge extracted data into draft
+        const nextDraft = mergeExtractedData(draft, extractedData);
+        logger.log('Onboarding', 'Merged draft after resume', nextDraft);
+
+        setDraft(nextDraft);
+        setHasResume(true);
+        const remaining = computeMissingFields(nextDraft);
+        setMissingFields(remaining);
+        updateProgressState(remaining.length, nextDraft);
+
+        if (remaining.length > 0) {
+          const previewSections = [
+            {
+              id: 'resume-identity',
+              title: 'Personal Details',
+              confidence: 0.9,
+              fields: Object.entries(extractedData.llm.profile.identity || {}).map(
+                ([key, value]) => ({
+                  id: key,
+                  label: key.replace(/_/g, ' '),
+                  value: String(value),
+                })
+              ),
+            },
+          ];
+
+          if (extractedData.llm.history?.employment?.length) {
+            previewSections.push({
+              id: 'resume-experience',
+              title: 'Experience',
+              confidence: 0.9,
+              fields: extractedData.llm.history.employment.map((job, idx) => ({
+                id: `job-${idx}`,
+                label: job.company,
+                value: `${job.title} ${job.start ? `(${job.start} - ${job.end || 'Present'})` : ''}`,
+              })),
+            });
+          }
+
+          if (extractedData.llm.history?.education?.length) {
+            previewSections.push({
+              id: 'resume-education',
+              title: 'Education',
+              confidence: 0.9,
+              fields: extractedData.llm.history.education.map((edu, idx) => ({
+                id: `edu-${idx}`,
+                label: edu.school,
+                value: `${edu.degree} ${edu.start ? `(${edu.start} - ${edu.end || 'Present'})` : ''}`,
+              })),
+            });
+          }
+
+          // Create a preview message for the resume data
+          const previewMessage: IntakeMessage = {
+            id: uuid(),
+            role: 'assistant',
+            kind: 'preview',
+            content: 'Here is what I found in your resume:',
+            previewSections,
+            createdAt: new Date().toISOString(),
+          };
+
+          const historyAfterResume = [...messages, previewMessage];
+
+          // Show the preview message to the user
+          appendMessage(previewMessage);
+
+          await runAssistantTurn(historyAfterResume, nextDraft, remaining);
+        }
+      } catch (error) {
+        logger.error('Onboarding', 'Resume processing failed', error);
+        appendMessage({
+          id: uuid(),
+          role: 'assistant',
+          kind: 'notice',
+          content:
+            error instanceof Error
+              ? `I couldn’t parse that resume: ${error.message}. Could you try a different PDF or DOCX?`
+              : 'I hit an issue reading that file. Could you try a different format (PDF or DOCX)?',
+          createdAt: new Date().toISOString(),
+        });
+      } finally {
+        setIsThinking(false);
+      }
+    },
+    [appendMessage, draft, messages, runAssistantTurn, updateProgressState, vaultPassword]
+  );
+
+  const syncDraftToVault = useCallback(
+    async (finalDraft: ProfileVault) => {
+      if (!vaultPassword) return;
+
+      logger.log('Onboarding', 'Syncing final draft to vault', finalDraft);
+
+      try {
+        await vaultService.save(VAULT_STORES.profile, finalDraft.profile, vaultPassword);
+        await vaultService.save(VAULT_STORES.compliance, finalDraft.compliance, vaultPassword);
+        await vaultService.save(VAULT_STORES.history, finalDraft.history, vaultPassword);
+        await vaultService.save(VAULT_STORES.policies, finalDraft.policies, vaultPassword);
+
+        logger.log('Onboarding', 'Vault sync complete');
+      } catch (error) {
+        logger.error('Onboarding', 'Vault sync failed', error);
+      }
+    },
+    [vaultPassword]
   );
 
   useEffect(() => {
@@ -249,17 +482,6 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
     setMissingFields((prev) => (arraysEqual(prev, remaining) ? prev : remaining));
     updateProgressState(remaining.length, draft);
   }, [draft, hydrated, updateProgressState]);
-  const syncDraftToVault = useCallback(
-    async (currentDraft: ProfileVault) => {
-      const signature = hashDraft(currentDraft);
-      if (!signature || lastPersistedDraftRef.current === signature) {
-        return;
-      }
-      await persistDraftToVault(currentDraft, vaultPassword);
-      lastPersistedDraftRef.current = signature;
-    },
-    [vaultPassword]
-  );
 
   useEffect(() => {
     lastPersistedDraftRef.current = null;
@@ -271,159 +493,6 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
       console.error('[Onboarding] Failed to sync draft to vault', error);
     });
   }, [draft, hasResume, hydrated, syncDraftToVault]);
-
-  const appendMessage = useCallback((message: IntakeMessage) => {
-    setMessages((prev) => [...prev, message]);
-  }, []);
-
-  const runAssistantTurn = useCallback(
-    async (history: IntakeMessage[], knownDraft: ProfileVault | null, currentMissing: string[]) => {
-      const payload = {
-        conversation: buildConversationPayload(history),
-        knownFields: knownDraft ?? undefined,
-        missingFields: currentMissing,
-      };
-
-      try {
-        const reply = await requestAssistantReply(payload);
-        appendMessage({
-          id: uuid(),
-          role: 'assistant',
-          kind: 'text',
-          content: reply.reply,
-          createdAt: new Date().toISOString(),
-        });
-
-        let updatedDraft: ProfileVault | null = null;
-        const invalidPaths: string[] = [];
-        if (reply.updates?.length) {
-          setDraft((prev) => {
-            const base = ensureDraft(knownDraft ?? prev);
-            let mutated = false;
-            reply.updates?.forEach(({ path, value }) => {
-              const parser = FIELD_PARSERS[path];
-              if (!parser) return;
-              const parsed = parser(value);
-              if (parsed === null || parsed === undefined) {
-                invalidPaths.push(path);
-                return;
-              }
-              setValueAtPath(base, path, parsed);
-              mutated = true;
-            });
-            if (applyDerivedFieldsToDraft(base)) {
-              mutated = true;
-            }
-            if (!mutated) {
-              return prev ?? base;
-            }
-            updatedDraft = { ...base };
-            return updatedDraft;
-          });
-        }
-
-        if (updatedDraft) {
-          const remaining = computeMissingFields(updatedDraft);
-          setMissingFields(remaining);
-          updateProgressState(remaining.length, updatedDraft);
-        }
-        if (invalidPaths.length) {
-          setMissingFields((prev) => addUniquePaths(prev, invalidPaths));
-          appendMessage({
-            id: uuid(),
-            role: 'assistant',
-            kind: 'notice',
-            content: buildValidationNotice(invalidPaths),
-            createdAt: new Date().toISOString(),
-          });
-          setPendingFieldPath(invalidPaths[0] ?? reply.requestedField ?? null);
-        } else {
-          setPendingFieldPath(reply.requestedField ?? null);
-        }
-      } catch (error) {
-        appendMessage({
-          id: uuid(),
-          role: 'assistant',
-          kind: 'notice',
-          content:
-            error instanceof Error
-              ? `I had trouble reaching the onboarding agent: ${error.message}`
-              : 'I had trouble reaching the onboarding agent. Please try again in a moment.',
-          createdAt: new Date().toISOString(),
-        });
-      }
-    },
-    [appendMessage, updateProgressState]
-  );
-
-  const handleResumeProcessing = useCallback(
-    async (file: File) => {
-      setIsThinking(true);
-      try {
-        const conversation = buildConversationPayload(messages);
-        const result = await resumeProcessor(file, {
-          password: vaultPassword,
-          emit: () => {},
-          conversation,
-        });
-
-        const previewMessage: IntakeMessage = {
-          id: uuid(),
-          role: 'assistant',
-          kind: 'preview',
-          content: result.llm.summary ?? 'Here’s what I pulled from your resume.',
-          createdAt: new Date().toISOString(),
-          previewSections: result.llm.previewSections ?? [],
-          metadata: {
-            confidence: result.llm.confidence,
-            resumeMetadata: result.extraction.metadata,
-          },
-        };
-
-        appendMessage(previewMessage);
-
-        const nextDraft: ProfileVault = {
-          profile: {
-            ...result.llm.profile,
-            preferences: {
-              ...result.llm.profile.preferences,
-              salary_currency:
-                result.llm.profile.preferences?.salary_currency ?? SALARY_CURRENCY_FALLBACK,
-            },
-          },
-          compliance: result.llm.compliance,
-          history: result.llm.history,
-          policies: result.llm.policies,
-        };
-
-        applyDerivedFieldsToDraft(nextDraft);
-        setDraft(nextDraft);
-        setHasResume(true);
-        const remaining = computeMissingFields(nextDraft);
-        setMissingFields(remaining);
-        updateProgressState(remaining.length, nextDraft);
-
-        if (remaining.length > 0) {
-          const historyAfterResume = [...messages, previewMessage];
-          await runAssistantTurn(historyAfterResume, nextDraft, remaining);
-        }
-      } catch (error) {
-        appendMessage({
-          id: uuid(),
-          role: 'assistant',
-          kind: 'notice',
-          content:
-            error instanceof Error
-              ? `I couldn’t parse that resume: ${error.message}. Could you try a different PDF or DOCX?`
-              : 'I hit an issue reading that file. Could you try a different format (PDF or DOCX)?',
-          createdAt: new Date().toISOString(),
-        });
-      } finally {
-        setIsThinking(false);
-      }
-    },
-    [appendMessage, messages, resumeProcessor, runAssistantTurn, updateProgressState, vaultPassword]
-  );
 
   const sendMessage = useCallback(
     async ({ text, attachments = [] }: { text: string; attachments?: File[] }) => {
@@ -653,13 +722,6 @@ async function loadVaultSnapshot(password: string): Promise<ProfileVault | null>
   };
   applyDerivedFieldsToDraft(draft);
   return draft;
-}
-
-async function persistDraftToVault(draft: ProfileVault, password: string) {
-  await vaultService.save(VAULT_STORES.profile, draft.profile, password);
-  await vaultService.save(VAULT_STORES.compliance, draft.compliance, password);
-  await vaultService.save(VAULT_STORES.history, draft.history, password);
-  await vaultService.save(VAULT_STORES.policies, draft.policies, password);
 }
 
 async function persistSnapshot(userKey: string, snapshot: OnboardingConversationSnapshot) {
@@ -895,15 +957,6 @@ function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
     }
   }
   return true;
-}
-
-function hashDraft(draft: ProfileVault | null): string | null {
-  if (!draft) return null;
-  try {
-    return JSON.stringify(draft);
-  } catch {
-    return null;
-  }
 }
 
 function addUniquePaths(existing: string[], additions: string[]): string[] {

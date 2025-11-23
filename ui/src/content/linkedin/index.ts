@@ -39,11 +39,46 @@ class AgentController {
     errors: [],
   };
 
+  private lastAlertMessage: string | null = null;
+
   constructor(config: AgentConfig) {
     this.config = config;
   }
 
+  private injectAlertHandler(): void {
+    const script = document.createElement('script');
+    script.textContent = `
+      (function() {
+        // Override alert
+        const originalAlert = window.alert;
+        window.alert = function(message) {
+          console.log('[Jobzippy] Alert intercepted:', message);
+          window.dispatchEvent(new CustomEvent('JOBZIPPY_ALERT', { detail: { message } }));
+          return true;
+        };
+        
+        // Override confirm
+        const originalConfirm = window.confirm;
+        window.confirm = function(message) {
+          console.log('[Jobzippy] Confirm intercepted:', message);
+          window.dispatchEvent(new CustomEvent('JOBZIPPY_CONFIRM', { detail: { message } }));
+          return true;
+        };
+      })();
+    `;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+
+    // Listen for the custom event
+    window.addEventListener('JOBZIPPY_ALERT', (event: any) => {
+      this.lastAlertMessage = event.detail.message;
+      logger.log('AgentController', `Intercepted alert: ${event.detail.message}`);
+    });
+  }
+
   async start(): Promise<AgentResult> {
+    this.injectAlertHandler();
+
     // Add separator for new agent run
     logger.log('AgentController', '='.repeat(80));
     logger.log('AgentController', '========== STARTING AGENT ==========');
@@ -189,8 +224,22 @@ class AgentController {
       );
 
       logger.log('AgentController', 'Calling intelligentNavigate()...');
+      this.lastAlertMessage = null; // Reset alert message before navigation
       const result = await intelligentNavigate();
       logger.log('AgentController', 'intelligentNavigate() returned', result);
+
+      // Check for success alert if navigation didn't confirm success
+      const alertMsg = this.lastAlertMessage;
+      if (
+        !result.success &&
+        alertMsg &&
+        ((alertMsg as string).toLowerCase().includes('success') ||
+          (alertMsg as string).toLowerCase().includes('submitted'))
+      ) {
+        logger.log('AgentController', 'Success alert detected, marking as submitted');
+        result.success = true;
+        result.message = 'Application submitted successfully (via alert)';
+      }
 
       const submitted = result.success;
       logger.log('AgentController', `Form submission result: ${submitted}`);
