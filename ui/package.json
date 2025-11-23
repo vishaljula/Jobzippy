@@ -25,7 +25,8 @@
     "test:run": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vitest run",
     "test:coverage": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "log-server": "node log-server.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -46,6 +47,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^10.0.0",
+    "ws": "^8.18.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {

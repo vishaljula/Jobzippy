@@ -1,4 +1,5 @@
 import { intelligentNavigate } from '../ats/navigator';
+import { logger } from '../../lib/logger';
 
 /**
  * Agent Controller Interfaces
@@ -44,6 +45,10 @@ class AgentController {
 
   async start(): Promise<AgentResult> {
     console.log('[AgentController] ========== STARTING AGENT ==========');
+    logger.log('AgentController', '========== STARTING AGENT ==========');
+    logger.log('AgentController', `Platform: ${this.config.platform}`);
+    logger.log('AgentController', `Max applications: ${this.config.maxApplications}`);
+
     console.log('[AgentController] Platform:', this.config.platform);
     console.log('[AgentController] Max applications:', this.config.maxApplications);
 
@@ -136,40 +141,54 @@ class AgentController {
   }
 
   private async processJob(job: JobCard): Promise<void> {
-    console.log('[AgentController] Processing job:', job.title, 'at', job.company);
-    console.log('[AgentController] Job details:', job);
+    logger.log('AgentController', `Processing job: ${job.title} at ${job.company}`);
+    logger.log('AgentController', 'Job details', job);
     this.results.jobsProcessed++;
 
     try {
       // 1. Click job card to view details
-      console.log('[AgentController] Step 1: Clicking job card...');
+      logger.log('AgentController', 'Step 1: Clicking job card...');
       await this.clickJobCard(job);
-      console.log('[AgentController] Job card clicked, waiting 1.5s...');
+      logger.log('AgentController', 'Job card clicked, waiting 1.5s...');
       await this.delay(1500);
 
       // 2. Click Apply button
-      console.log('[AgentController] Step 2: Looking for Apply button...');
+      logger.log('AgentController', 'Step 2: Looking for Apply button...');
       const applyClicked = await this.clickApplyButton();
-      console.log('[AgentController] Apply button clicked:', applyClicked);
+      logger.log('AgentController', `Apply button clicked: ${applyClicked}`);
 
       if (!applyClicked) {
-        console.warn('[AgentController] Could not click apply button for', job.id);
+        logger.error('AgentController', `Could not click apply button for ${job.id}`);
         this.results.errors.push({ jobId: job.id, error: 'Apply button not found' });
         return;
       }
 
       // 3. Wait for form/modal to appear
-      console.log('[AgentController] Step 3: Waiting for form/modal (2s)...');
+      logger.log('AgentController', 'Step 3: Waiting for form/modal (2s)...');
       await this.delay(2000);
 
       // 4. Fill and submit form using dynamic classifier
-      console.log('[AgentController] Step 4: Filling and submitting form...');
+      logger.log('AgentController', 'Step 4: Filling and submitting form...');
+      logger.log('AgentController', `Current URL: ${window.location.href}`);
+      logger.log('AgentController', `Document ready state: ${document.readyState}`);
+      logger.log(
+        'AgentController',
+        `Visible modals: ${document.querySelectorAll('.modal-overlay.active').length}`
+      );
+      logger.log(
+        'AgentController',
+        `Form elements on page: ${document.querySelectorAll('form, input, textarea').length}`
+      );
+
+      logger.log('AgentController', 'Calling intelligentNavigate()...');
       const result = await intelligentNavigate();
+      logger.log('AgentController', 'intelligentNavigate() returned', result);
+
       const submitted = result.success;
-      console.log('[AgentController] Form submission result:', submitted);
+      logger.log('AgentController', `Form submission result: ${submitted}`);
 
       if (submitted) {
-        console.log('[AgentController] ✓ Successfully applied to', job.title);
+        logger.log('AgentController', `✓ Successfully applied to ${job.title}`);
         this.results.jobsApplied++;
         chrome.runtime
           .sendMessage({
@@ -178,8 +197,13 @@ class AgentController {
           })
           .catch(() => {});
       } else {
-        console.warn('[AgentController] Failed to submit application for', job.id);
-        this.results.errors.push({ jobId: job.id, error: 'Form submission failed' });
+        logger.error('AgentController', `Failed to submit application for ${job.id}`);
+        logger.error('AgentController', `Failure reason: ${result.reason}`);
+        logger.error('AgentController', `Failure message: ${result.message}`);
+        this.results.errors.push({
+          jobId: job.id,
+          error: result.message || 'Form submission failed',
+        });
       }
 
       await this.closeModal();

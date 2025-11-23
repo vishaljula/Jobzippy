@@ -3,6 +3,9 @@
  * Handles extension lifecycle, messaging, and orchestration
  */
 
+import { logger } from '../lib/logger';
+
+logger.log('Background', 'Background service worker initialized');
 console.log('[Jobzippy] Background service worker initialized');
 
 // -----------------------------------------------------------------------------

@@ -111,18 +111,21 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
   // Application form inside a modal
   form_modal: {
     priority: 2,
-    minConfidence: 0.8,
+    minConfidence: 0.7,
     indicators: [
       {
         type: 'combination',
         weight: 1.0,
         check: (doc) => {
-          const hasModal = doc.querySelector('[role="dialog"], .modal, .popup');
-          const hasForm = hasModal?.querySelector('form');
+          const hasModal = doc.querySelector('[role="dialog"], .modal, .popup, .modal-overlay');
+          if (!hasModal) return false;
+
           const hasInputs =
-            hasForm?.querySelectorAll('input[type="text"], input[type="email"]').length || 0;
-          const hasFile = hasForm?.querySelector('input[type="file"]');
-          return !!(hasModal && hasForm && hasInputs >= 2 && hasFile);
+            hasModal.querySelectorAll(
+              'input[type="text"], input[type="email"], input[type="tel"], textarea'
+            ).length || 0;
+          // Form modal if: has modal + has at least 2 inputs
+          return hasInputs >= 2;
         },
       },
     ],

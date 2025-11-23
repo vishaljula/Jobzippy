@@ -13,6 +13,7 @@ import {
   logClassification,
 } from './page-classifier';
 import { createFormFillerFromVault } from './form-filler';
+import { logger } from '../../lib/logger';
 
 // ============================================================================
 // NAVIGATION STATE
@@ -59,6 +60,7 @@ export interface NavigationResult {
  * Navigates through multi-step flows until reaching application form
  */
 export async function intelligentNavigate(): Promise<NavigationResult> {
+  logger.log('Navigator', 'Starting intelligent navigation...');
   console.log('[Navigator] Starting intelligent navigation...');
 
   navState.attempts = 0;
@@ -135,6 +137,7 @@ async function handlePageType(
  * Handle application form (fill and submit!)
  */
 async function handleForm(classification: PageClassification): Promise<NavigationResult> {
+  logger.log('Navigator', '✓ Application form found!');
   console.log('[Navigator] ✓ Application form found!');
 
   try {
@@ -152,6 +155,7 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
 
     // Fill the form
     await filler.fillForm(classification);
+    logger.log('Navigator', '✓ Form filled successfully');
     console.log('[Navigator] ✓ Form filled successfully');
 
     // Wait a bit for any validation
