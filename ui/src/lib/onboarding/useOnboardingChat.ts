@@ -235,6 +235,23 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
           : completed === 0
             ? 'idle'
             : 'collecting';
+
+      // Debug logging for field validation
+      if (nextStatus === 'ready') {
+        logger.log('Onboarding', '✅ All required fields collected! Status: ready');
+        logger.log('Onboarding', `Completed: ${completed}/${REQUIRED_FIELDS.length}`);
+      } else if (remaining > 0) {
+        const missing = computeMissingFields(currentDraft);
+        logger.log(
+          'Onboarding',
+          `Missing ${remaining} fields:`,
+          missing.map((path) => {
+            const field = REQUIRED_FIELDS.find((f) => f.path === path);
+            return field ? `${field.label} (${path})` : path;
+          })
+        );
+      }
+
       setProgress({
         completed,
         total: REQUIRED_FIELDS.length,
