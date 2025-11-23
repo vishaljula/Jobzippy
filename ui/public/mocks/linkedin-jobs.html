@@ -144,8 +144,27 @@
     </div>
 
     <script>
+      // Prevent title links from navigating
+      document.querySelectorAll('.job-card-list__title-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          // Trigger the parent card's click instead
+          const card = link.closest('.jobs-search-results__list-item');
+          if (card) {
+            card.click();
+          }
+        });
+      });
+
+      // Handle card clicks to show job details
       document.querySelectorAll('.jobs-search-results__list-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', (e) => {
+          // Don't trigger if clicking the Easy Apply button on the card
+          if (e.target.closest('button[aria-label="Easy Apply"]')) {
+            return;
+          }
+
           const title = item.querySelector('.job-card-list__title-link').textContent.trim();
           const company = item.querySelector('.base-search-card__subtitle').textContent.trim();
           const jobId = item.getAttribute('data-job-id');
@@ -162,6 +181,14 @@
           const actionsContainer = detailsContainer.querySelector('#job-actions');
           if (isEasyApply) {
             actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+            
+            // Add click handler for Easy Apply button in details panel
+            const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
+            if (easyApplyBtn) {
+              easyApplyBtn.addEventListener('click', () => {
+                window.open(`http://localhost:3000/mocks/linkedin-easy-apply.html?job=${jobId}`, '_blank');
+              });
+            }
           } else {
             // External apply - opens Greenhouse ATS in new tab
             actionsContainer.innerHTML = `

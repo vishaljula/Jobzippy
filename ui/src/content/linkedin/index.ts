@@ -43,41 +43,91 @@ class AgentController {
   }
 
   async start(): Promise<AgentResult> {
-    console.log('[AgentController] Starting agent for', this.config.platform);
+    console.log('[AgentController] ========== STARTING AGENT ==========');
+    console.log('[AgentController] Platform:', this.config.platform);
+    console.log('[AgentController] Max applications:', this.config.maxApplications);
+
+    // Broadcast that agent is starting
+    this.broadcastStatus('RUNNING', 'Starting agent...');
+
     this.shouldStop = false;
-    this.results = { success: true, jobsProcessed: 0, jobsApplied: 0, errors: [] };
+    this.results = {
+      success: true,
+      jobsProcessed: 0,
+      jobsApplied: 0,
+      errors: [],
+    };
 
     try {
+      // Get jobs on current page
+      console.log('[AgentController] Calling getJobs()...');
       const jobs = await this.getJobs();
-      console.log('[AgentController] Found', jobs.length, 'jobs');
+      console.log('[AgentController] Found', jobs.length, 'jobs:', jobs);
 
+      if (jobs.length === 0) {
+        console.warn('[AgentController] No jobs found on page!');
+        this.broadcastStatus('IDLE', 'No jobs found');
+        return this.results;
+      }
+
+      this.broadcastStatus('RUNNING', `Processing ${jobs.length} jobs...`);
+
+      // Process each job
       for (const job of jobs) {
         if (this.shouldStop) {
           console.log('[AgentController] Stopped by user');
+          this.broadcastStatus('IDLE', 'Stopped by user');
           break;
         }
+
+        // Check max applications limit
         if (
           this.config.maxApplications &&
           this.results.jobsApplied >= this.config.maxApplications
         ) {
           console.log('[AgentController] Reached max applications limit');
+          this.broadcastStatus(
+            'IDLE',
+            `Completed: ${this.results.jobsApplied} applications submitted`
+          );
           break;
         }
 
+        console.log('[AgentController] ========== Processing job', job.id, '==========');
+        this.broadcastStatus('RUNNING', `Applying to: ${job.title}`);
         await this.processJob(job);
 
+        // Delay between jobs
         if (this.config.delayBetweenJobs) {
+          console.log(
+            '[AgentController] Waiting',
+            this.config.delayBetweenJobs,
+            'ms before next job'
+          );
           await this.delay(this.config.delayBetweenJobs);
         }
       }
 
-      console.log('[AgentController] Agent completed', this.results);
+      console.log('[AgentController] ========== AGENT COMPLETED ==========');
+      console.log('[AgentController] Results:', this.results);
+      this.broadcastStatus('IDLE', `Completed: ${this.results.jobsApplied} applications submitted`);
       return this.results;
     } catch (error) {
-      console.error('[AgentController] Agent error:', error);
+      console.error('[AgentController] ========== AGENT ERROR ==========');
+      console.error('[AgentController] Error:', error);
       this.results.success = false;
+      this.broadcastStatus('IDLE', 'Error occurred');
       return this.results;
     }
+  }
+
+  private broadcastStatus(state: 'IDLE' | 'RUNNING' | 'PAUSED', status: string): void {
+    chrome.runtime
+      .sendMessage({
+        type: 'ENGINE_STATE',
+        data: { state, status },
+      })
+      .catch(() => {});
   }
 
   stop(): void {
@@ -87,25 +137,36 @@ class AgentController {
 
   private async processJob(job: JobCard): Promise<void> {
     console.log('[AgentController] Processing job:', job.title, 'at', job.company);
+    console.log('[AgentController] Job details:', job);
     this.results.jobsProcessed++;
 
     try {
+      // 1. Click job card to view details
+      console.log('[AgentController] Step 1: Clicking job card...');
       await this.clickJobCard(job);
+      console.log('[AgentController] Job card clicked, waiting 1.5s...');
       await this.delay(1500);
 
+      // 2. Click Apply button
+      console.log('[AgentController] Step 2: Looking for Apply button...');
       const applyClicked = await this.clickApplyButton();
+      console.log('[AgentController] Apply button clicked:', applyClicked);
+
       if (!applyClicked) {
         console.warn('[AgentController] Could not click apply button for', job.id);
         this.results.errors.push({ jobId: job.id, error: 'Apply button not found' });
         return;
       }
 
+      // 3. Wait for form/modal to appear
+      console.log('[AgentController] Step 3: Waiting for form/modal (2s)...');
       await this.delay(2000);
 
-      // Use static import instead of dynamic
-      console.log('[AgentController] Starting intelligent navigation...');
+      // 4. Fill and submit form using dynamic classifier
+      console.log('[AgentController] Step 4: Filling and submitting form...');
       const result = await intelligentNavigate();
       const submitted = result.success;
+      console.log('[AgentController] Form submission result:', submitted);
 
       if (submitted) {
         console.log('[AgentController] ✓ Successfully applied to', job.title);
@@ -123,17 +184,16 @@ class AgentController {
 
       await this.closeModal();
     } catch (error) {
-      console.error('[AgentController] Error processing job', job.id, error);
+      console.error('[AgentController] Error processing job', job.id, ':', error);
       this.results.errors.push({ jobId: job.id, error: String(error) });
     }
   }
 
   private async getJobs(): Promise<JobCard[]> {
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_JOBS',
-      data: { platform: this.config.platform },
-    });
-    return response?.jobs || [];
+    // Call scrapeJobCards directly instead of message passing
+    const scrapedJobs = scrapeJobCards();
+    console.log('[AgentController] Found', scrapedJobs.length, 'jobs on page');
+    return scrapedJobs;
   }
 
   private async clickJobCard(job: JobCard): Promise<void> {
@@ -148,14 +208,10 @@ class AgentController {
   private async clickLinkedInJobCard(job: JobCard): Promise<void> {
     const card = document.querySelector(`[data-job-id="${job.id}"]`) as HTMLElement;
     if (!card) throw new Error('Job card not found');
-    const titleLink = card.querySelector('.job-card-list__title-link') as HTMLAnchorElement;
-    if (titleLink) {
-      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-      titleLink.addEventListener('click', (e) => e.preventDefault(), { once: true, capture: true });
-      titleLink.dispatchEvent(clickEvent);
-    } else {
-      card.click();
-    }
+
+    // Click the card container directly to trigger the details panel update
+    console.log('[AgentController] Clicking job card container for:', job.id);
+    card.click();
   }
 
   private async clickIndeedJobCard(job: JobCard): Promise<void> {
@@ -166,14 +222,10 @@ class AgentController {
         ?.closest('.jobsearch-SerpJobCard') as HTMLElement;
     }
     if (!card) throw new Error('Job card not found');
-    const titleLink = card.querySelector('.jobTitle a, h2 a') as HTMLAnchorElement;
-    if (titleLink) {
-      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-      titleLink.addEventListener('click', (e) => e.preventDefault(), { once: true, capture: true });
-      titleLink.dispatchEvent(clickEvent);
-    } else {
-      card.click();
-    }
+
+    // Click the card container directly
+    console.log('[AgentController] Clicking job card container for:', job.id);
+    card.click();
   }
 
   private async clickApplyButton(): Promise<boolean> {
@@ -187,16 +239,29 @@ class AgentController {
   }
 
   private async clickLinkedInApply(): Promise<boolean> {
+    // First try to find the button in the job details panel (right side)
+    const detailsPanel = document.querySelector(
+      '.jobs-details__main-content, .jobs-search__job-details--container'
+    );
+
     const selectors = [
       'button[aria-label*="Easy Apply"]',
       'button[data-testid*="easy-apply"]',
-      'button:has-text("Easy Apply")',
+      'a[data-testid*="apply"]', // For external apply links
     ];
+
     for (const selector of selectors) {
       try {
-        const button = document.querySelector(selector) as HTMLButtonElement;
+        // First try within the details panel
+        let button = detailsPanel?.querySelector(selector) as HTMLButtonElement | HTMLAnchorElement;
+
+        // Fallback to document-wide search
+        if (!button) {
+          button = document.querySelector(selector) as HTMLButtonElement | HTMLAnchorElement;
+        }
+
         if (button && button.offsetParent !== null) {
-          console.log('[AgentController] Clicking Easy Apply button');
+          console.log('[AgentController] Clicking Apply button:', selector);
           button.click();
           return true;
         }

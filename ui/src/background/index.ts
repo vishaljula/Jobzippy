@@ -418,9 +418,45 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       sendResponse({ status: 'ok' });
       break;
+
+    case 'PAGE_ACTIVE': {
+      // Content script is telling us it's active on a platform
+      const platform = message.data?.platform as 'LinkedIn' | 'Indeed' | undefined;
+      if (platform && _sender.tab?.id) {
+        const state = platformStates.get(platform);
+        if (state) {
+          state.tabId = _sender.tab.id;
+          console.log(`[Jobzippy] ${platform} content script active on tab:`, _sender.tab.id);
+        }
+      }
+      sendResponse({ status: 'ok' });
+      break;
+    }
+
     case 'START_AUTO_APPLY':
       startEngine();
       sendResponse({ status: 'success', state: engineState });
+      break;
+    case 'START_AGENT':
+      console.log('[Jobzippy] Background received START_AGENT, forwarding to content scripts');
+      // Use stored tab IDs from platformStates (set by PAGE_ACTIVE messages)
+      for (const [platform, state] of platformStates.entries()) {
+        if (state.tabId) {
+          console.log(`[Jobzippy] Forwarding START_AGENT to ${platform} tab:`, state.tabId);
+          chrome.tabs
+            .sendMessage(state.tabId, {
+              type: 'START_AGENT',
+              data: message.data || { maxApplications: 10 },
+            })
+            .then(() => console.log(`[Jobzippy] START_AGENT sent to ${platform}`))
+            .catch((err) =>
+              console.error(`[Jobzippy] Error sending START_AGENT to ${platform}:`, err)
+            );
+        } else {
+          console.warn(`[Jobzippy] No tab ID for ${platform}, skipping`);
+        }
+      }
+      sendResponse({ status: 'started' });
       break;
     case 'STOP_AUTO_APPLY':
       stopEngine();

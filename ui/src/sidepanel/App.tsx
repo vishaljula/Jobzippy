@@ -360,7 +360,10 @@ function App() {
       setAuthNeeded(need);
       const allMissing = need.linkedin && need.indeed;
       if (!allMissing) {
-        chrome.runtime.sendMessage({ type: 'START_AUTO_APPLY' }, () => {});
+        chrome.runtime.sendMessage(
+          { type: 'START_AGENT', data: { maxApplications: 10 } },
+          () => {}
+        );
       }
     }, 5000);
 
@@ -387,7 +390,10 @@ function App() {
           // Allow starting if at least one platform is signed in
           const allMissing = need.linkedin && need.indeed;
           if (!allMissing) {
-            chrome.runtime.sendMessage({ type: 'START_AUTO_APPLY' }, () => {});
+            chrome.runtime.sendMessage(
+              { type: 'START_AGENT', data: { maxApplications: 10 } },
+              () => {}
+            );
           }
         }
       }
