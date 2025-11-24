@@ -355,9 +355,42 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
   try {
     // Click submit button
     console.log('[Navigator] Clicking submit button...');
+
+    // Setup a one-time alert handler for this submission
+    const alertPromise = new Promise<boolean>((resolve) => {
+      const handleAlert = (event: Event) => {
+        const msg = (event as CustomEvent).detail.message;
+        console.log('[Navigator] Alert intercepted during submission:', msg);
+        if (
+          msg &&
+          (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('submitted'))
+        ) {
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+        window.removeEventListener('JOBZIPPY_ALERT', handleAlert);
+      };
+      window.addEventListener('JOBZIPPY_ALERT', handleAlert);
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        window.removeEventListener('JOBZIPPY_ALERT', handleAlert);
+        resolve(false);
+      }, 5000);
+    });
+
     submitAction.element.click();
 
-    // Wait for submission
+    // Wait for submission or alert
+    const alertSuccess = await alertPromise;
+
+    if (alertSuccess) {
+      console.log('[Navigator] Success alert detected!');
+      return true;
+    }
+
+    // Fallback wait if no alert
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     return true;

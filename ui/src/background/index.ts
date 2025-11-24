@@ -3,9 +3,13 @@
  * Handles extension lifecycle, messaging, and orchestration
  */
 
-import { logger } from '../lib/logger';
+// import { vaultService } from '../lib/vault/service';
+// import { VAULT_STORES } from '../lib/vault/constants';
+import { deriveVaultPassword } from '../lib/vault/utils';
+import { backgroundVaultService, STORES } from './vault-service-worker';
+// import { logger } from '../lib/logger'; // Disabled to prevent Service Worker crash
 
-logger.log('Background', 'Background service worker initialized');
+// logger.log('Background', 'Background service worker initialized');
 console.log('[Jobzippy] Background service worker initialized');
 
 // -----------------------------------------------------------------------------
@@ -486,20 +490,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             return;
           }
 
-          // Import dynamically to avoid top-level await issues if any
-          const { deriveVaultPassword } = await import('../lib/vault/utils');
-          const { vaultService } = await import('../lib/vault/index');
-          const { VAULT_STORES } = await import('../lib/vault/constants');
-
+          // Use static imports
+          console.log('[Jobzippy] User from storage:', JSON.stringify(user));
           const password = deriveVaultPassword(user);
-          const profile = await vaultService.load(VAULT_STORES.profile, password);
+          console.log('[Jobzippy] Derived password (masked):', password.substring(0, 10) + '...');
 
-          console.log('[Jobzippy] Profile loaded for content script:', profile ? 'yes' : 'no');
+          const profile = await backgroundVaultService.load(STORES.profile, password);
+
+          if (profile) {
+            console.log('[Jobzippy] Profile loaded from vault: SUCCESS');
+            console.log('[Jobzippy] Profile data preview:', {
+              firstName: profile.identity?.first_name,
+              lastName: profile.identity?.last_name,
+              email: profile.identity?.email,
+              phone: profile.identity?.phone_number,
+              country: profile.identity?.country,
+              resumeFileName: profile.resume?.file_name,
+              coverLetterFileName: profile.cover_letter?.file_name,
+            });
+          } else {
+            console.warn(
+              '[Jobzippy] Profile is null or empty, check password derivation or vault content'
+            );
+          }
           sendResponse({ status: 'success', profile });
         } catch (error) {
           console.error('[Jobzippy] Error loading profile:', error);
-          // Log to file via logger if possible, or just console
-          logger.error('Background', 'Error loading profile', error);
+          // Log to console only to avoid Service Worker crash
+          console.error('Background', 'Error loading profile', error);
           sendResponse({
             status: 'error',
             message: `Failed to load profile: ${error instanceof Error ? error.message : String(error)}`,

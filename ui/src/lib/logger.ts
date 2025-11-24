@@ -5,7 +5,7 @@
 
 class FileLogger {
   private ws: WebSocket | null = null;
-  private reconnectTimeout: number | null = null;
+  private reconnectTimeout: any = null; // Use any to handle both number (browser) and Timeout (node/worker)
   private messageQueue: string[] = [];
   private maxQueueSize = 100;
 
@@ -15,20 +15,24 @@ class FileLogger {
 
   private connect(): void {
     try {
-      // Check if WebSocket is available (not in all contexts)
-      if (typeof WebSocket === 'undefined') {
-        console.warn('[Logger] WebSocket not available in this context, logging to console only');
+      // Safe check for WebSocket availability in current scope
+      const wsClass =
+        (typeof globalThis !== 'undefined' ? globalThis.WebSocket : undefined) ||
+        (typeof WebSocket !== 'undefined' ? WebSocket : undefined);
+
+      if (!wsClass) {
+        // console.warn('[Logger] WebSocket not available in this context, logging to console only');
         return;
       }
 
-      this.ws = new WebSocket('ws://localhost:9999');
+      this.ws = new wsClass('ws://localhost:9999');
 
       this.ws.onopen = () => {
         console.log('[Logger] Connected to log server');
         // Flush queued messages
         while (this.messageQueue.length > 0) {
           const msg = this.messageQueue.shift();
-          if (msg && this.ws?.readyState === WebSocket.OPEN) {
+          if (msg && this.ws?.readyState === wsClass.OPEN) {
             this.ws.send(msg);
           }
         }
@@ -37,10 +41,7 @@ class FileLogger {
       this.ws.onclose = () => {
         console.log('[Logger] Disconnected from log server, will retry...');
         // Retry connection after 5 seconds
-        this.reconnectTimeout = globalThis.setTimeout(
-          () => this.connect(),
-          5000
-        ) as unknown as number;
+        this.scheduleReconnect();
       };
 
       this.ws.onerror = (error) => {
@@ -48,16 +49,22 @@ class FileLogger {
       };
     } catch (error) {
       console.error('[Logger] Failed to connect to log server:', error);
-      // Retry after 5 seconds
-      this.reconnectTimeout = globalThis.setTimeout(
-        () => this.connect(),
-        5000
-      ) as unknown as number;
+      this.scheduleReconnect();
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (typeof globalThis !== 'undefined' && globalThis.setTimeout) {
+      this.reconnectTimeout = globalThis.setTimeout(() => this.connect(), 5000);
     }
   }
 
   private send(message: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    const wsClass =
+      (typeof globalThis !== 'undefined' ? globalThis.WebSocket : undefined) ||
+      (typeof WebSocket !== 'undefined' ? WebSocket : undefined);
+
+    if (this.ws && wsClass && this.ws.readyState === wsClass.OPEN) {
       this.ws.send(message);
     } else {
       // Queue message if not connected
@@ -96,7 +103,9 @@ class FileLogger {
 
   disconnect(): void {
     if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
+      if (typeof globalThis !== 'undefined' && globalThis.clearTimeout) {
+        globalThis.clearTimeout(this.reconnectTimeout);
+      }
     }
     if (this.ws) {
       this.ws.close();

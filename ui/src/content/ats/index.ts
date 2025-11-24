@@ -398,8 +398,20 @@ async function initialize() {
 /**
  * Initialize: Use dynamic classifier for intelligent navigation
  */
+/**
+ * Initialize: Use dynamic classifier for intelligent navigation
+ */
 async function initialize() {
   console.log('[ATS] Initializing with dynamic classifier...');
+
+  // Inject alert override script via src to avoid CSP issues
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('page-script.js');
+  script.onload = function () {
+    console.log('[ATS] Page script injected successfully');
+    (this as HTMLScriptElement).remove();
+  };
+  (document.head || document.documentElement).appendChild(script);
 
   try {
     // Use the intelligent navigation system
@@ -534,6 +546,12 @@ const findInput = (
 // Auto-fill form with user data
 async function autoFillForm(userData: Record<string, unknown>) {
   console.log('[ATS] Auto-filling form with user data');
+  console.log('[ATS] Received Data:', {
+    firstName: userData.firstName,
+    lastName: userData.lastName,
+    email: userData.email,
+    isMock: userData.firstName === 'John' && userData.lastName === 'Doe',
+  });
 
   // Fill first name
   const firstNameInput = findInput([

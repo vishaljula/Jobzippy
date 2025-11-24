@@ -46,28 +46,14 @@ class AgentController {
   }
 
   private injectAlertHandler(): void {
+    // Inject alert override script via src to avoid CSP issues
     const script = document.createElement('script');
-    script.textContent = `
-      (function() {
-        // Override alert
-        const originalAlert = window.alert;
-        window.alert = function(message) {
-          console.log('[Jobzippy] Alert intercepted:', message);
-          window.dispatchEvent(new CustomEvent('JOBZIPPY_ALERT', { detail: { message } }));
-          return true;
-        };
-        
-        // Override confirm
-        const originalConfirm = window.confirm;
-        window.confirm = function(message) {
-          console.log('[Jobzippy] Confirm intercepted:', message);
-          window.dispatchEvent(new CustomEvent('JOBZIPPY_CONFIRM', { detail: { message } }));
-          return true;
-        };
-      })();
-    `;
+    script.src = chrome.runtime.getURL('page-script.js');
+    script.onload = function () {
+      console.log('[Jobzippy] Page script injected successfully');
+      (this as HTMLScriptElement).remove();
+    };
     (document.head || document.documentElement).appendChild(script);
-    script.remove();
 
     // Listen for the custom event
     window.addEventListener('JOBZIPPY_ALERT', (event: any) => {
