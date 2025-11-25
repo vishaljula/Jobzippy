@@ -414,7 +414,7 @@ function App() {
       const allMissing = need.linkedin && need.indeed;
       if (!allMissing) {
         chrome.runtime.sendMessage(
-          { type: 'START_AGENT', data: { maxApplications: 10 } },
+          { type: 'START_AGENT', data: { maxApplications: 15 } },
           (resp) => {
             if (chrome.runtime.lastError) {
               console.error(
@@ -453,7 +453,7 @@ function App() {
           const allMissing = need.linkedin && need.indeed;
           if (!allMissing) {
             chrome.runtime.sendMessage(
-              { type: 'START_AGENT', data: { maxApplications: 10 } },
+              { type: 'START_AGENT', data: { maxApplications: 15 } },
               () => {}
             );
           }

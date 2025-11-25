@@ -889,7 +889,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           chrome.tabs
             .sendMessage(state.tabId, {
               type: 'START_AGENT',
-              data: message.data || { maxApplications: 10 },
+              data: message.data || { maxApplications: 15 },
             })
             .catch((err) => {
               console.error(
