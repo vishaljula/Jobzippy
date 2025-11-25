@@ -131,66 +131,110 @@ class AgentController {
     };
 
     try {
-      // Get jobs on current page
-      console.log('[AgentController] Calling getJobs()...');
-      const jobs = await this.getJobs();
-      console.log('[AgentController] Found', jobs.length, 'jobs:', jobs);
+      // Set up inactivity timeout for the whole run: if no jobs applied in last 2 minutes, stop
+      this.lastJobAppliedTime = Date.now();
+      this.resetInactivityTimeout();
+
+      let pageIndex = 1;
+      let jobs = await this.getJobs();
+      console.log('[AgentController] Found', jobs.length, 'jobs on page', pageIndex, jobs);
 
       if (jobs.length === 0) {
-        console.warn('[AgentController] No jobs found on page!');
+        console.warn('[AgentController] No jobs found on first page!');
         this.broadcastStatus('IDLE', 'No jobs found');
         return this.results;
       }
 
-      this.broadcastStatus('RUNNING', `Processing ${jobs.length} jobs...`);
+      // Outer loop: iterate over search result pages until limits or end of results
+      while (true) {
+        console.log('[AgentController] ===== Processing search page', pageIndex, '=====');
+        this.broadcastStatus('RUNNING', `Processing ${jobs.length} jobs on page ${pageIndex}...`);
 
-      // Set up inactivity timeout: if no jobs applied in last 2 minutes, stop
-      this.lastJobAppliedTime = Date.now();
-      this.resetInactivityTimeout();
+        // Process each job sequentially on the current page
+        for (const job of jobs) {
+          if (this.shouldStop) {
+            console.log('[AgentController] Stopped by user');
+            this.broadcastStatus('IDLE', 'Stopped by user');
+            break;
+          }
 
-      // Process each job sequentially
-      for (const job of jobs) {
+          // Check inactivity timeout: if no jobs applied in last 2 minutes, stop
+          const timeSinceLastApplication = Date.now() - this.lastJobAppliedTime;
+          if (timeSinceLastApplication > 120000 && this.results.jobsApplied > 0) {
+            console.log(
+              '[AgentController] Inactivity timeout: No jobs applied in last 2 minutes'
+            );
+            logger.log(
+              'AgentController',
+              'Inactivity timeout: No jobs applied in last 2 minutes'
+            );
+            this.broadcastStatus(
+              'IDLE',
+              'Inactivity timeout: No jobs applied in last 2 minutes'
+            );
+            this.shouldStop = true;
+            break;
+          }
+
+          // Check max applications limit
+          if (
+            this.config.maxApplications &&
+            this.results.jobsApplied >= this.config.maxApplications
+          ) {
+            console.log('[AgentController] Reached max applications limit');
+            this.broadcastStatus(
+              'IDLE',
+              `Completed: ${this.results.jobsApplied} applications submitted`
+            );
+            this.shouldStop = true;
+            break;
+          }
+
+          console.log('[AgentController] ========== Processing job', job.id, '==========');
+          this.broadcastStatus('RUNNING', `Applying to: ${job.title}`);
+          await this.processJob(job);
+
+          // Delay between jobs
+          if (this.config.delayBetweenJobs) {
+            console.log(
+              '[AgentController] Waiting',
+              this.config.delayBetweenJobs,
+              'ms before next job'
+            );
+            await this.delay(this.config.delayBetweenJobs);
+          }
+        }
+
+        // If we were asked to stop or hit limits, exit outer loop
         if (this.shouldStop) {
-          console.log('[AgentController] Stopped by user');
-          this.broadcastStatus('IDLE', 'Stopped by user');
           break;
         }
-
-        // Check inactivity timeout: if no jobs applied in last 2 minutes, stop
-        const timeSinceLastApplication = Date.now() - this.lastJobAppliedTime;
-        if (timeSinceLastApplication > 120000 && this.results.jobsApplied > 0) {
-          console.log('[AgentController] Inactivity timeout: No jobs applied in last 2 minutes');
-          logger.log('AgentController', 'Inactivity timeout: No jobs applied in last 2 minutes');
-          this.broadcastStatus('IDLE', 'Inactivity timeout: No jobs applied in last 2 minutes');
-          break;
-        }
-
-        // Check max applications limit
         if (
           this.config.maxApplications &&
           this.results.jobsApplied >= this.config.maxApplications
         ) {
-          console.log('[AgentController] Reached max applications limit');
-          this.broadcastStatus(
-            'IDLE',
-            `Completed: ${this.results.jobsApplied} applications submitted`
+          break;
+        }
+
+        // Only LinkedIn currently supports multi-page navigation in this controller.
+        if (this.config.platform !== 'LinkedIn') {
+          console.log(
+            '[AgentController] Non-LinkedIn platform: skipping pagination and stopping after first page'
           );
           break;
         }
 
-        console.log('[AgentController] ========== Processing job', job.id, '==========');
-        this.broadcastStatus('RUNNING', `Applying to: ${job.title}`);
-        await this.processJob(job);
-
-        // Delay between jobs
-        if (this.config.delayBetweenJobs) {
+        // Attempt to navigate to next page and wait for new jobs to load.
+        const nextJobs = await this.goToNextPageAndLoadJobs(jobs);
+        if (!nextJobs || nextJobs.length === 0) {
           console.log(
-            '[AgentController] Waiting',
-            this.config.delayBetweenJobs,
-            'ms before next job'
+            '[AgentController] No next page available or next page has no jobs, stopping agent'
           );
-          await this.delay(this.config.delayBetweenJobs);
+          break;
         }
+
+        pageIndex += 1;
+        jobs = nextJobs;
       }
 
       console.log('[AgentController] ========== AGENT COMPLETED ==========');
@@ -477,6 +521,54 @@ class AgentController {
     const scrapedJobs = scrapeJobCards();
     console.log('[AgentController] Found', scrapedJobs.length, 'jobs on page');
     return scrapedJobs;
+  }
+
+  /**
+   * Navigate to the next search results page and wait for a fresh set of jobs.
+   * Returns null if there is no next page or jobs failed to change within timeout.
+   */
+  private async goToNextPageAndLoadJobs(previousJobs: JobCard[]): Promise<JobCard[] | null> {
+    const previousIds = previousJobs.map((j) => j.id);
+    console.log('[AgentController] Attempting to navigate to next search results page...', {
+      previousIds,
+    });
+
+    const navigated = navigateToNextPage();
+    if (!navigated) {
+      console.log(
+        '[AgentController] navigateToNextPage() returned false - no next page button/link found or it is disabled'
+      );
+      return null;
+    }
+
+    const timeoutMs = 10000;
+    const start = performance.now();
+
+    while (performance.now() - start < timeoutMs) {
+      const newJobs = scrapeJobCards();
+      const newIds = newJobs.map((j) => j.id);
+
+      const sameLength = previousIds.length === newIds.length;
+      const sameIds =
+        sameLength && previousIds.every((id, idx) => id === newIds[idx]);
+
+      if (newJobs.length > 0 && !sameIds) {
+        console.log(
+          '[AgentController] Next page jobs loaded',
+          newJobs.length,
+          'jobs:',
+          newJobs
+        );
+        return newJobs;
+      }
+
+      await this.delay(200);
+    }
+
+    console.warn(
+      '[AgentController] Timeout waiting for next page jobs to load; stopping pagination'
+    );
+    return null;
   }
 
   private async clickJobCard(job: JobCard): Promise<void> {
