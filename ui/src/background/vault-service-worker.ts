@@ -44,6 +44,7 @@ interface VaultDBSchema extends DBSchema {
 }
 
 const SINGLETON_KEY = 'singleton';
+const RESUME_META_KEY = 'resume_blob';
 
 // Crypto Utils (Native Web Crypto API available in Service Worker)
 const textEncoder = new TextEncoder();
@@ -126,6 +127,11 @@ async function getSalt(): Promise<string | undefined> {
   return db.get(VAULT_STORES.meta, SALT_KEY);
 }
 
+async function getMetaValue(key: string): Promise<string | undefined> {
+  const db = await dbPromise;
+  return db.get(VAULT_STORES.meta, key);
+}
+
 // Service
 export class BackgroundVaultService {
   async load(storeName: string, password: string): Promise<any | null> {
@@ -158,6 +164,33 @@ export class BackgroundVaultService {
       return JSON.parse(plaintext);
     } catch (e) {
       console.error('BackgroundVaultService: Decryption failed for store', storeKey, e);
+      return null;
+    }
+  }
+
+  async loadResume(password: string): Promise<ArrayBuffer | null> {
+    const persisted = await getMetaValue(RESUME_META_KEY);
+    if (!persisted) {
+      return null;
+    }
+
+    const saltBase64 = await getSalt();
+    if (!saltBase64) {
+      console.warn('BackgroundVaultService: No salt found in meta store');
+      return null;
+    }
+    const salt = decodeBase64(saltBase64);
+    const key = await deriveKey(password, salt);
+
+    try {
+      const parsed = JSON.parse(persisted) as EncryptedPayload;
+      const base64 = await decryptToString(key, parsed);
+      const bytes = decodeBase64(base64);
+      const copy = new Uint8Array(bytes.length);
+      copy.set(bytes);
+      return copy.buffer;
+    } catch (e) {
+      console.error('BackgroundVaultService: Decryption failed for resume', e);
       return null;
     }
   }

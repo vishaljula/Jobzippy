@@ -294,6 +294,9 @@
                 document.getElementById('success-message').style.display = 'block';
                 submitBtn.textContent = 'Application Submitted';
 
+                // Trigger alert for extension to detect (intercepted by page-script.js)
+                alert('Application submitted successfully!');
+
                 // Notify extension that application is complete
                 window.postMessage({ type: 'ATS_APPLICATION_COMPLETE' }, '*');
             }, 1500);

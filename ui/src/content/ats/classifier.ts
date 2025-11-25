@@ -3,6 +3,8 @@
  * Intelligently classifies web pages and their elements for ATS automation
  */
 
+import { classifyPage } from './page-classifier';
+
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -27,6 +29,14 @@ export type FieldPurpose =
   | 'website'
   | 'password'
   | 'captcha'
+  | 'workAuth'
+  | 'sponsorship'
+  | 'clearance'
+  | 'exportControls'
+  | 'country'
+  | 'previousApplication'
+  | 'previousEmployment'
+  | 'conflictOfInterest'
   | 'submit'
   | 'apply'
   | 'close'
@@ -339,6 +349,83 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0.8,
   },
 
+  workAuth: {
+    selectors: [
+      'select[name*="work" i][name*="authorization" i]',
+      'select[name*="work" i][name*="auth" i]',
+      'select[id*="work" i][id*="authorization" i]',
+      'select[id*="work" i][id*="auth" i]',
+      'select[name*="authorization" i]',
+      'select[id*="authorization" i]',
+    ],
+    weight: 0.9,
+  },
+
+  sponsorship: {
+    selectors: [
+      'select[name*="sponsor" i]',
+      'select[name*="visa" i]',
+      'select[id*="sponsor" i]',
+      'select[id*="visa" i]',
+      'select[name*="h1b" i]',
+      'select[id*="h1b" i]',
+    ],
+    weight: 0.9,
+  },
+
+  clearance: {
+    selectors: [
+      'select[name*="clearance" i]',
+      'select[id*="clearance" i]',
+    ],
+    weight: 0.8,
+  },
+
+  exportControls: {
+    selectors: [
+      'select[name*="export" i]',
+      'select[id*="export" i]',
+      'select[name*="citizen" i]',
+      'select[id*="citizen" i]',
+    ],
+    weight: 0.8,
+  },
+
+  country: {
+    selectors: [
+      'select[name*="country" i]',
+      'select[id*="country" i]',
+      'select[name="country"]',
+    ],
+    weight: 0.9,
+  },
+
+  previousApplication: {
+    selectors: [
+      'select[name*="previous" i][name*="application" i]',
+      'select[name*="application" i]',
+      'select[id*="previous" i][id*="application" i]',
+    ],
+    weight: 0.8,
+  },
+
+  previousEmployment: {
+    selectors: [
+      'select[name*="previous" i][name*="employment" i]',
+      'select[name*="employment" i]',
+      'select[id*="previous" i][id*="employment" i]',
+    ],
+    weight: 0.8,
+  },
+
+  conflictOfInterest: {
+    selectors: [
+      'select[name*="conflict" i]',
+      'select[id*="conflict" i]',
+    ],
+    weight: 0.8,
+  },
+
   password: {
     selectors: ['input[type="password"]'],
     weight: 1.0,
@@ -363,6 +450,13 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
       'button[aria-label*="apply" i]',
       'a[href*="apply"]',
       'button[data-automation-id*="apply"]',
+      'a[data-automation-id="autofillWithResume"]',
+      'a[data-automation-id="applyManually"]',
+      'a[data-automation-id="useMyLastApplication"]',
+      'a[href*="autofill"]',
+      'a[href*="manual"]',
+      '.option-button',
+      '.option-button.primary',
     ],
     weight: 0.9,
   },
@@ -396,3 +490,147 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0,
   },
 };
+
+// ============================================================================
+// POST-CLICK CLASSIFICATION HELPERS
+// ============================================================================
+
+/**
+ * Get truly visible modals (not just present in DOM)
+ * Checks display, visibility, opacity, and aria-hidden
+ */
+export function getVisibleModals(doc: Document): HTMLElement[] {
+  return Array.from(
+    doc.querySelectorAll<HTMLElement>('[role="dialog"], .modal, .modal-overlay')
+  ).filter((el) => {
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+      return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    return true;
+  });
+}
+
+/**
+ * Cheap pre-click guess based on button attributes
+ * Fast path for obvious cases (external ATS links, Easy Apply buttons)
+ */
+export function cheapGuessFromButton(
+  applyButton: HTMLElement
+): 'modal' | 'external' | 'unknown' {
+  // Check <a> tags with external ATS domains
+  if (applyButton.tagName === 'A') {
+    const href = applyButton.getAttribute('href') || '';
+    const externalDomains = [
+      'greenhouse.io',
+      'workday',
+      'lever.co',
+      'smartrecruiters',
+      'ashbyhq.com',
+      'jobvite',
+    ];
+    if (externalDomains.some((domain) => href.includes(domain))) {
+      return 'external';
+    }
+  }
+
+  // Check for LinkedIn Easy Apply indicators
+  if (
+    applyButton.getAttribute('aria-label')?.includes('Easy Apply') ||
+    applyButton.closest('[data-test-global-easy-apply-modal]')
+  ) {
+    return 'modal';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Post-click classification: click Apply button and detect what happens
+ * Returns classification based on actual outcome (modal, navigation, or new tab)
+ */
+export async function classifyAfterApply(
+  applyButton: HTMLElement
+): Promise<PageClassification> {
+  const { logger } = await import('../../lib/logger');
+  
+  logger.log('Classifier', 'Post-click classification: clicking Apply button...');
+  console.log('[Classifier] Post-click classification: clicking Apply button...');
+
+  // Notify background we're about to click
+  chrome.runtime.sendMessage({ type: 'APPLY_CLICK_START' }).catch(() => {
+    // Ignore if background script isn't ready
+  });
+
+  const initialUrl = window.location.href;
+  const initialModals = getVisibleModals(document).length;
+  
+  logger.log('Classifier', 'Before click', { url: initialUrl, modals: initialModals });
+  console.log('[Classifier] Before click - URL:', initialUrl, 'Modals:', initialModals);
+
+  // Click the button
+  applyButton.click();
+  logger.log('Classifier', 'Apply button clicked, waiting for DOM changes...');
+  console.log('[Classifier] Apply button clicked, waiting for DOM changes...');
+
+  // Wait for DOM changes (event-driven)
+  await waitForDOMStable(300, 1000);
+
+  // Check what happened
+  const newModals = getVisibleModals(document).length;
+  const newUrl = window.location.href;
+  
+  logger.log('Classifier', 'After click', { url: newUrl, modals: newModals, urlChanged: newUrl !== initialUrl, modalsChanged: newModals > initialModals });
+  console.log('[Classifier] After click - URL:', newUrl, 'Modals:', newModals);
+
+  if (newModals > initialModals) {
+    // Modal appeared - run full classification on it
+    logger.log('Classifier', 'Modal appeared, classifying modal...');
+    console.log('[Classifier] Modal appeared, classifying modal...');
+    return classifyPage(document);
+  }
+
+  if (newUrl !== initialUrl) {
+    // Same-page navigation - classify new page
+    logger.log('Classifier', 'URL changed, classifying new page...');
+    console.log('[Classifier] URL changed, classifying new page...');
+    return classifyPage(document);
+  }
+
+  // Check if new tab opened
+  logger.log('Classifier', 'Checking for new external tab...');
+  console.log('[Classifier] Checking for new external tab...');
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'CHECK_NEW_TAB' });
+    logger.log('Classifier', 'CHECK_NEW_TAB response', response);
+    console.log('[Classifier] CHECK_NEW_TAB response:', response);
+    
+    if (response?.newTabId) {
+      logger.log('Classifier', `External tab detected: ${response.newTabId}, returning intermediate classification`);
+      console.log(`[Classifier] External tab detected: ${response.newTabId}, returning intermediate classification`);
+      return {
+        type: 'intermediate' as PageType, // Mark as intermediate, external tab will be handled separately
+        confidence: 1.0,
+        fields: [],
+        actions: [],
+        metadata: {
+          hasOverlay: false,
+          hasPasswordField: false,
+          hasFileUpload: false,
+          hasMultipleInputs: false,
+          formCount: 0,
+          modalCount: 0,
+        },
+      };
+    }
+  } catch (err) {
+    logger.error('Classifier', 'Error checking for new tab', err);
+    console.error('[Classifier] Error checking for new tab:', err);
+    // Background script not responding, continue
+  }
+
+  // Fallback to current page classification
+  logger.log('Classifier', 'No modal/URL/tab change detected, classifying current page...');
+  console.log('[Classifier] No modal/URL/tab change detected, classifying current page...');
+  return classifyPage(document);
+}

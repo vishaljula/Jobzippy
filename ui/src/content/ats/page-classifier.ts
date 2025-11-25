@@ -13,6 +13,7 @@ import {
   FIELD_PURPOSE_RULES,
   Indicator,
 } from './classifier';
+import { logger } from '../../lib/logger';
 
 // ============================================================================
 // FIELD DETECTION
@@ -47,6 +48,52 @@ export function detectFields(container: Document | Element = document): Detected
       });
     }
   }
+
+  // Also detect select fields by their label text (for fields not caught by name/id selectors)
+  const allSelects = container.querySelectorAll('select');
+  allSelects.forEach((select) => {
+    // Skip if already detected
+    if (fields.some((f) => f.element === select)) return;
+
+    // Find associated label
+    const label = container.querySelector(`label[for="${select.id}"]`) ||
+                  select.closest('.form-group')?.querySelector('label') ||
+                  select.previousElementSibling as HTMLElement;
+    
+    if (label) {
+      const labelText = (label.textContent || '').toLowerCase();
+      
+      // Detect purpose from label text
+      let purpose: FieldPurpose = 'unknown';
+      if (labelText.includes('work authorization') || labelText.includes('authorized to work')) {
+        purpose = 'workAuth';
+      } else if (labelText.includes('sponsor') || labelText.includes('visa') || labelText.includes('h1b')) {
+        purpose = 'sponsorship';
+      } else if (labelText.includes('clearance')) {
+        purpose = 'clearance';
+      } else if (labelText.includes('export') || labelText.includes('citizen') || labelText.includes('permanent resident')) {
+        purpose = 'exportControls';
+      } else if (labelText.includes('country')) {
+        purpose = 'country';
+      } else if (labelText.includes('previously applied') || labelText.includes('history with')) {
+        purpose = 'previousApplication';
+      } else if (labelText.includes('previously employed') || labelText.includes('ever been employed')) {
+        purpose = 'previousEmployment';
+      } else if (labelText.includes('conflict of interest')) {
+        purpose = 'conflictOfInterest';
+      }
+
+      if (purpose !== 'unknown') {
+        fields.push({
+          type: 'select',
+          purpose,
+          element: select as HTMLElement,
+          confidence: 0.7, // Lower confidence for label-based detection
+          selectors: ['label-based'],
+        });
+      }
+    }
+  });
 
   // Also detect by text content for buttons/links
   const buttons = container.querySelectorAll('button, a');
@@ -96,6 +143,12 @@ function getElementType(element: HTMLElement): ElementType {
 function inferPurposeFromText(text: string): FieldPurpose {
   const lowerText = text.toLowerCase().trim();
 
+  // Workday-style options: prioritize autofill, then manual, then last application
+  if (lowerText.includes('autofill') || lowerText.includes('auto-fill') || lowerText.includes('auto fill')) return 'apply';
+  if (lowerText.includes('apply manually') || lowerText.includes('manual')) return 'apply';
+  if (lowerText.includes('use my last') || lowerText.includes('last application')) return 'apply';
+  
+  // Generic apply buttons
   if (lowerText.includes('apply')) return 'apply';
   if (lowerText.includes('submit')) return 'submit';
   if (lowerText.includes('close')) return 'close';
@@ -114,8 +167,14 @@ function inferPurposeFromText(text: string): FieldPurpose {
  * Classify the current page
  */
 export function classifyPage(container: Document = document): PageClassification {
+  logger.log('Classifier', 'Starting page classification...');
+  console.log('[Classifier] Starting page classification...');
+  console.log('[Classifier] Current URL:', container.location?.href || window.location.href);
+
   // Detect all fields first
   const allFields = detectFields(container);
+  logger.log('Classifier', `Detected ${allFields.length} total fields`);
+  console.log(`[Classifier] Detected ${allFields.length} total fields`);
 
   // Separate actions from form fields
   const actions = allFields.filter((f) =>
@@ -124,6 +183,9 @@ export function classifyPage(container: Document = document): PageClassification
   const formFields = allFields.filter(
     (f) => !['apply', 'submit', 'close', 'skip', 'guest'].includes(f.purpose)
   );
+
+  logger.log('Classifier', `Found ${formFields.length} form fields and ${actions.length} actions`);
+  console.log(`[Classifier] Found ${formFields.length} form fields and ${actions.length} actions`);
 
   // Gather metadata
   const metadata = {
@@ -134,6 +196,9 @@ export function classifyPage(container: Document = document): PageClassification
     formCount: container.querySelectorAll('form').length,
     modalCount: container.querySelectorAll('[role="dialog"], .modal, .popup').length,
   };
+
+  logger.log('Classifier', 'Page metadata', metadata);
+  console.log('[Classifier] Page metadata:', metadata);
 
   // Calculate confidence for each page type
   const scores: Array<{ type: PageType; confidence: number }> = [];
@@ -148,6 +213,8 @@ export function classifyPage(container: Document = document): PageClassification
         type: pageType as PageType,
         confidence,
       });
+      logger.log('Classifier', `Page type ${pageType}: ${(confidence * 100).toFixed(1)}% confidence`);
+      console.log(`[Classifier] Page type ${pageType}: ${(confidence * 100).toFixed(1)}% confidence`);
     }
   }
 
@@ -166,13 +233,18 @@ export function classifyPage(container: Document = document): PageClassification
   // Return best match or unknown
   const bestMatch = scores[0];
 
-  return {
+  const result: PageClassification = {
     type: bestMatch?.type || 'unknown',
     confidence: bestMatch?.confidence || 0,
     fields: formFields,
     actions,
     metadata,
   };
+
+  logger.log('Classifier', `Classification complete: ${result.type} (${(result.confidence * 100).toFixed(1)}%)`);
+  console.log(`[Classifier] Classification complete: ${result.type} (${(result.confidence * 100).toFixed(1)}%)`);
+
+  return result;
 }
 
 /**

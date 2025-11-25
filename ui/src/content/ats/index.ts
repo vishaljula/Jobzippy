@@ -18,6 +18,42 @@ console.log('[Jobzippy] Universal ATS content script loaded');
 
 // Import dynamic classifier
 import { intelligentNavigate, NavigationResult } from './navigator';
+import { logger } from '../../lib/logger';
+import {
+  waitForElementRemoval,
+  waitForNavigation,
+  waitForElement,
+  waitForFormReady,
+  waitForDOMStable,
+  waitForCheckboxChecked,
+} from '../../lib/dom-events';
+
+// Send ready signal to background script when content script loads
+logger.log('ATS', 'Content script loaded, sending ready signal');
+console.log('[ATS] Content script loaded, sending ready signal');
+
+// Extract jobId from URL (e.g., ?job=123457)
+function extractJobIdFromUrl(): string | null {
+  const urlParams = new URLSearchParams(window.location.search);
+  const jobId = urlParams.get('job');
+  return jobId || null;
+}
+
+// Send ready signal with jobId
+const jobId = extractJobIdFromUrl();
+if (jobId) {
+  console.log(`[ATS] Extracted jobId from URL: ${jobId}`);
+  chrome.runtime.sendMessage({
+    type: 'ATS_CONTENT_SCRIPT_READY',
+    data: { jobId },
+  }).catch(() => {
+    // Ignore if background script isn't ready yet
+  });
+} else {
+  // Fallback: send without jobId, background will look it up
+  console.log('[ATS] No jobId in URL, sending ready signal without jobId');
+  chrome.runtime.sendMessage({ type: 'ATS_CONTENT_SCRIPT_READY', data: {} }).catch(() => {});
+}
 
 /*
  * LEGACY CODE (Preserved for reference)
@@ -94,8 +130,15 @@ async function closeModals() {
 
       if (buttons.length > 0) {
         console.log(`[ATS] Found modal close button: ${selector}`);
-        (buttons[0] as HTMLElement).click();
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const button = buttons[0] as HTMLElement;
+        const modal = button.closest('.modal, [role="dialog"], .overlay') as HTMLElement;
+        button.click();
+        // Wait for modal to be removed (event-driven)
+        if (modal) {
+          await waitForElementRemoval(modal.className.split(' ')[0] || '[role="dialog"]', 2000);
+        } else {
+          await waitForDOMStable(300, 1000);
+        }
         return true;
       }
     } catch (error) {
@@ -153,7 +196,11 @@ async function handleWorkdayOptionsModal(): Promise<boolean> {
       navState.navigationDepth++;
 
       element.click();
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait for navigation or DOM change (event-driven)
+      await Promise.race([
+        waitForNavigation(3000),
+        waitForDOMStable(500, 3000),
+      ]);
       return true;
     }
   }
@@ -211,7 +258,12 @@ async function trySkipAccountCreation(): Promise<boolean> {
       if (elements.length > 0) {
         console.log(`[ATS] Found guest option: ${selector}`);
         (elements[0] as HTMLElement).click();
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // Wait for navigation or form to appear (event-driven)
+        await Promise.race([
+          waitForNavigation(3000),
+          waitForFormReady('form', 3000),
+          waitForDOMStable(500, 3000),
+        ]);
         return true;
       }
     } catch (error) {
@@ -265,7 +317,12 @@ async function findAndClickApplyButton(): Promise<boolean> {
       if (elements.length > 0) {
         console.log(`[ATS] Found Apply button: ${selector}`);
         (elements[0] as HTMLElement).click();
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait for navigation or modal to appear (event-driven)
+        await Promise.race([
+          waitForNavigation(3000),
+          waitForElement('.modal, [role="dialog"]', 3000).then(() => true),
+          waitForDOMStable(500, 3000),
+        ]);
         return true;
       }
     } catch (error) {
@@ -324,11 +381,9 @@ async function initialize() {
     const skipped = await trySkipAccountCreation();
     if (skipped) {
       console.log('[ATS] Successfully skipped account creation');
-      // Wait for next page
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Check if we now have a form
-      if (detectApplicationForm()) {
+      // Wait for form to appear (event-driven)
+      const form = await waitForFormReady('form', 3000);
+      if (form || detectApplicationForm()) {
         console.log('[ATS] Application form detected after skipping account');
         navState.currentStep = 'form';
         notifyBackgroundReady();
@@ -362,8 +417,12 @@ async function initialize() {
     navState.currentStep = 'intermediate';
     console.log('[ATS] Clicked Apply button, waiting for next step...');
 
-    // Wait for navigation or modal
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for navigation or modal (event-driven)
+    await Promise.race([
+      waitForNavigation(3000),
+      waitForElement('.modal, [role="dialog"]', 3000).then(() => true),
+      waitForDOMStable(500, 3000),
+    ]);
 
     // Re-check for Workday modal after clicking Apply
     const handledModalAfterClick = await handleWorkdayOptionsModal();
@@ -397,79 +456,16 @@ async function initialize() {
 
 /**
  * Initialize: Use dynamic classifier for intelligent navigation
+ * NOTE: This function is no longer auto-called. It's kept for reference/fallback.
+ * The content script now waits for FILL_EXTERNAL_ATS command from background script.
  */
-/**
- * Initialize: Use dynamic classifier for intelligent navigation
- */
+// Legacy function - removed (no longer used, we wait for FILL_EXTERNAL_ATS command)
+/*
 async function initialize() {
   console.log('[ATS] Initializing with dynamic classifier...');
-
-  // Inject alert override script via src to avoid CSP issues
-  const script = document.createElement('script');
-  script.src = chrome.runtime.getURL('page-script.js');
-  script.onload = function () {
-    console.log('[ATS] Page script injected successfully');
-    (this as HTMLScriptElement).remove();
-  };
-  (document.head || document.documentElement).appendChild(script);
-
-  try {
-    // Use the intelligent navigation system
-    const result: NavigationResult = await intelligentNavigate();
-
-    if (result.success && result.finalClassification) {
-      console.log('[ATS] ✓ Successfully navigated to application form');
-      console.log(
-        '[ATS] Form confidence:',
-        `${(result.finalClassification.confidence * 100).toFixed(1)}%`
-      );
-
-      // Notify background that job is complete
-      // If the result says "submitted", we are done.
-      // If it says "form_found" but not submitted, we might need manual intervention,
-      // but for now we'll mark it as complete so the agent can move on (or we could wait).
-
-      // Check if it was actually submitted
-      const isSubmitted = result.message?.includes('submitted');
-
-      if (isSubmitted) {
-        chrome.runtime.sendMessage({
-          type: 'JOB_COMPLETE',
-          result,
-        });
-      } else {
-        // Form found but not submitted (e.g. manual submission required)
-        // We still notify completion but with a different status if needed
-        // For now, let's assume we want to close the tab and move on if we can't submit
-        chrome.runtime.sendMessage({
-          type: 'JOB_COMPLETE',
-          result,
-        });
-      }
-    } else {
-      // Navigation failed
-      console.log('[ATS] ✗ Navigation failed:', result.reason);
-      console.log('[ATS] Message:', result.message);
-
-      // Notify background about the failure
-      chrome.runtime.sendMessage({
-        type: 'ATS_NAVIGATION_FAILED',
-        reason: result.reason,
-        message: result.message,
-        url: window.location.href,
-      });
-    }
-  } catch (error) {
-    console.error('[ATS] Error during initialization:', error);
-
-    // Notify background about the error
-    chrome.runtime.sendMessage({
-      type: 'ATS_ERROR',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      url: window.location.href,
-    });
-  }
+  // ... legacy code removed ...
 }
+*/
 
 // Detect ATS type
 // const detectATSType = (): string | null => {
@@ -679,7 +675,8 @@ async function handleSimpleCaptcha(): Promise<boolean> {
   if (checkboxCaptcha && !checkboxCaptcha.checked) {
     console.log('[ATS] Found simple checkbox CAPTCHA, checking it');
     checkboxCaptcha.click();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Wait for checkbox to be checked (event-driven)
+    await waitForCheckboxChecked(checkboxCaptcha, 2000);
     return true;
   }
 
@@ -770,18 +767,121 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         .catch((error) => sendResponse({ success: false, error: error.message }));
       return true;
 
+    case 'FILL_EXTERNAL_ATS': {
+      // Clear the safety timeout since we received the command
+      clearTimeout(safetyTimeout);
+      fillCommandReceived = true;
+      
+      // Get jobId from message or URL
+      const jobId = message.data?.jobId || extractJobIdFromUrl() || 'unknown';
+      
+      logger.log('ATS', `Received FILL_EXTERNAL_ATS for jobId=${jobId}, starting intelligent navigation...`);
+      console.log('[ATS] Received FILL_EXTERNAL_ATS, starting intelligent navigation...');
+      console.log('[ATS] Current URL:', window.location.href);
+      console.log('[ATS] JobId:', jobId);
+      
+      intelligentNavigate()
+        .then((result: NavigationResult | null) => {
+          logger.log('ATS', 'intelligentNavigate result', result);
+          console.log('[ATS] intelligentNavigate result:', result);
+          
+          // Safety check: ensure result is not null
+          if (!result) {
+            logger.error('ATS', 'intelligentNavigate returned null - this should not happen');
+            console.error('[ATS] intelligentNavigate returned null');
+            const errorMsg = 'Navigation returned null result';
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: false, error: errorMsg },
+            }).catch(() => {});
+            sendResponse({ success: false, error: errorMsg });
+            return;
+          }
+          
+          // NEW ARCHITECTURE: Send ATS_COMPLETE with jobId
+          if (result.success) {
+            logger.log('ATS', 'External form filled successfully');
+            console.log('[ATS] External form filled successfully');
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: true },
+            }).catch(() => {});
+            sendResponse({ success: true });
+          } else {
+            logger.error('ATS', 'External form fill failed', { error: result.message });
+            console.error('[ATS] External form fill failed:', result.message);
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: false, error: result.message },
+            }).catch(() => {});
+            sendResponse({ success: false, error: result.message });
+          }
+        })
+        .catch((error) => {
+          logger.error('ATS', 'Error filling external form', error);
+          console.error('[ATS] Error filling external form:', error);
+          chrome.runtime.sendMessage({
+            type: 'ATS_COMPLETE',
+            data: { jobId, success: false, error: String(error) },
+          }).catch(() => {});
+          sendResponse({ success: false, error: String(error) });
+        });
+      return true; // Keep channel open for async response
+    }
+
     default:
       sendResponse({ success: false, error: 'Unknown message type' });
       return false;
   }
 });
 
-// Run initialization on page load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  // DOM already loaded
-  initialize();
-}
+// DO NOT auto-initialize - wait for FILL_EXTERNAL_ATS message from background script
+// This prevents race conditions where navigation happens before the background script
+// can send the fill command, which would put the tab in back/forward cache and break messaging.
+// The background script will send FILL_EXTERNAL_ATS after receiving the ready signal.
+console.log('[ATS] Content script loaded, waiting for FILL_EXTERNAL_ATS command from background script');
 
-export {};
+// Safety timeout: If FILL_EXTERNAL_ATS doesn't arrive within 30 seconds, proceed anyway
+// This handles edge cases where the background script fails or message is lost
+let fillCommandReceived = false;
+const safetyTimeout = setTimeout(() => {
+  if (!fillCommandReceived) {
+    logger.log('ATS', 'WARNING: FILL_EXTERNAL_ATS not received within 30s, proceeding anyway');
+    console.warn('[ATS] FILL_EXTERNAL_ATS not received within 30 seconds, proceeding with intelligent navigation...');
+    
+    // Proceed with intelligent navigation as fallback
+    intelligentNavigate()
+      .then((result: NavigationResult) => {
+        logger.log('ATS', 'intelligentNavigate result (fallback)', result);
+        console.log('[ATS] intelligentNavigate result (fallback):', result);
+        
+          const jobId = extractJobIdFromUrl() || 'unknown';
+          if (result.success) {
+            logger.log('ATS', 'External form filled successfully (fallback)');
+            console.log('[ATS] External form filled successfully (fallback)');
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: true },
+            }).catch(() => {});
+} else {
+            logger.error('ATS', 'External form fill failed (fallback)', result.message);
+            console.error('[ATS] External form fill failed (fallback):', result.message);
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: false, error: result.message || 'Timeout waiting for fill command' },
+            }).catch(() => {});
+          }
+      })
+      .catch((error) => {
+        logger.error('ATS', 'Error filling external form (fallback)', error);
+        console.error('[ATS] Error filling external form (fallback):', error);
+            const jobId = extractJobIdFromUrl() || 'unknown';
+            chrome.runtime.sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: false, error: `Timeout: ${String(error)}` },
+            }).catch(() => {});
+      });
+  }
+}, 30000); // 30 second timeout
+
+export { };

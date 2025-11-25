@@ -1,5 +1,16 @@
 import { intelligentNavigate } from '../ats/navigator';
 import { logger } from '../../lib/logger';
+import {
+  waitForJobDetailsDom,
+  waitForLinkedInModal,
+  waitForMessage,
+} from '../../lib/dom-waits';
+import type {
+  ApplyJobStartMessage,
+  JobCompletedMessage,
+  ExternalATSOpenedMessage,
+  LinkedInModalDetectedMessage,
+} from '../../types/job-session';
 
 /**
  * Agent Controller Interfaces
@@ -22,7 +33,7 @@ export interface AgentResult {
   success: boolean;
   jobsProcessed: number;
   jobsApplied: number;
-  errors: Array<{ jobId: string; error: string }>;
+  errors: Array<{ jobId: string; error: string; stack?: string }>;
 }
 
 /**
@@ -32,17 +43,44 @@ export interface AgentResult {
 class AgentController {
   private config: AgentConfig;
   private shouldStop: boolean = false;
-  private results: AgentResult = {
+
+  private lastAlertMessage: string | null = null;
+  public lastJobAppliedTime: number = Date.now();
+  private inactivityTimeoutId: number | null = null;
+  // Promise map for waiting job completion
+  public pendingJobs: Map<string, {
+    resolve: (result: { success: boolean; error?: string }) => void;
+    reject: (error: Error) => void;
+    timeoutId?: number;
+  }> = new Map();
+  public results: AgentResult = {
     success: true,
     jobsProcessed: 0,
     jobsApplied: 0,
     errors: [],
   };
 
-  private lastAlertMessage: string | null = null;
-
   constructor(config: AgentConfig) {
     this.config = config;
+  }
+
+  public resetInactivityTimeout(): void {
+    // Clear existing timeout
+    if (this.inactivityTimeoutId !== null) {
+      clearTimeout(this.inactivityTimeoutId);
+      this.inactivityTimeoutId = null;
+    }
+
+    // Set new timeout: if no jobs applied in last 2 minutes, stop
+    this.inactivityTimeoutId = setTimeout(() => {
+      const timeSinceLastApplication = Date.now() - this.lastJobAppliedTime;
+      if (timeSinceLastApplication > 120000 && this.results.jobsApplied > 0) {
+        logger.log('AgentController', 'Inactivity timeout: No jobs applied in last 2 minutes');
+        console.log('[AgentController] Inactivity timeout: No jobs applied in last 2 minutes');
+        this.shouldStop = true;
+        this.broadcastStatus('IDLE', 'Inactivity timeout: No jobs applied in last 2 minutes');
+      }
+    }, 120000) as unknown as number;
   }
 
   private injectAlertHandler(): void {
@@ -106,11 +144,24 @@ class AgentController {
 
       this.broadcastStatus('RUNNING', `Processing ${jobs.length} jobs...`);
 
-      // Process each job
+      // Set up inactivity timeout: if no jobs applied in last 2 minutes, stop
+      this.lastJobAppliedTime = Date.now();
+      this.resetInactivityTimeout();
+
+      // Process each job sequentially
       for (const job of jobs) {
         if (this.shouldStop) {
           console.log('[AgentController] Stopped by user');
           this.broadcastStatus('IDLE', 'Stopped by user');
+          break;
+        }
+
+        // Check inactivity timeout: if no jobs applied in last 2 minutes, stop
+        const timeSinceLastApplication = Date.now() - this.lastJobAppliedTime;
+        if (timeSinceLastApplication > 120000 && this.results.jobsApplied > 0) {
+          console.log('[AgentController] Inactivity timeout: No jobs applied in last 2 minutes');
+          logger.log('AgentController', 'Inactivity timeout: No jobs applied in last 2 minutes');
+          this.broadcastStatus('IDLE', 'Inactivity timeout: No jobs applied in last 2 minutes');
           break;
         }
 
@@ -161,7 +212,7 @@ class AgentController {
         type: 'ENGINE_STATE',
         data: { state, status },
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   stop(): void {
@@ -169,52 +220,95 @@ class AgentController {
     this.shouldStop = true;
   }
 
+  /**
+   * NEW ARCHITECTURE: Event-driven processJob
+   * Uses DOM-based waits and event-driven communication instead of polling
+   */
   private async processJob(job: JobCard): Promise<void> {
     logger.log('AgentController', `Processing job: ${job.title} at ${job.company}`);
     logger.log('AgentController', 'Job details', job);
     this.results.jobsProcessed++;
 
     try {
-      // 1. Click job card to view details
-      logger.log('AgentController', 'Step 1: Clicking job card...');
+      const jobId = job.id;
+      logger.log('AgentController', `Step 0: Starting processJob for jobId=${jobId}`);
+
+      // 1. Register job with background BEFORE clicking anything
+      // Note: Background script will extract sourceTabId from message sender
+      logger.log('AgentController', 'Step 1: Registering job with background...');
+      await chrome.runtime.sendMessage({
+        type: 'APPLY_JOB_START',
+        data: { jobId },
+      } as ApplyJobStartMessage);
+      logger.log('AgentController', `Job ${jobId} registered with background`);
+
+      // 2. Setup promise BEFORE clicking Apply button
+      logger.log('AgentController', 'Step 2: Setting up job completion promise...');
+      const jobPromise = this.waitForJobCompletion(jobId);
+
+      // 3. Click job card and wait for details (DOM-based)
+      logger.log('AgentController', 'Step 3: Clicking job card...');
       await this.clickJobCard(job);
-      logger.log('AgentController', 'Job card clicked, waiting 1.5s...');
-      await this.delay(1500);
-
-      // 2. Click Apply button
-      logger.log('AgentController', 'Step 2: Looking for Apply button...');
-      const applyClicked = await this.clickApplyButton();
-      logger.log('AgentController', `Apply button clicked: ${applyClicked}`);
-
-      if (!applyClicked) {
-        logger.error('AgentController', `Could not click apply button for ${job.id}`);
-        this.results.errors.push({ jobId: job.id, error: 'Apply button not found' });
+      try {
+        await waitForJobDetailsDom(5000);
+        logger.log('AgentController', 'Job details panel loaded');
+      } catch (error) {
+        logger.error('AgentController', 'Job details panel did not load:', error);
+        this.results.errors.push({ jobId, error: 'Job details panel did not load' });
         return;
       }
 
-      // 3. Wait for form/modal to appear
-      logger.log('AgentController', 'Step 3: Waiting for form/modal (2s)...');
-      await this.delay(2000);
+      // 4. Click Apply button
+      logger.log('AgentController', 'Step 4: Clicking Apply button...');
+      const applyClicked = await this.clickApplyButton();
+      if (!applyClicked) {
+        logger.error('AgentController', `Could not click apply button for ${jobId}`);
+        this.results.errors.push({ jobId, error: 'Apply button not found' });
+        return;
+      }
 
-      // 4. Fill and submit form using dynamic classifier
-      logger.log('AgentController', 'Step 4: Filling and submitting form...');
-      logger.log('AgentController', `Current URL: ${window.location.href}`);
-      logger.log('AgentController', `Document ready state: ${document.readyState}`);
-      logger.log(
-        'AgentController',
-        `Visible modals: ${document.querySelectorAll('.modal-overlay.active').length}`
-      );
-      logger.log(
-        'AgentController',
-        `Form elements on page: ${document.querySelectorAll('form, input, textarea').length}`
-      );
+          // 5. Race between LinkedIn modal vs External ATS tab (event-driven, no timeouts)
+          logger.log('AgentController', 'Step 5: Waiting for modal or external ATS...');
+          try {
+            // Pure event-driven: wait for either modal (DOM event) or external ATS (message event)
+            // No timeouts - events will fire when they occur
+            const outcome = await Promise.race([
+              // Option 1: LinkedIn modal appears (DOM-based, event-driven)
+              waitForLinkedInModal(0).then((hasModal) => ({
+                type: 'LINKEDIN_MODAL' as const,
+                hasModal,
+              })),
+              // Option 2: External ATS tab opened (event from background, event-driven)
+              waitForMessage<ExternalATSOpenedMessage['data']>('EXTERNAL_ATS_OPENED', jobId, 0).then(
+                (message) => ({
+                  type: 'EXTERNAL_ATS_OPENED' as const,
+                  data: message.data,
+                })
+              ),
+            ]).catch((error) => {
+              // If Promise.race fails, handle it
+              logger.error('AgentController', `Error in Promise.race:`, error);
+              throw error; // Re-throw to be caught by outer catch
+            });
 
-      logger.log('AgentController', 'Calling intelligentNavigate()...');
-      this.lastAlertMessage = null; // Reset alert message before navigation
+            if (outcome.type === 'LINKEDIN_MODAL' && outcome.hasModal) {
+              // LinkedIn modal flow
+              logger.log('AgentController', 'LinkedIn modal detected, filling form...');
+              
+              // Notify background that LinkedIn modal was detected
+              await chrome.runtime.sendMessage({
+                type: 'LINKEDIN_MODAL_DETECTED',
+                data: { jobId },
+              } as LinkedInModalDetectedMessage).catch(() => {});
+              
+              this.lastAlertMessage = null;
+              logger.log('AgentController', 'Calling intelligentNavigate() to fill LinkedIn modal form...');
+              console.log('[AgentController] Calling intelligentNavigate() to fill LinkedIn modal form...');
       const result = await intelligentNavigate();
-      logger.log('AgentController', 'intelligentNavigate() returned', result);
+              logger.log('AgentController', 'intelligentNavigate() completed', result);
+              console.log('[AgentController] intelligentNavigate() completed:', result);
 
-      // Check for success alert if navigation didn't confirm success
+              // Check for success alert
       const alertMsg = this.lastAlertMessage;
       if (
         !result.success &&
@@ -222,38 +316,160 @@ class AgentController {
         ((alertMsg as string).toLowerCase().includes('success') ||
           (alertMsg as string).toLowerCase().includes('submitted'))
       ) {
-        logger.log('AgentController', 'Success alert detected, marking as submitted');
         result.success = true;
         result.message = 'Application submitted successfully (via alert)';
       }
 
-      const submitted = result.success;
-      logger.log('AgentController', `Form submission result: ${submitted}`);
+              const success = result.success;
+              logger.log('AgentController', `LinkedIn modal result: ${success}`);
 
-      if (submitted) {
+              // Notify background
+              await chrome.runtime.sendMessage({
+                type: 'JOB_COMPLETED',
+                data: { jobId, success, error: result.message },
+              } as JobCompletedMessage);
+
+              if (success) {
         logger.log('AgentController', `✓ Successfully applied to ${job.title}`);
         this.results.jobsApplied++;
+                this.lastJobAppliedTime = Date.now();
+                this.resetInactivityTimeout();
         chrome.runtime
           .sendMessage({
             type: 'JOB_APPLIED',
             data: { job, platform: this.config.platform },
           })
-          .catch(() => {});
+                  .catch(() => {});
       } else {
-        logger.error('AgentController', `Failed to submit application for ${job.id}`);
-        logger.error('AgentController', `Failure reason: ${result.reason}`);
-        logger.error('AgentController', `Failure message: ${result.message}`);
+                logger.error('AgentController', `Failed to submit LinkedIn modal for ${jobId}`);
         this.results.errors.push({
-          jobId: job.id,
+                  jobId,
           error: result.message || 'Form submission failed',
         });
       }
 
       await this.closeModal();
+            } else if (outcome.type === 'EXTERNAL_ATS_OPENED') {
+              // External ATS flow - wait for completion
+              logger.log('AgentController', `External ATS opened: tab ${outcome.data.atsTabId}`);
+              logger.log('AgentController', 'Waiting for external ATS to complete...');
+
+              await this.closeModal();
+
+              // Wait for EXTERNAL_ATS_DONE message (event-driven, no timeout)
+              logger.log('AgentController', `Waiting for jobPromise to resolve for jobId=${jobId}...`);
+              try {
+                // Pure event-driven: wait for jobPromise to resolve (no timeout)
+                // High-level inactivity timeout (2 minutes) will stop the agent if nothing happens
+                const result = await jobPromise;
+                logger.log('AgentController', `External ATS completed: success=${result.success}`);
+
+                if (result.success) {
+                  logger.log('AgentController', `✓ Successfully applied to ${job.title} (external ATS)`);
+                  this.results.jobsApplied++;
+                  this.lastJobAppliedTime = Date.now();
+                  this.resetInactivityTimeout();
+                  chrome.runtime
+                    .sendMessage({
+                      type: 'JOB_APPLIED',
+                      data: { job, platform: this.config.platform },
+                    })
+                    .catch(() => {});
+                } else {
+                  logger.error('AgentController', `External ATS failed for ${jobId}: ${result.error}`);
+                  this.results.errors.push({
+                    jobId,
+                    error: result.error || 'External ATS application failed',
+                  });
+                }
     } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                const errorStack = error instanceof Error ? error.stack : undefined;
+                logger.error('AgentController', `ERROR: Error waiting for EXTERNAL_ATS_DONE for jobId=${jobId}:`, {
+                  message: errorMessage,
+                  stack: errorStack,
+                  error: error,
+                });
+                console.error('[AgentController] ERROR: Error waiting for EXTERNAL_ATS_DONE:', error);
+                this.results.errors.push({
+                  jobId,
+                  error: errorMessage,
+                  stack: errorStack,
+                });
+              }
+            } else {
+              // This should never happen in pure event-driven architecture
+              // Both waitForLinkedInModal and waitForMessage wait indefinitely
+              // This branch is only reached if outcome.type doesn't match either case
+              logger.error('AgentController', `Unexpected outcome type: ${(outcome as any).type} for jobId=${jobId}`);
+              this.results.errors.push({
+                jobId,
+                error: 'Unexpected outcome: neither modal nor external ATS',
+              });
+              // Reject the jobPromise to ensure it doesn't hang
+              const pending = this.pendingJobs.get(jobId);
+              if (pending) {
+                clearTimeout(pending.timeoutId);
+                pending.reject(new Error('Unexpected outcome: neither modal nor external ATS'));
+                this.pendingJobs.delete(jobId);
+              }
+            }
+          } catch (error) {
+          logger.error('AgentController', `Error in race condition:`, error);
+          this.results.errors.push({
+            jobId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Reject the jobPromise to ensure it doesn't hang
+          const pending = this.pendingJobs.get(jobId);
+          if (pending) {
+            clearTimeout(pending.timeoutId);
+            pending.reject(error instanceof Error ? error : new Error(String(error)));
+            this.pendingJobs.delete(jobId);
+          }
+        }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
       console.error('[AgentController] Error processing job', job.id, ':', error);
-      this.results.errors.push({ jobId: job.id, error: String(error) });
+      logger.error('AgentController', `Error processing job ${job.id}:`, errorMessage);
+      if (errorStack) {
+        logger.error('AgentController', `Error stack:`, errorStack);
+      }
+      
+      this.results.errors.push({ 
+        jobId: job.id, 
+        error: errorMessage,
+        stack: errorStack 
+      });
     }
+  }
+
+  /**
+   * Wait for job completion (external ATS flow)
+   * Returns a promise that resolves when EXTERNAL_ATS_DONE is received
+   */
+  private waitForJobCompletion(
+    jobId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        if (this.pendingJobs.has(jobId)) {
+          logger.error('AgentController', `Timeout waiting for job completion: ${jobId}`);
+          this.pendingJobs.delete(jobId);
+          reject(new Error('Job completion timeout (5 minutes)'));
+        }
+      }, 300000) as unknown as number; // 5 minutes
+
+      this.pendingJobs.set(jobId, {
+        resolve,
+        reject,
+        timeoutId,
+      });
+
+      logger.log('AgentController', `Promise stored for job ${jobId}, waiting for EXTERNAL_ATS_DONE...`);
+    });
   }
 
   private async getJobs(): Promise<JobCard[]> {
@@ -329,6 +545,8 @@ class AgentController {
 
         if (button && button.offsetParent !== null) {
           console.log('[AgentController] Clicking Apply button:', selector);
+          // DEPRECATED: APPLY_CLICK_START removed - new architecture uses APPLY_JOB_START before clicking
+          // Job is already registered with background via APPLY_JOB_START in processJob()
           button.click();
           return true;
         }
@@ -384,7 +602,10 @@ class AgentController {
 
 async function startAgent(config: AgentConfig): Promise<AgentResult> {
   const controller = new AgentController(config);
-  return await controller.start();
+  currentAgentController = controller; // Store reference for message handler
+  const result = await controller.start();
+  currentAgentController = null; // Clear reference when done
+  return result;
 }
 
 /**
@@ -413,6 +634,9 @@ const isJobsPage = () => {
   return result;
 };
 
+// Store reference to current AgentController instance for message handler access
+let currentAgentController: AgentController | null = null;
+
 // Initialize content script
 function init() {
   if (!isJobsPage()) {
@@ -430,7 +654,7 @@ function init() {
   // Notify side panel that LinkedIn is active
   chrome.runtime
     .sendMessage({ type: 'PAGE_ACTIVE', data: { platform: 'LinkedIn' } })
-    .catch(() => {});
+    .catch(() => { });
 
   // Report auth state heuristic
   try {
@@ -458,7 +682,7 @@ function init() {
           const loggedIn = detectLoggedIn();
           chrome.runtime
             .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn } })
-            .catch(() => {});
+            .catch(() => { });
           sendResponse({ status: 'ok' });
         } catch {
           sendResponse({ status: 'error' });
@@ -470,8 +694,72 @@ function init() {
         sendResponse({ status: 'started' });
         break;
 
+      case 'LOG_MESSAGE': {
+        // Forward background script logs to agent-logs.txt
+        const { component, message: logMessage, data } = message.data;
+        logger.log(component, logMessage, data);
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
+      case 'EXTERNAL_ATS_DONE': {
+        // External ATS tab completed - mark the job as applied
+        const { success, jobId, error } = message.data || {};
+        logger.log('AgentController', `Received EXTERNAL_ATS_DONE: success=${success}, jobId=${jobId}`);
+        console.log('[AgentController] External ATS done:', { success, jobId });
+        
+        // Access the current AgentController instance
+        if (!currentAgentController) {
+          logger.error('AgentController', 'Received EXTERNAL_ATS_DONE but no active AgentController instance');
+          console.error('[AgentController] No active AgentController instance');
+          sendResponse({ status: 'error', message: 'No active agent controller' });
+          break;
+        }
+        
+        // Resolve promise from pendingJobs
+        logger.log('AgentController', `Looking for pending promise for job ${jobId}, pendingJobs size: ${currentAgentController.pendingJobs.size}`);
+        console.log('[AgentController] Pending jobs:', Array.from(currentAgentController.pendingJobs.keys()));
+        const pending = currentAgentController.pendingJobs.get(jobId);
+        
+        if (pending) {
+          logger.log('AgentController', `Found pending promise for job ${jobId}, resolving...`);
+          console.log('[AgentController] Found pending promise, resolving...');
+          
+          // Resolve the promise - processJob() will handle incrementing jobsApplied on success
+          // Do NOT increment here to avoid double-counting
+          if (success) {
+            logger.log('AgentController', `External ATS completed successfully for job ${jobId}`);
+            console.log('[AgentController] External ATS completed successfully');
+            pending.resolve({ success: true });
+          } else {
+            const errorMessage = error || 'External ATS application failed';
+            logger.error('AgentController', `ERROR: External ATS failed for job ${jobId}: ${errorMessage}`);
+            console.error('[AgentController] ERROR: External ATS failed:', errorMessage);
+            currentAgentController.results.errors.push({
+              jobId: jobId,
+              error: errorMessage,
+            });
+            // Reject the promise to continue processing (but mark as error)
+            const rejectionError = new Error(errorMessage);
+            logger.error('AgentController', `ERROR: Rejecting promise for job ${jobId} with error:`, {
+              message: rejectionError.message,
+              stack: rejectionError.stack,
+            });
+            pending.reject(rejectionError);
+          }
+          // Remove from pending map
+          currentAgentController.pendingJobs.delete(jobId);
+        } else {
+          logger.log('AgentController', `WARNING: Received EXTERNAL_ATS_DONE for unknown job ${jobId}`);
+          console.warn(`[AgentController] Received EXTERNAL_ATS_DONE for unknown job ${jobId}`);
+        }
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       case 'START_AGENT': {
         console.log('[Jobzippy] Starting agent on LinkedIn');
+        addActiveIndicator(); // Ensure indicator is visible
         (async () => {
           try {
             const result = await startAgent({
@@ -484,7 +772,7 @@ function init() {
                 type: 'AGENT_COMPLETED',
                 data: result,
               })
-              .catch(() => {});
+              .catch(() => { });
           } catch (error) {
             console.error('[Jobzippy] Agent error:', error);
             chrome.runtime
@@ -492,7 +780,7 @@ function init() {
                 type: 'AGENT_ERROR',
                 data: { error: String(error) },
               })
-              .catch(() => {});
+              .catch(() => { });
           }
         })();
         sendResponse({ status: 'started' });
@@ -507,8 +795,8 @@ function init() {
       case 'SCRAPE_JOBS': {
         console.log('[Jobzippy] LinkedIn received SCRAPE_JOBS command');
         try {
-          // Wait a bit for page to be fully loaded
-          setTimeout(() => {
+          // Scrape immediately - page should already be loaded when SCRAPE_JOBS is received
+          // (event-driven: SCRAPE_JOBS is sent after tabs.onUpdated with status === 'complete')
             const jobs = scrapeJobCards();
             const hasNextPage =
               getNextPageUrl() !== null ||
@@ -528,7 +816,6 @@ function init() {
                 },
               })
               .catch((err) => console.error('[Jobzippy] Error sending scraped jobs:', err));
-          }, 1000);
           sendResponse({ status: 'ok' });
         } catch (error) {
           console.error('[Jobzippy] Error scraping jobs:', error);
@@ -552,7 +839,7 @@ function init() {
                     ...details,
                   },
                 })
-                .catch(() => {});
+                .catch(() => { });
             } else {
               console.warn('[Jobzippy] Failed to scrape details for:', jobId);
               // Send failure so background doesn't hang (or let timeout handle it)
@@ -575,7 +862,7 @@ function init() {
                   type: 'PAGE_NAVIGATED',
                   data: { platform: 'LinkedIn', url: window.location.href },
                 })
-                .catch(() => {});
+                .catch(() => { });
             }, 2000);
             sendResponse({ status: 'ok', navigated: true });
           } else {
@@ -638,11 +925,15 @@ function addActiveIndicator() {
 
   document.body.appendChild(indicator);
 
-  // Remove after 5 seconds
+  // Remove indicator after animation completes (event-driven via transitionend)
+  indicator.addEventListener('transitionend', () => {
+    indicator.remove();
+  }, { once: true });
+  
+  // Start fade-out after 5 seconds (UI-only, acceptable)
   setTimeout(() => {
     indicator.style.transition = 'opacity 0.3s ease-out';
     indicator.style.opacity = '0';
-    setTimeout(() => indicator.remove(), 300);
   }, 5000);
 }
 
@@ -662,7 +953,19 @@ async function clickJobCard(jobId: string): Promise<{
 
   // Scroll into view
   jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Wait for scroll to complete (event-driven)
+  await new Promise<void>((resolve) => {
+    const checkScroll = () => {
+      const rect = jobCard.getBoundingClientRect();
+      const isVisible = rect.top >= 0 && rect.top <= window.innerHeight;
+      if (isVisible) {
+        resolve();
+      } else {
+        requestAnimationFrame(checkScroll);
+      }
+    };
+    requestAnimationFrame(checkScroll);
+  });
 
   // Find the title link and click it with preventDefault
   const titleLink = jobCard.querySelector('.job-card-list__title-link') as HTMLAnchorElement;
@@ -684,15 +987,14 @@ async function clickJobCard(jobId: string): Promise<{
     // Click the link
     titleLink.dispatchEvent(clickEvent);
 
-    // Clean up listener just in case
-    setTimeout(() => titleLink.removeEventListener('click', preventNav, true), 100);
+    // Listener is already set to { once: true }, so it auto-removes after first click
   } else {
     // Fallback: click the card itself
     jobCard.click();
   }
 
-  // Wait for details pane to load
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Wait for details pane to load (DOM-based, event-driven)
+  await waitForJobDetailsDom(5000);
 
   // Scrape the job description from the details pane
   const detailsContainer = document.querySelector(
@@ -1010,7 +1312,7 @@ function setupAuthObservers() {
           lastState = state;
           chrome.runtime
             .sendMessage({ type: 'AUTH_STATE', data: { platform: 'LinkedIn', loggedIn: state } })
-            .catch(() => {});
+            .catch(() => { });
         }
       } catch {
         // ignore
