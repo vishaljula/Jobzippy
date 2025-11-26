@@ -256,26 +256,45 @@
       </div>
     </div>
     <script>
-      // All 9 jobs data
+      // All 9 jobs data (full mixed run)
       const allJobs = [
-        // Page 1
-        { id: '123456', title: 'Senior Software Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', atsUrl: null },
-        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },
-        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html' },
-        // Page 2
-        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'motion-recruitment-apply.html' },
-        { id: '123460', title: 'DevOps Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Hybrid', salary: '$145,000 - $185,000', applyType: 'modal_apply', atsUrl: null },
-        { id: '123461', title: 'UX Designer', company: 'DesignHub', location: 'Los Angeles, CA', type: 'Remote', salary: '$120,000 - $150,000', applyType: 'external', atsUrl: 'indeed-apply.html' },
-        // Page 3
-        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },
-        { id: '123463', title: 'Frontend Developer', company: 'WebWorks', location: 'Portland, OR', type: 'Hybrid', salary: '$125,000 - $160,000', applyType: 'external', atsUrl: 'workday-apply.html' },
-        { id: '123464', title: 'ML Engineer', company: 'AI Innovations', location: 'San Jose, CA', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'easy_apply', atsUrl: 'linkedin-easy-apply.html' }
+        // Page 1 (index 0–2): PASS, PASS, MANUAL (tough flow)
+        { id: '123456', title: 'Senior Software Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', atsUrl: null },              // LinkedIn modal
+        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },      // Greenhouse
+        { id: '123461', title: 'UX Designer', company: 'DesignHub', location: 'Los Angeles, CA', type: 'Remote', salary: '$120,000 - $150,000', applyType: 'external', atsUrl: 'indeed-apply.html' },                 // Indeed-style ATS (manual_input_required)
+        // Page 2 (index 3–5): historically tricky flows (now fixed/handled)
+        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'motion-recruitment-apply.html' },      // Motion Recruitment
+        { id: '123464', title: 'ML Engineer', company: 'AI Innovations', location: 'San Jose, CA', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'easy_apply', atsUrl: 'linkedin-easy-apply.html' },      // LinkedIn Easy Apply in ATS
+        { id: '123463', title: 'Frontend Developer', company: 'WebWorks', location: 'Portland, OR', type: 'Hybrid', salary: '$125,000 - $160,000', applyType: 'external', atsUrl: 'workday-apply.html' },            // Workday external form
+        // Page 3 (index 6–8): PASS tail
+        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },          // Greenhouse
+        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html' },    // Workday
+        { id: '123460', title: 'DevOps Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Hybrid', salary: '$145,000 - $185,000', applyType: 'modal_apply', atsUrl: null }                             // LinkedIn modal
       ];
 
       let currentPage = 1;
       const jobsPerPage = 3;
+      let currentJob = null;
+
+      // Helper to POST submission data back to the mock server
+      function logMockSubmission(payload) {
+        try {
+          fetch('/mock-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).catch((err) => {
+            console.error('[LinkedIn Jobs Mock] Failed to log submission', err);
+          });
+        } catch (err) {
+          console.error('[LinkedIn Jobs Mock] Failed to log submission', err);
+        }
+      }
 
       function renderJobs() {
+        const totalPages = Math.max(1, Math.ceil(allJobs.length / jobsPerPage));
+        if (currentPage > totalPages) currentPage = totalPages;
+
         const startIndex = (currentPage - 1) * jobsPerPage;
         const endIndex = startIndex + jobsPerPage;
         const pageJobs = allJobs.slice(startIndex, endIndex);
@@ -303,10 +322,12 @@
 
         // Update pagination
         document.querySelectorAll('.page-btn').forEach(btn => {
-          btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
+          const pageNum = parseInt(btn.dataset.page);
+          btn.style.display = pageNum <= Math.ceil(allJobs.length / jobsPerPage) ? 'inline-block' : 'none';
+          btn.classList.toggle('active', pageNum === currentPage);
         });
         document.getElementById('prevBtn').disabled = currentPage === 1;
-        document.getElementById('nextBtn').disabled = currentPage === 3;
+        document.getElementById('nextBtn').disabled = currentPage >= Math.ceil(allJobs.length / jobsPerPage);
 
         // Re-attach event listeners
         attachJobCardListeners();
@@ -335,6 +356,8 @@
             const jobId = item.getAttribute('data-job-id');
             const job = allJobs.find(j => j.id === jobId);
             if (!job) return;
+
+            currentJob = job;
 
             const detailsContainer = document.querySelector('.jobs-details__main-content');
             detailsContainer.querySelector('#job-details-title').textContent = job.title;
@@ -391,7 +414,8 @@
       });
 
       document.getElementById('nextBtn').addEventListener('click', () => {
-        if (currentPage < 3) {
+        const totalPages = Math.max(1, Math.ceil(allJobs.length / jobsPerPage));
+        if (currentPage < totalPages) {
           currentPage++;
           renderJobs();
         }
@@ -413,7 +437,28 @@
       });
 
       document.getElementById('submitApplication').addEventListener('click', () => {
-        console.log('[LinkedIn Easy Apply] Application submitted via modal');
+        const modal = document.getElementById('easyApplyModal');
+        const inputs = modal.querySelectorAll('input');
+        const answers = {};
+
+        inputs.forEach((input) => {
+          if (!input.name) return;
+          answers[input.name] = input.value;
+        });
+
+        const jobId = currentJob?.id || null;
+
+        logMockSubmission({
+          atsType: 'linkedin_modal',
+          jobId,
+          url: window.location.href,
+          company: currentJob?.company || null,
+          title: currentJob?.title || null,
+          submittedAt: new Date().toISOString(),
+          answers,
+        });
+
+        console.log('[LinkedIn Easy Apply] Application submitted via modal', { jobId, answers });
         alert('Application submitted successfully!');
         document.getElementById('easyApplyModal').classList.remove('active');
       });
@@ -422,4 +467,3 @@
 </body>
 
 </html>
-```

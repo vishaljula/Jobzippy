@@ -6,7 +6,7 @@
  */
 
 import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, appendFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,6 +15,7 @@ const __dirname = dirname(__filename);
 
 const PORT = process.env.VITE_MOCK_PORT || 3000;
 const MOCKS_DIR = join(__dirname, '../public/mocks');
+const SUBMISSIONS_FILE = join(MOCKS_DIR, 'mock-submissions.log');
 
 // Platform configuration
 const PLATFORMS = [
@@ -25,6 +26,45 @@ const PLATFORMS = [
 const server = createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
+
+  // Capture mock form submissions as real HTTP POSTs
+  if (pathname === '/mock-submissions' && req.method === 'POST') {
+    let body = '';
+
+    req.on('data', (chunk) => {
+      body += chunk;
+      // Basic safeguard against very large payloads
+      if (body.length > 1e6) {
+        req.socket.destroy();
+      }
+    });
+
+    req.on('end', () => {
+      const timestamp = new Date().toISOString();
+      let payload;
+
+      try {
+        const json = JSON.parse(body || '{}');
+        payload = JSON.stringify(json, null, 2);
+      } catch {
+        payload = body || '{}';
+      }
+
+      const logEntry = `=== Mock Submission @ ${timestamp} ===\n${payload}\n\n`;
+
+      try {
+        appendFileSync(SUBMISSIONS_FILE, logEntry, 'utf-8');
+        console.log('[Mock Server] Recorded mock submission');
+      } catch (err) {
+        console.error('[Mock Server] Failed to write mock submission:', err);
+      }
+
+      res.writeHead(204);
+      res.end();
+    });
+
+    return;
+  }
 
   // Serve mock pages
   if (pathname.startsWith('/mocks/')) {

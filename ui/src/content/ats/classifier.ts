@@ -21,10 +21,12 @@ export type PageType =
 export type FieldPurpose =
   | 'firstName'
   | 'lastName'
+  | 'fullName'
   | 'email'
   | 'phone'
   | 'resume'
   | 'coverLetter'
+  | 'experience'
   | 'linkedin'
   | 'website'
   | 'password'
@@ -315,6 +317,17 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0.9,
   },
 
+  // Combined full name field (e.g. "Full name")
+  fullName: {
+    selectors: [
+      'input[name="fullName"]',
+      'input[name*="full" i][name*="name" i]',
+      'input[id*="full" i][id*="name" i]',
+      'input[placeholder*="full name" i]',
+    ],
+    weight: 0.8,
+  },
+
   resume: {
     selectors: [
       'input[type="file"][accept*="pdf"]',
@@ -340,6 +353,11 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
   },
 
   website: {
+    // Generic experience selector (e.g. "Years of experience")
+    experience: {
+      selectors: ['select[name*="experience" i]', 'select[id*="experience" i]'],
+      weight: 0.8,
+    },
     selectors: [
       'input[type="url"]',
       'input[name*="website" i]',
@@ -374,10 +392,7 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
   },
 
   clearance: {
-    selectors: [
-      'select[name*="clearance" i]',
-      'select[id*="clearance" i]',
-    ],
+    selectors: ['select[name*="clearance" i]', 'select[id*="clearance" i]'],
     weight: 0.8,
   },
 
@@ -392,11 +407,7 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
   },
 
   country: {
-    selectors: [
-      'select[name*="country" i]',
-      'select[id*="country" i]',
-      'select[name="country"]',
-    ],
+    selectors: ['select[name*="country" i]', 'select[id*="country" i]', 'select[name="country"]'],
     weight: 0.9,
   },
 
@@ -419,10 +430,7 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
   },
 
   conflictOfInterest: {
-    selectors: [
-      'select[name*="conflict" i]',
-      'select[id*="conflict" i]',
-    ],
+    selectors: ['select[name*="conflict" i]', 'select[id*="conflict" i]'],
     weight: 0.8,
   },
 
@@ -515,9 +523,7 @@ export function getVisibleModals(doc: Document): HTMLElement[] {
  * Cheap pre-click guess based on button attributes
  * Fast path for obvious cases (external ATS links, Easy Apply buttons)
  */
-export function cheapGuessFromButton(
-  applyButton: HTMLElement
-): 'modal' | 'external' | 'unknown' {
+export function cheapGuessFromButton(applyButton: HTMLElement): 'modal' | 'external' | 'unknown' {
   // Check <a> tags with external ATS domains
   if (applyButton.tagName === 'A') {
     const href = applyButton.getAttribute('href') || '';
@@ -549,11 +555,9 @@ export function cheapGuessFromButton(
  * Post-click classification: click Apply button and detect what happens
  * Returns classification based on actual outcome (modal, navigation, or new tab)
  */
-export async function classifyAfterApply(
-  applyButton: HTMLElement
-): Promise<PageClassification> {
+export async function classifyAfterApply(applyButton: HTMLElement): Promise<PageClassification> {
   const { logger } = await import('../../lib/logger');
-  
+
   logger.log('Classifier', 'Post-click classification: clicking Apply button...');
   console.log('[Classifier] Post-click classification: clicking Apply button...');
 
@@ -564,7 +568,7 @@ export async function classifyAfterApply(
 
   const initialUrl = window.location.href;
   const initialModals = getVisibleModals(document).length;
-  
+
   logger.log('Classifier', 'Before click', { url: initialUrl, modals: initialModals });
   console.log('[Classifier] Before click - URL:', initialUrl, 'Modals:', initialModals);
 
@@ -579,8 +583,13 @@ export async function classifyAfterApply(
   // Check what happened
   const newModals = getVisibleModals(document).length;
   const newUrl = window.location.href;
-  
-  logger.log('Classifier', 'After click', { url: newUrl, modals: newModals, urlChanged: newUrl !== initialUrl, modalsChanged: newModals > initialModals });
+
+  logger.log('Classifier', 'After click', {
+    url: newUrl,
+    modals: newModals,
+    urlChanged: newUrl !== initialUrl,
+    modalsChanged: newModals > initialModals,
+  });
   console.log('[Classifier] After click - URL:', newUrl, 'Modals:', newModals);
 
   if (newModals > initialModals) {
@@ -604,10 +613,15 @@ export async function classifyAfterApply(
     const response = await chrome.runtime.sendMessage({ type: 'CHECK_NEW_TAB' });
     logger.log('Classifier', 'CHECK_NEW_TAB response', response);
     console.log('[Classifier] CHECK_NEW_TAB response:', response);
-    
+
     if (response?.newTabId) {
-      logger.log('Classifier', `External tab detected: ${response.newTabId}, returning intermediate classification`);
-      console.log(`[Classifier] External tab detected: ${response.newTabId}, returning intermediate classification`);
+      logger.log(
+        'Classifier',
+        `External tab detected: ${response.newTabId}, returning intermediate classification`
+      );
+      console.log(
+        `[Classifier] External tab detected: ${response.newTabId}, returning intermediate classification`
+      );
       return {
         type: 'intermediate' as PageType, // Mark as intermediate, external tab will be handled separately
         confidence: 1.0,

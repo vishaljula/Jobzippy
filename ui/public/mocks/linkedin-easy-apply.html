@@ -476,6 +476,21 @@
         const totalSteps = 4;
         const formData = {};
 
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+            }
+        }
+
         // Open modal
         document.querySelector('.apply-button').addEventListener('click', () => {
             document.getElementById('easyApplyModal').classList.add('active');
@@ -598,6 +613,43 @@
                 alert('Please agree to the terms and conditions');
                 return;
             }
+
+            // Capture final answers including non-required fields
+            const modalRoot = document.querySelector('.modal');
+            const allInputs = modalRoot.querySelectorAll('input, textarea, select');
+            const answers = { ...formData };
+
+            allInputs.forEach((input) => {
+                if (!input.name) return;
+                if (input.type === 'file') {
+                    if (input.files && input.files[0]) {
+                        answers[input.name] = input.files[0].name || 'uploaded-file';
+                    }
+                    return;
+                }
+                if (input.type === 'radio') {
+                    if (input.checked) {
+                        answers[input.name] = input.value;
+                    }
+                    return;
+                }
+                if (input.type === 'checkbox') {
+                    answers[input.name] = !!input.checked;
+                    return;
+                }
+                answers[input.name] = input.value;
+            });
+
+            const urlParamsForJob = new URLSearchParams(window.location.search);
+            const jobIdForLog = urlParamsForJob.get('job') || jobId || null;
+
+            logMockSubmission({
+                atsType: 'linkedin_easy_apply',
+                jobId: jobIdForLog,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
 
             // Hide form, show success
             document.querySelectorAll('.form-section').forEach(s => s.style.display = 'none');

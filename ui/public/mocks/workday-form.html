@@ -281,6 +281,21 @@
             input.addEventListener('input', checkFormValidity);
         });
 
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[Workday Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[Workday Mock] Failed to log submission', err);
+            }
+        }
+
         // Form submission
         document.getElementById('application-form').addEventListener('submit', function (e) {
             e.preventDefault();
@@ -288,6 +303,26 @@
             const submitBtn = document.getElementById('submit-btn');
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
+
+            // Capture current answers
+            const form = document.getElementById('application-form');
+            const formData = new FormData(form);
+            const answers = Object.fromEntries(formData.entries());
+            const resumeFile = formData.get('resume');
+            if (resumeFile && typeof resumeFile === 'object') {
+                answers.resume = resumeFile.name || 'uploaded-file';
+            }
+
+            const urlParamsForJob = new URLSearchParams(window.location.search);
+            const jobId = urlParamsForJob.get('job') || null;
+
+            logMockSubmission({
+                atsType: 'workday_form',
+                jobId,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
 
             // Simulate submission
             setTimeout(() => {

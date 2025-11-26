@@ -219,6 +219,27 @@
     </div>
 
     <script>
+        // Preserve jobId when navigating to the actual Workday form
+        (function propagateJobIdToFormLinks() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const jobId = params.get('job');
+                if (!jobId) return;
+
+                document.querySelectorAll('.workday-popup a.option-button').forEach((link) => {
+                    try {
+                        const url = new URL(link.href);
+                        url.searchParams.set('job', jobId);
+                        link.href = url.toString();
+                    } catch {
+                        // Ignore malformed URLs in mocks
+                    }
+                });
+            } catch (err) {
+                console.error('[Workday Apply Mock] Failed to propagate jobId to form links', err);
+            }
+        })();
+
         // Show modal when Apply button is clicked
         document.getElementById('apply-btn').addEventListener('click', function () {
             document.getElementById('modal-overlay').classList.add('active');

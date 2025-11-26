@@ -297,6 +297,21 @@
     </div>
 
     <script>
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[Indeed Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[Indeed Mock] Failed to log submission', err);
+            }
+        }
+
         // Open modal
         document.getElementById('indeedApplyButton').addEventListener('click', () => {
             document.getElementById('indeedApplyModal').classList.add('active');
@@ -330,6 +345,21 @@
             // Get form data
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
+            const resumeFile = formData.get('resume');
+            if (resumeFile && typeof resumeFile === 'object') {
+                data.resume = resumeFile.name || 'uploaded-file';
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobId = urlParams.get('job') || null;
+
+            logMockSubmission({
+                atsType: 'indeed',
+                jobId,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers: data,
+            });
 
             console.log('[Indeed Apply] Application submitted:', data);
 

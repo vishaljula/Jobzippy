@@ -411,6 +411,21 @@
     </div>
 
     <script>
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[Greenhouse Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[Greenhouse Mock] Failed to log submission', err);
+            }
+        }
+
         // File upload handling
         document.getElementById('resume').addEventListener('change', function (e) {
             const fileName = e.target.files[0]?.name;
@@ -435,6 +450,31 @@
             const submitButton = document.querySelector('.submit-button');
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
+
+            // Capture current answers
+            const form = document.getElementById('application-form');
+            const formData = new FormData(form);
+            const answers = Object.fromEntries(formData.entries());
+
+            const resumeFile = formData.get('resume');
+            if (resumeFile && typeof resumeFile === 'object') {
+                answers.resume = resumeFile.name || 'uploaded-file';
+            }
+            const coverFile = formData.get('cover_letter');
+            if (coverFile && typeof coverFile === 'object') {
+                answers.cover_letter = coverFile.name || 'uploaded-file';
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobId = urlParams.get('job') || null;
+
+            logMockSubmission({
+                atsType: 'greenhouse',
+                jobId,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
 
             // Simulate submission
             setTimeout(() => {

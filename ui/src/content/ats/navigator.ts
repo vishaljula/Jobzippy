@@ -14,11 +14,7 @@ import {
 } from './page-classifier';
 import { createFormFillerFromVault } from './form-filler';
 import { logger } from '../../lib/logger';
-import {
-  waitForNavigation,
-  waitForDOMStable,
-  waitForElement,
-} from '../../lib/dom-events';
+import { waitForNavigation, waitForDOMStable } from '../../lib/dom-events';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -42,6 +38,13 @@ interface NavigationState {
   clickedElements: Set<string>;
   attempts: number;
   maxAttempts: number;
+  /**
+   * Whether we've already treated a "form" / "form_modal" page as an intermediate
+   * step (clicked an Apply-style button) on the current URL. This prevents us
+   * from getting stuck repeatedly treating the same form-modal as "intermediate"
+   * after the real form/modal has opened (e.g. Indeed-style Apply flows).
+   */
+  usedIntermediateOnFormPage: boolean;
   history: Array<{
     url: string;
     classification: PageClassification;
@@ -55,7 +58,7 @@ const navState: NavigationState = {
   clickedElements: new Set(),
   attempts: 0,
   maxAttempts: 5,
-  initialUrl: '',
+  usedIntermediateOnFormPage: false,
   history: [],
 };
 
@@ -67,12 +70,13 @@ export interface NavigationResult {
   success: boolean;
   finalClassification?: PageClassification;
   reason?:
-  | 'form_found'
-  | 'account_required'
-  | 'complex_captcha'
-  | 'max_attempts'
-  | 'unknown_page'
-  | 'external_ats';
+    | 'form_found'
+    | 'account_required'
+    | 'complex_captcha'
+    | 'manual_input_required'
+    | 'max_attempts'
+    | 'unknown_page'
+    | 'external_ats';
   message?: string;
 }
 
@@ -93,6 +97,7 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
   navState.attempts = 0;
   navState.visitedUrls.clear();
   navState.clickedElements.clear();
+  navState.usedIntermediateOnFormPage = false;
   navState.history = [];
 
   // ========================================================================
@@ -108,9 +113,13 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
     // Check if URL changed - if so, clear clicked elements (new page = new elements)
     const currentUrl = window.location.href;
     if (currentUrl !== navState.initialUrl && navState.attempts > 1) {
-      logger.log('Navigator', `URL changed from ${navState.initialUrl} to ${currentUrl}, clearing clicked elements`);
+      logger.log(
+        'Navigator',
+        `URL changed from ${navState.initialUrl} to ${currentUrl}, clearing clicked elements`
+      );
       console.log(`[Navigator] URL changed, clearing clicked elements`);
       navState.clickedElements.clear();
+      navState.usedIntermediateOnFormPage = false;
       navState.initialUrl = currentUrl; // Update initial URL for next check
     }
 
@@ -119,8 +128,13 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
     console.log('[Navigator] Classifying current page...');
     const classification = classifyPage();
     logClassification(classification);
-    logger.log('Navigator', `Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`);
-    console.log(`[Navigator] Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`);
+    logger.log(
+      'Navigator',
+      `Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`
+    );
+    console.log(
+      `[Navigator] Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`
+    );
 
     // Record in history
     navState.history.push({
@@ -133,25 +147,36 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
     // Handle based on page type
     logger.log('Navigator', `Handling page type: ${classification.type}`);
     console.log(`[Navigator] Handling page type: ${classification.type}`);
-    
+
     let result: NavigationResult | null = null;
     try {
       result = await handlePageType(classification);
     } catch (error) {
       logger.error('Navigator', `Error handling page type ${classification.type}:`, error);
       console.error(`[Navigator] Error handling page type ${classification.type}:`, error);
-      // Continue loop - might recover on next attempt
-      navState.attempts++;
-      if (navState.attempts >= navState.maxAttempts) {
-        // Max attempts reached, return failure
+      const message = String(error);
+      // If we explicitly signaled manual input is required, exit early with that reason
+      if (typeof message === 'string' && message.startsWith('manual_input_required:')) {
+        const userMessage = message.replace('manual_input_required: ', '');
+        logger.warn('Navigator', 'Manual input required - stopping navigation', userMessage);
         return {
           success: false,
-          reason: 'error',
-          message: `Error handling page type ${classification.type}: ${error instanceof Error ? error.message : String(error)}`,
+          reason: 'manual_input_required',
+          finalClassification: classification,
+          message: userMessage,
+        };
+      }
+      // Otherwise, keep looping until maxAttempts, then fail as a generic error
+      navState.attempts++;
+      if (navState.attempts >= navState.maxAttempts) {
+        return {
+          success: false,
+          reason: 'unknown_page',
+          message: `Error handling page type ${classification.type}: ${message}`,
           finalClassification: classification,
         };
       }
-      continue; // Retry
+      continue; // Retry with updated DOM/URL
     }
 
     if (result) {
@@ -160,35 +185,9 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
       return result;
     }
 
-    // Wait for page changes (event-driven: popstate, hashchange, or MutationObserver)
-    logger.log('Navigator', 'Waiting for page changes (event-driven)...');
-    console.log('[Navigator] Waiting for page changes (event-driven)...');
-    
-    // Use event-driven waitForNavigation (no timeout - waits indefinitely for events)
-    const navigated = await waitForNavigation(0);
-    
-    if (navigated) {
-      // After navigation, check if URL changed and continue loop
-      const newUrl = window.location.href;
-      if (newUrl !== navState.initialUrl) {
-        logger.log('Navigator', `URL changed after navigation event: ${navState.initialUrl} -> ${newUrl}, continuing loop...`);
-        console.log(`[Navigator] URL changed, continuing loop...`);
-        navState.clickedElements.clear();
-        navState.initialUrl = newUrl;
-      }
-    } else {
-      // No navigation event fired, but check if URL changed anyway (might have been programmatic)
-      const newUrl = window.location.href;
-      if (newUrl !== navState.initialUrl) {
-        logger.log('Navigator', `URL changed (no event detected): ${navState.initialUrl} -> ${newUrl}, continuing loop...`);
-        console.log(`[Navigator] URL changed (no event), continuing loop...`);
-        navState.clickedElements.clear();
-        navState.initialUrl = newUrl;
-      } else {
-        logger.log('Navigator', `No navigation detected, continuing loop anyway...`);
-        console.log(`[Navigator] No navigation, continuing loop...`);
-      }
-    }
+    // No terminal result yet. Do not assume URL changes; handlers (clickElement,
+    // waitForDOMStable, etc.) already wait for DOM or navigation events as needed.
+    // Simply continue the loop and re-classify the current DOM on the next iteration.
   }
 
   logger.error('Navigator', 'Max attempts reached without finding application form');
@@ -209,6 +208,30 @@ async function handlePageType(
   switch (classification.type) {
     case 'form':
     case 'form_modal':
+      // If we see a form classification but the actual submit control is not visible yet,
+      // prefer to treat this as an intermediate "open real form" step if there is a
+      // visible apply-style action (e.g. an "Apply now" button that opens a modal).
+      //
+      // NOTE: We only do this "intermediate hop" once per URL. After we've already
+      // clicked an Apply-style button on this form/modal page, we should treat it
+      // as a real form even if the submit button is off-screen (e.g. requires scroll),
+      // otherwise we can get stuck re-classifying the same page as "form_modal"
+      // and never advancing to filling/submitting the inner form.
+      if (
+        !hasVisibleSubmitAction(classification) &&
+        hasVisibleApplyAction(classification) &&
+        !navState.usedIntermediateOnFormPage
+      ) {
+        logger.log(
+          'Navigator',
+          'Form classified, but submit is not visible and a visible apply action exists – handling as intermediate step first'
+        );
+        console.log(
+          '[Navigator] Form classified but submit hidden; using apply action to advance to real form stage...'
+        );
+        navState.usedIntermediateOnFormPage = true;
+        return await handleIntermediate(classification);
+      }
       return handleForm(classification);
 
     case 'modal':
@@ -229,6 +252,30 @@ async function handlePageType(
     default:
       return null;
   }
+}
+
+/**
+ * Determine if there is a visible submit action for the current classification.
+ */
+function hasVisibleSubmitAction(classification: PageClassification): boolean {
+  const submitAction = findBestAction(classification, 'submit');
+  if (!submitAction) return false;
+  const el = submitAction.element as HTMLElement | null;
+  if (!el) return false;
+  return isElementActuallyVisible(el) && isElementInViewport(el);
+}
+
+/**
+ * Determine if there is a visible apply-style action (e.g. "Apply now" button).
+ * Used to decide when to treat an early stage as "intermediate" even if the
+ * classifier labeled the page as a form/modal based on hidden DOM.
+ */
+function hasVisibleApplyAction(classification: PageClassification): boolean {
+  const applyAction = findBestAction(classification, 'apply');
+  if (!applyAction) return false;
+  const el = applyAction.element as HTMLElement | null;
+  if (!el) return false;
+  return isElementActuallyVisible(el) && isElementInViewport(el);
 }
 
 /**
@@ -291,37 +338,40 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
       // Validation failed, but try to submit anyway (some forms have client-side validation that's too strict)
       logger.log('Navigator', 'Form validation failed, but attempting to submit anyway...');
       console.warn('[Navigator] Form validation failed, but attempting to submit anyway...');
-      
+
       // Try clicking submit button anyway - some forms submit despite validation errors
       const submitAction = findBestAction(classification, 'submit');
       if (submitAction) {
         logger.log('Navigator', 'Clicking submit button despite validation failure...');
         console.log('[Navigator] Clicking submit button despite validation failure...');
         await clickElement(submitAction, 'submit_button_force');
-        
+
         // Wait for success indicators to appear (event-driven)
         await waitForDOMStable(500, 3000);
-        
+
         // Check for success indicators
         const successIndicators = [
           document.querySelector('.success-message'),
           document.body.textContent?.toLowerCase().includes('submitted'),
           document.body.textContent?.toLowerCase().includes('success'),
         ];
-        
-        if (successIndicators.some(ind => ind)) {
+
+        if (successIndicators.some((ind) => ind)) {
           logger.log('Navigator', '✓ Form submitted successfully (despite validation failure)');
           console.log('[Navigator] ✓ Form submitted successfully (despite validation failure)');
-      return {
-        success: true,
-        finalClassification: classification,
-        reason: 'form_found',
+          return {
+            success: true,
+            finalClassification: classification,
+            reason: 'form_found',
             message: 'Application form filled and submitted',
           };
         }
       }
-      
-      logger.log('Navigator', 'Form filled but not submitted (validation failed and submission attempt failed)');
+
+      logger.log(
+        'Navigator',
+        'Form filled but not submitted (validation failed and submission attempt failed)'
+      );
       console.warn('[Navigator] Form filled but not submitted (validation failed)');
       return {
         success: true, // Still return success since we filled the form - user can manually submit
@@ -348,8 +398,21 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
 async function handleModal(classification: PageClassification): Promise<NavigationResult | null> {
   logger.log('Navigator', 'Handling modal...');
   console.log('[Navigator] Handling modal...');
-  logger.log('Navigator', `Modal has ${classification.actions.length} actions`, classification.actions.map(a => ({ purpose: a.purpose, text: a.element.textContent?.substring(0, 50) })));
-  console.log('[Navigator] Modal actions:', classification.actions.map(a => ({ purpose: a.purpose, text: a.element.textContent?.substring(0, 50) })));
+  logger.log(
+    'Navigator',
+    `Modal has ${classification.actions.length} actions`,
+    classification.actions.map((a) => ({
+      purpose: a.purpose,
+      text: a.element.textContent?.substring(0, 50),
+    }))
+  );
+  console.log(
+    '[Navigator] Modal actions:',
+    classification.actions.map((a) => ({
+      purpose: a.purpose,
+      text: a.element.textContent?.substring(0, 50),
+    }))
+  );
 
   // Check if this is a Workday-style options modal
   const hasApplyOption = classification.actions.some((a) => a.purpose === 'apply');
@@ -360,38 +423,51 @@ async function handleModal(classification: PageClassification): Promise<Navigati
     console.log('[Navigator] Detected options modal');
 
     // First, check if modal is visible - if not, we need to click a button to show it
-    const modalElement = document.querySelector('[role="dialog"], .modal-overlay, [data-automation-id="wd-popup-frame"]') as HTMLElement;
-    const isModalVisible = modalElement && (
+    const modalElement = document.querySelector(
+      '[role="dialog"], .modal-overlay, [data-automation-id="wd-popup-frame"]'
+    ) as HTMLElement;
+    const isModalVisible =
+      modalElement &&
       window.getComputedStyle(modalElement).display !== 'none' &&
       window.getComputedStyle(modalElement).visibility !== 'hidden' &&
-      window.getComputedStyle(modalElement).opacity !== '0'
-    );
+      window.getComputedStyle(modalElement).opacity !== '0';
 
     logger.log('Navigator', `Modal visibility check:`, {
       found: !!modalElement,
       visible: isModalVisible,
       display: modalElement ? window.getComputedStyle(modalElement).display : 'N/A',
     });
-    console.log('[Navigator] Modal visibility:', { found: !!modalElement, visible: isModalVisible });
+    console.log('[Navigator] Modal visibility:', {
+      found: !!modalElement,
+      visible: isModalVisible,
+    });
 
     // If modal is not visible, find and click the button that shows it
     if (!isModalVisible) {
       logger.log('Navigator', 'Modal is hidden, looking for button to show modal...');
       console.log('[Navigator] Modal is hidden, looking for button to show modal');
-      
-      // Look for common buttons that show modals: "Apply", "Apply for this Position", etc.
-      const allShowModalButtons = Array.from(document.querySelectorAll('button, a')).filter((el) => {
-        const text = el.textContent?.toLowerCase() || '';
-        return (
-          text.includes('apply') &&
-          !text.includes('autofill') &&
-          !text.includes('manual') &&
-          !text.includes('last application')
-        );
-      }) as HTMLElement[];
 
-      logger.log('Navigator', `Found ${allShowModalButtons.length} potential buttons to show modal`);
-      console.log('[Navigator] Found buttons:', allShowModalButtons.map(b => b.textContent?.substring(0, 50)));
+      // Look for common buttons that show modals: "Apply", "Apply for this Position", etc.
+      const allShowModalButtons = Array.from(document.querySelectorAll('button, a')).filter(
+        (el) => {
+          const text = el.textContent?.toLowerCase() || '';
+          return (
+            text.includes('apply') &&
+            !text.includes('autofill') &&
+            !text.includes('manual') &&
+            !text.includes('last application')
+          );
+        }
+      ) as HTMLElement[];
+
+      logger.log(
+        'Navigator',
+        `Found ${allShowModalButtons.length} potential buttons to show modal`
+      );
+      console.log(
+        '[Navigator] Found buttons:',
+        allShowModalButtons.map((b) => b.textContent?.substring(0, 50))
+      );
 
       // Filter to only visible buttons (check parent chain)
       const visibleShowModalButtons = allShowModalButtons.filter((btn) => {
@@ -403,15 +479,21 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         return isVisible;
       });
 
-      logger.log('Navigator', `[MODAL] Filtered to ${visibleShowModalButtons.length} visible show buttons`);
+      logger.log(
+        'Navigator',
+        `[MODAL] Filtered to ${visibleShowModalButtons.length} visible show buttons`
+      );
       console.log(`[Navigator] [MODAL] ${visibleShowModalButtons.length} visible show buttons`);
 
       if (visibleShowModalButtons.length > 0) {
         // Click the first visible button that shows the modal
         const showButton = visibleShowModalButtons[0];
-        logger.log('Navigator', `Clicking button to show modal: ${showButton.textContent?.substring(0, 50)}`);
+        logger.log(
+          'Navigator',
+          `Clicking button to show modal: ${showButton.textContent?.substring(0, 50)}`
+        );
         console.log('[Navigator] Clicking button to show modal:', showButton.textContent);
-        
+
         await clickElement(
           {
             element: showButton,
@@ -426,16 +508,19 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         // Wait for modal to become visible
         logger.log('Navigator', 'Waiting for modal to become visible...');
         console.log('[Navigator] Waiting for modal to become visible');
-        
+
         // Wait up to 3 seconds for modal to appear
         const modalAppeared = await new Promise<boolean>((resolve) => {
           const checkInterval = setInterval(() => {
-            const modal = document.querySelector('[role="dialog"], .modal-overlay.active, [data-automation-id="wd-popup-frame"]') as HTMLElement;
-            if (modal && (
+            const modal = document.querySelector(
+              '[role="dialog"], .modal-overlay.active, [data-automation-id="wd-popup-frame"]'
+            ) as HTMLElement;
+            if (
+              modal &&
               window.getComputedStyle(modal).display !== 'none' &&
               window.getComputedStyle(modal).visibility !== 'hidden' &&
               window.getComputedStyle(modal).opacity !== '0'
-            )) {
+            ) {
               clearInterval(checkInterval);
               resolve(true);
             }
@@ -470,10 +555,13 @@ async function handleModal(classification: PageClassification): Promise<Navigati
 
     // Find all apply actions and filter to only visible ones
     const allApplyActions = classification.actions.filter((a) => a.purpose === 'apply');
-    
-    logger.log('Navigator', `[MODAL] Found ${allApplyActions.length} apply actions, checking visibility...`);
+
+    logger.log(
+      'Navigator',
+      `[MODAL] Found ${allApplyActions.length} apply actions, checking visibility...`
+    );
     console.log(`[Navigator] [MODAL] Found ${allApplyActions.length} apply actions`);
-    
+
     // Filter to only visible actions (avoids hidden modals - getComputedStyle already accounts for parent styles)
     const visibleApplyActions = allApplyActions.filter((action) => {
       const isVisible = isElementActuallyVisible(action.element);
@@ -484,16 +572,19 @@ async function handleModal(classification: PageClassification): Promise<Navigati
       });
       return isVisible;
     });
-    
-    logger.log('Navigator', `[MODAL] Filtered to ${visibleApplyActions.length} visible apply actions`);
+
+    logger.log(
+      'Navigator',
+      `[MODAL] Filtered to ${visibleApplyActions.length} visible apply actions`
+    );
     console.log(`[Navigator] [MODAL] ${visibleApplyActions.length} visible apply actions`);
-    
+
     if (visibleApplyActions.length === 0) {
       logger.warn('Navigator', '[MODAL] No visible apply actions found - all are hidden');
       console.warn('[Navigator] [MODAL] No visible apply actions found');
       return null; // Continue navigation loop
     }
-    
+
     // Priority: Autofill > Manual > Last Application > Generic Apply
     // Now only selecting from visible actions
     let bestAction: DetectedField | undefined;
@@ -506,7 +597,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         break;
       }
     }
-    
+
     if (!bestAction) {
       for (const action of visibleApplyActions) {
         const text = action.element.textContent?.toLowerCase() || '';
@@ -518,7 +609,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         }
       }
     }
-    
+
     if (!bestAction) {
       for (const action of visibleApplyActions) {
         const text = action.element.textContent?.toLowerCase() || '';
@@ -530,7 +621,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         }
       }
     }
-    
+
     // Fallback to first visible apply action
     if (!bestAction && visibleApplyActions.length > 0) {
       bestAction = visibleApplyActions[0];
@@ -539,9 +630,12 @@ async function handleModal(classification: PageClassification): Promise<Navigati
     }
 
     if (bestAction) {
-      logger.log('Navigator', `[MODAL] Clicking apply option: ${bestAction.element.textContent?.substring(0, 50)}`);
+      logger.log(
+        'Navigator',
+        `[MODAL] Clicking apply option: ${bestAction.element.textContent?.substring(0, 50)}`
+      );
       console.log('[Navigator] [MODAL] Clicking apply option:', bestAction.element.textContent);
-      
+
       try {
         await clickElement(bestAction, 'apply_option');
         logger.log('Navigator', '[MODAL] ✓ Apply option clicked successfully');
@@ -552,7 +646,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
         // Re-throw to be caught by handlePageType's try-catch
         throw error;
       }
-      
+
       // If the click triggers full-page navigation (e.g., link with href), the page will reload
       // and content script will restart, so intelligentNavigate() will continue on the new page
       // No need to wait for navigation events here - just return and let the page reload if needed
@@ -699,10 +793,10 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
     return false;
   }
 
-  logger.log('Navigator', 'Submit button found', { 
-    purpose: submitAction.purpose, 
+  logger.log('Navigator', 'Submit button found', {
+    purpose: submitAction.purpose,
     confidence: submitAction.confidence,
-    selector: submitAction.selectors[0] 
+    selector: submitAction.selectors[0],
   });
   console.log('[Navigator] Submit button found:', submitAction.selectors[0]);
 
@@ -711,7 +805,7 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
   if (formElement) {
     logger.log('Navigator', 'Checking form validity...');
     console.log('[Navigator] Checking form validity...');
-    
+
     // Check for invalid fields before calling checkValidity
     const invalidFields: Array<{ name: string; element: HTMLElement; message: string }> = [];
     const allInputs = formElement.querySelectorAll('input, select, textarea');
@@ -725,21 +819,41 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
         });
       }
     });
-    
+
     if (invalidFields.length > 0) {
-      logger.log('Navigator', `Form validation failed: ${invalidFields.length} invalid fields`, invalidFields.map(f => ({ name: f.name, message: f.message })));
-      console.warn('[Navigator] Form validation failed. Invalid fields:', invalidFields.map(f => ({ name: f.name, message: f.message, value: (f.element as HTMLInputElement | HTMLSelectElement).value })));
-    formElement.reportValidity();
-    return false;
+      logger.log(
+        'Navigator',
+        `Form validation failed: ${invalidFields.length} invalid fields`,
+        invalidFields.map((f) => ({ name: f.name, message: f.message }))
+      );
+      console.warn(
+        '[Navigator] Form validation failed. Invalid fields:',
+        invalidFields.map((f) => ({
+          name: f.name,
+          message: f.message,
+          value: (f.element as HTMLInputElement | HTMLSelectElement).value,
+        }))
+      );
+      formElement.reportValidity();
+      // This form requires answers we don't have (e.g. years of experience).
+      // Treat as a "manual input required" page instead of force-submitting.
+      const summary = invalidFields.map((f) => f.name).join(', ');
+      throw new Error(`manual_input_required: Required fields missing or invalid: ${summary}`);
     }
-    
+
     if (!formElement.checkValidity()) {
       logger.log('Navigator', 'Form validation failed (checkValidity returned false)');
       console.warn('[Navigator] Form validation failed (checkValidity returned false)');
-      
+
       // Log which fields are invalid for debugging
       const allInputs = formElement.querySelectorAll('input, select, textarea');
-      const invalidFields: Array<{ name: string; type: string; required: boolean; value: string; message: string }> = [];
+      const invalidFields: Array<{
+        name: string;
+        type: string;
+        required: boolean;
+        value: string;
+        message: string;
+      }> = [];
       allInputs.forEach((input) => {
         const htmlInput = input as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
         if (htmlInput.required && !htmlInput.validity.valid) {
@@ -752,14 +866,21 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
           });
         }
       });
-      
+
       if (invalidFields.length > 0) {
         logger.log('Navigator', `Invalid required fields: ${invalidFields.length}`, invalidFields);
         console.warn('[Navigator] Invalid required fields:', invalidFields);
-        logger.error('Navigator', 'Cannot submit form - required fields are missing or invalid. Fields needed:', invalidFields.map(f => ({ name: f.name, type: f.type, message: f.message })));
-        console.error('[Navigator] Cannot submit form - required fields are missing or invalid:', invalidFields);
+        logger.error(
+          'Navigator',
+          'Cannot submit form - required fields are missing or invalid. Fields needed:',
+          invalidFields.map((f) => ({ name: f.name, type: f.type, message: f.message }))
+        );
+        console.error(
+          '[Navigator] Cannot submit form - required fields are missing or invalid:',
+          invalidFields
+        );
       }
-      
+
       formElement.reportValidity();
       return false;
     }
@@ -793,22 +914,22 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
       // Timeout after 5 seconds
       setTimeout(() => {
         window.removeEventListener('jobzippy-alert', handleAlert);
-        
+
         // Check if we missed an alert stored in DOM
         const alertDiv = document.getElementById('jobzippy-last-alert');
         if (alertDiv) {
-           const msg = alertDiv.textContent;
-           const timestamp = parseInt(alertDiv.getAttribute('data-timestamp') || '0');
-           // Only consider recent alerts (last 5 seconds)
-           if (msg && (Date.now() - timestamp < 5000)) {
-             console.log('[Navigator] Found missed alert in DOM:', msg);
-             if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('submitted')) {
-               resolve(true);
-               return;
-             }
-           }
+          const msg = alertDiv.textContent;
+          const timestamp = parseInt(alertDiv.getAttribute('data-timestamp') || '0');
+          // Only consider recent alerts (last 5 seconds)
+          if (msg && Date.now() - timestamp < 5000) {
+            console.log('[Navigator] Found missed alert in DOM:', msg);
+            if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('submitted')) {
+              resolve(true);
+              return;
+            }
+          }
         }
-        
+
         resolve(false);
       }, 5000);
     });
@@ -844,10 +965,11 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
       document.body.textContent?.toLowerCase().includes('thank you for applying'),
       // Form state - if form is gone or disabled, might indicate success
       formElement && formElement.style.display === 'none',
-      submitAction.element.disabled && submitAction.element.textContent?.toLowerCase().includes('submitted'),
+      submitAction.element.disabled &&
+        submitAction.element.textContent?.toLowerCase().includes('submitted'),
     ];
 
-    const hasSuccessIndicator = successIndicators.some(ind => {
+    const hasSuccessIndicator = successIndicators.some((ind) => {
       if (typeof ind === 'boolean') return ind;
       if (ind instanceof Element) {
         const isVisible = window.getComputedStyle(ind).display !== 'none';
@@ -859,12 +981,17 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
     if (hasSuccessIndicator) {
       logger.log('Navigator', 'Success indicator found in DOM');
       console.log('[Navigator] Success indicator found in DOM');
-    return true;
+      return true;
     }
 
     // No success detected - return false to indicate failure
-    logger.log('Navigator', 'WARNING: No success alert or DOM indicator detected - form submission may have failed');
-    console.warn('[Navigator] No success alert or DOM indicator detected - form submission may have failed');
+    logger.log(
+      'Navigator',
+      'WARNING: No success alert or DOM indicator detected - form submission may have failed'
+    );
+    console.warn(
+      '[Navigator] No success alert or DOM indicator detected - form submission may have failed'
+    );
     return false;
   } catch (error) {
     logger.error('Navigator', 'Error submitting form', error);
@@ -878,27 +1005,24 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
 // ============================================================================
 
 /**
- * Check if an element is actually visible
- * Note: getComputedStyle() already accounts for parent styles (display:none, visibility:hidden, opacity:0)
- * So we only need to check the element itself, plus some edge cases
+ * Check if an element is actually rendered and not hidden by styles.
+ * This does NOT enforce being in the viewport; viewport checks are done separately.
  */
 function isElementActuallyVisible(element: HTMLElement): boolean {
-  const elementRect = element.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
   const style = window.getComputedStyle(element);
-  
+
   // Check 1: Element must have dimensions
-  if (elementRect.width === 0 || elementRect.height === 0) {
-    logger.log('Navigator', `[VISIBILITY] Element has no dimensions: ${element.textContent?.substring(0, 30)}`);
+  if (rect.width === 0 || rect.height === 0) {
+    logger.log(
+      'Navigator',
+      `[VISIBILITY] Element has no dimensions: ${element.textContent?.substring(0, 30)}`
+    );
     return false;
   }
-  
+
   // Check 2: Computed style (already accounts for parent styles)
-  // If parent has display:none, this will already be 'none'
-  if (
-    style.display === 'none' ||
-    style.visibility === 'hidden' ||
-    style.opacity === '0'
-  ) {
+  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
     logger.log('Navigator', `[VISIBILITY] Element hidden by computed style:`, {
       element: element.textContent?.substring(0, 30),
       display: style.display,
@@ -907,12 +1031,15 @@ function isElementActuallyVisible(element: HTMLElement): boolean {
     });
     return false;
   }
-  
+
   // Check 3: aria-hidden attribute (not reflected in computed styles, need to check parent chain)
   let current: HTMLElement | null = element;
   while (current) {
     if (current.getAttribute('aria-hidden') === 'true') {
-      logger.log('Navigator', `[VISIBILITY] Element has aria-hidden=true in parent chain: ${current.tagName}`);
+      logger.log(
+        'Navigator',
+        `[VISIBILITY] Element has aria-hidden=true in parent chain: ${current.tagName}`
+      );
       return false;
     }
     current = current.parentElement;
@@ -920,20 +1047,29 @@ function isElementActuallyVisible(element: HTMLElement): boolean {
       break;
     }
   }
-  
-  // Check 4: Element must be in viewport (or at least partially visible)
-  const isInViewport = (
-    elementRect.top < window.innerHeight &&
-    elementRect.bottom > 0 &&
-    elementRect.left < window.innerWidth &&
-    elementRect.right > 0
-  );
-  
-  if (!isInViewport) {
-    logger.log('Navigator', `[VISIBILITY] Element not in viewport: ${element.textContent?.substring(0, 30)}`);
+
+  return true;
+}
+
+/**
+ * Check if an element is within the viewport (at least partially visible).
+ */
+function isElementInViewport(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const inViewport =
+    rect.top < window.innerHeight &&
+    rect.bottom > 0 &&
+    rect.left < window.innerWidth &&
+    rect.right > 0;
+
+  if (!inViewport) {
+    logger.log(
+      'Navigator',
+      `[VISIBILITY] Element not in viewport: ${element.textContent?.substring(0, 30)}`
+    );
     return false;
   }
-  
+
   return true;
 }
 
@@ -951,21 +1087,14 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
     return;
   }
 
-  // Verify element is visible and clickable before attempting click
-  // Use the same visibility check we use for filtering buttons
-  const isVisible = isElementActuallyVisible(element);
-  const rect = element.getBoundingClientRect();
-  const isInViewport = (
-    rect.top >= 0 &&
-    rect.left >= 0 &&
-    rect.bottom <= window.innerHeight &&
-    rect.right <= window.innerWidth
-  );
+  // Verify element is visible (rendered) and determine viewport status before attempting click
+  const isRenderable = isElementActuallyVisible(element);
+  const isInViewport = isElementInViewport(element);
 
   logger.log('Navigator', `Pre-click check for ${actionType}:`, {
     tagName: element.tagName,
     href: (element as HTMLAnchorElement).href || 'N/A',
-    visible: isVisible,
+    visible: isRenderable,
     inViewport: isInViewport,
     disabled: (element as HTMLButtonElement).disabled || false,
     textContent: element.textContent?.substring(0, 50),
@@ -973,12 +1102,12 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
   console.log(`[Navigator] Pre-click check:`, {
     tagName: element.tagName,
     href: (element as HTMLAnchorElement).href || 'N/A',
-    visible: isVisible,
+    visible: isRenderable,
     inViewport: isInViewport,
     disabled: (element as HTMLButtonElement).disabled || false,
   });
 
-  if (!isVisible) {
+  if (!isRenderable) {
     logger.error('Navigator', `Element ${actionType} is not visible, cannot click`);
     console.error(`[Navigator] Element is not visible, cannot click`);
     throw new Error(`Element ${actionType} is not visible`);
@@ -990,7 +1119,7 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
     console.log(`[Navigator] Scrolling element into view`);
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     // Wait a bit for scroll to complete
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
   // Mark as clicked BEFORE clicking (to prevent double-clicks)
@@ -1013,7 +1142,10 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
     href: linkHref || 'N/A',
     textContent: element.textContent?.substring(0, 50),
   });
-  console.log(`[Navigator] Attempting to click ${actionType}:`, element.textContent?.substring(0, 50));
+  console.log(
+    `[Navigator] Attempting to click ${actionType}:`,
+    element.textContent?.substring(0, 50)
+  );
 
   // Retry logic: try clicking up to 3 times
   const maxRetries = 3;
@@ -1027,48 +1159,74 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
       if (isLink && linkHref) {
         // For links, try .click() first (normal user behavior)
         // Retry up to 3 times with delays - if .click() doesn't work, something is wrong
-        logger.log('Navigator', `[LINK CLICK] Starting link click (attempt ${attempt}/${maxRetries})`, {
-          href: linkHref,
-          currentUrl,
-          elementTag: element.tagName,
-          elementText: element.textContent?.substring(0, 50),
-        });
+        logger.log(
+          'Navigator',
+          `[LINK CLICK] Starting link click (attempt ${attempt}/${maxRetries})`,
+          {
+            href: linkHref,
+            currentUrl,
+            elementTag: element.tagName,
+            elementText: element.textContent?.substring(0, 50),
+          }
+        );
         console.log(`[Navigator] [LINK CLICK] Attempt ${attempt}/${maxRetries}: ${linkHref}`);
         console.log(`[Navigator] [LINK CLICK] Current URL: ${currentUrl}`);
-        
+
         // CRITICAL: Notify background IMMEDIATELY that navigation is starting
         // This must happen BEFORE clicking to reset the timeout
         // Even if navigation doesn't happen, we'll clear it later if needed
         try {
           const jobId = extractJobIdFromUrl() || 'unknown';
-          logger.log('Navigator', `[LINK CLICK] Notifying background BEFORE click that navigation is starting: jobId=${jobId}, targetUrl=${linkHref}`);
+          logger.log(
+            'Navigator',
+            `[LINK CLICK] Notifying background BEFORE click that navigation is starting: jobId=${jobId}, targetUrl=${linkHref}`
+          );
           console.log(`[Navigator] [LINK CLICK] Notifying background BEFORE click: jobId=${jobId}`);
-          
-          chrome.runtime.sendMessage({
-            type: 'ATS_NAVIGATION_STARTING',
-            data: { jobId, newUrl: linkHref },
-          }).catch((err) => {
-            logger.error('Navigator', `[LINK CLICK] Failed to notify background BEFORE click:`, err);
-            console.error(`[Navigator] [LINK CLICK] Failed to notify background BEFORE click:`, err);
-          });
+
+          chrome.runtime
+            .sendMessage({
+              type: 'ATS_NAVIGATION_STARTING',
+              data: { jobId, newUrl: linkHref },
+            })
+            .catch((err) => {
+              logger.error(
+                'Navigator',
+                `[LINK CLICK] Failed to notify background BEFORE click:`,
+                err
+              );
+              console.error(
+                `[Navigator] [LINK CLICK] Failed to notify background BEFORE click:`,
+                err
+              );
+            });
         } catch (notifyError) {
-          logger.error('Navigator', `[LINK CLICK] Error notifying background BEFORE click:`, notifyError);
-          console.error(`[Navigator] [LINK CLICK] Error notifying background BEFORE click:`, notifyError);
+          logger.error(
+            'Navigator',
+            `[LINK CLICK] Error notifying background BEFORE click:`,
+            notifyError
+          );
+          console.error(
+            `[Navigator] [LINK CLICK] Error notifying background BEFORE click:`,
+            notifyError
+          );
         }
-        
+
         try {
           // Try .click()
           logger.log('Navigator', `[LINK CLICK] Calling element.click()...`);
           console.log(`[Navigator] [LINK CLICK] Calling element.click()...`);
           element.click();
-          logger.log('Navigator', `[LINK CLICK] ✓ element.click() completed without error (attempt ${attempt})`);
+          logger.log(
+            'Navigator',
+            `[LINK CLICK] ✓ element.click() completed without error (attempt ${attempt})`
+          );
           console.log(`[Navigator] [LINK CLICK] ✓ element.click() completed (attempt ${attempt})`);
         } catch (clickError) {
           logger.error('Navigator', `[LINK CLICK] Error calling element.click():`, clickError);
           console.error(`[Navigator] [LINK CLICK] Error calling element.click():`, clickError);
           throw clickError; // Re-throw to be caught by outer catch
         }
-        
+
         // Check immediately if URL changed (for same-origin navigation, this happens synchronously)
         const urlAfterClick = window.location.href;
         logger.log('Navigator', `[LINK CLICK] URL check after click:`, {
@@ -1076,19 +1234,29 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
           after: urlAfterClick,
           changed: urlAfterClick !== currentUrl,
         });
-        console.log(`[Navigator] [LINK CLICK] URL after click: ${urlAfterClick} (changed: ${urlAfterClick !== currentUrl})`);
-        
+        console.log(
+          `[Navigator] [LINK CLICK] URL after click: ${urlAfterClick} (changed: ${urlAfterClick !== currentUrl})`
+        );
+
         if (urlAfterClick !== currentUrl) {
           // Navigation happened!
-          logger.log('Navigator', `[LINK CLICK] ✓ Navigation detected immediately: ${currentUrl} -> ${urlAfterClick}`);
-          console.log(`[Navigator] [LINK CLICK] ✓ Navigation detected: ${currentUrl} -> ${urlAfterClick}`);
-          
+          logger.log(
+            'Navigator',
+            `[LINK CLICK] ✓ Navigation detected immediately: ${currentUrl} -> ${urlAfterClick}`
+          );
+          console.log(
+            `[Navigator] [LINK CLICK] ✓ Navigation detected: ${currentUrl} -> ${urlAfterClick}`
+          );
+
           // Notify background script that navigation is happening
           try {
             const jobId = extractJobIdFromUrl() || 'unknown';
-            logger.log('Navigator', `[LINK CLICK] Notifying background of navigation: jobId=${jobId}, newUrl=${urlAfterClick}`);
+            logger.log(
+              'Navigator',
+              `[LINK CLICK] Notifying background of navigation: jobId=${jobId}, newUrl=${urlAfterClick}`
+            );
             console.log(`[Navigator] [LINK CLICK] Notifying background: jobId=${jobId}`);
-            
+
             await chrome.runtime.sendMessage({
               type: 'ATS_NAVIGATION_STARTING',
               data: { jobId, newUrl: urlAfterClick },
@@ -1096,38 +1264,55 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
             logger.log('Navigator', `[LINK CLICK] ✓ Background notified successfully`);
             console.log(`[Navigator] [LINK CLICK] ✓ Background notified`);
           } catch (msgError) {
-            logger.error('Navigator', `[LINK CLICK] Failed to notify background of navigation:`, msgError);
+            logger.error(
+              'Navigator',
+              `[LINK CLICK] Failed to notify background of navigation:`,
+              msgError
+            );
             console.error(`[Navigator] [LINK CLICK] Failed to notify background:`, msgError);
             // Don't throw - navigation happened, that's what matters
           }
-          
+
           return; // Navigation happened, success! Page may reload and content script will restart
         }
-        
+
         // If URL didn't change immediately, wait a SHORT time to see if async navigation starts
         // (Some sites use preventDefault + manual navigation, or navigation is delayed)
-        logger.log('Navigator', `[LINK CLICK] URL unchanged immediately, waiting 200ms for async navigation...`);
+        logger.log(
+          'Navigator',
+          `[LINK CLICK] URL unchanged immediately, waiting 200ms for async navigation...`
+        );
         console.log(`[Navigator] [LINK CLICK] Waiting 200ms for async navigation...`);
-        await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 500ms to 200ms
+        await new Promise((resolve) => setTimeout(resolve, 200)); // Reduced from 500ms to 200ms
         const urlAfterWait = window.location.href;
-        
+
         logger.log('Navigator', `[LINK CLICK] URL check after wait:`, {
           before: currentUrl,
           after: urlAfterWait,
           changed: urlAfterWait !== currentUrl,
         });
-        console.log(`[Navigator] [LINK CLICK] URL after wait: ${urlAfterWait} (changed: ${urlAfterWait !== currentUrl})`);
-        
+        console.log(
+          `[Navigator] [LINK CLICK] URL after wait: ${urlAfterWait} (changed: ${urlAfterWait !== currentUrl})`
+        );
+
         if (urlAfterWait !== currentUrl) {
           // Navigation happened asynchronously
-          logger.log('Navigator', `[LINK CLICK] ✓ Async navigation detected: ${currentUrl} -> ${urlAfterWait}`);
-          console.log(`[Navigator] [LINK CLICK] ✓ Async navigation detected: ${currentUrl} -> ${urlAfterWait}`);
-          
+          logger.log(
+            'Navigator',
+            `[LINK CLICK] ✓ Async navigation detected: ${currentUrl} -> ${urlAfterWait}`
+          );
+          console.log(
+            `[Navigator] [LINK CLICK] ✓ Async navigation detected: ${currentUrl} -> ${urlAfterWait}`
+          );
+
           try {
             const jobId = extractJobIdFromUrl() || 'unknown';
-            logger.log('Navigator', `[LINK CLICK] Notifying background of async navigation: jobId=${jobId}, newUrl=${urlAfterWait}`);
+            logger.log(
+              'Navigator',
+              `[LINK CLICK] Notifying background of async navigation: jobId=${jobId}, newUrl=${urlAfterWait}`
+            );
             console.log(`[Navigator] [LINK CLICK] Notifying background: jobId=${jobId}`);
-            
+
             await chrome.runtime.sendMessage({
               type: 'ATS_NAVIGATION_STARTING',
               data: { jobId, newUrl: urlAfterWait },
@@ -1135,31 +1320,46 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
             logger.log('Navigator', `[LINK CLICK] ✓ Background notified successfully`);
             console.log(`[Navigator] [LINK CLICK] ✓ Background notified`);
           } catch (msgError) {
-            logger.error('Navigator', `[LINK CLICK] Failed to notify background of async navigation:`, msgError);
+            logger.error(
+              'Navigator',
+              `[LINK CLICK] Failed to notify background of async navigation:`,
+              msgError
+            );
             console.error(`[Navigator] [LINK CLICK] Failed to notify background:`, msgError);
             // Don't throw - navigation happened, that's what matters
           }
-          
+
           return; // Navigation happened, success!
         }
-        
+
         // .click() didn't trigger navigation - immediately fall back to window.location.href
         // Don't retry - if .click() doesn't work, it likely won't work on retry either
-        logger.warn('Navigator', `[LINK CLICK] No navigation detected after click, immediately falling back to window.location.href`, {
-          attempt,
-          currentUrl,
-          targetUrl: linkHref,
-          urlAfterClick,
-          urlAfterWait,
-        });
-        console.warn(`[Navigator] [LINK CLICK] No navigation detected, using window.location.href immediately`);
-        
+        logger.warn(
+          'Navigator',
+          `[LINK CLICK] No navigation detected after click, immediately falling back to window.location.href`,
+          {
+            attempt,
+            currentUrl,
+            targetUrl: linkHref,
+            urlAfterClick,
+            urlAfterWait,
+          }
+        );
+        console.warn(
+          `[Navigator] [LINK CLICK] No navigation detected, using window.location.href immediately`
+        );
+
         // Notify background script BEFORE navigation so it can reset the timeout
         try {
           const jobId = extractJobIdFromUrl() || 'unknown';
-          logger.log('Navigator', `[LINK CLICK] Notifying background before fallback navigation: jobId=${jobId}, newUrl=${linkHref}`);
-          console.log(`[Navigator] [LINK CLICK] Notifying background before fallback: jobId=${jobId}`);
-          
+          logger.log(
+            'Navigator',
+            `[LINK CLICK] Notifying background before fallback navigation: jobId=${jobId}, newUrl=${linkHref}`
+          );
+          console.log(
+            `[Navigator] [LINK CLICK] Notifying background before fallback: jobId=${jobId}`
+          );
+
           await chrome.runtime.sendMessage({
             type: 'ATS_NAVIGATION_STARTING',
             data: { jobId, newUrl: linkHref },
@@ -1167,11 +1367,15 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
           logger.log('Navigator', `[LINK CLICK] ✓ Background notified before fallback`);
           console.log(`[Navigator] [LINK CLICK] ✓ Background notified`);
         } catch (msgError) {
-          logger.error('Navigator', `[LINK CLICK] Failed to notify background before fallback:`, msgError);
+          logger.error(
+            'Navigator',
+            `[LINK CLICK] Failed to notify background before fallback:`,
+            msgError
+          );
           console.error(`[Navigator] [LINK CLICK] Failed to notify background:`, msgError);
           // Continue anyway - we'll navigate regardless
         }
-        
+
         // Fallback: use programmatic navigation immediately
         logger.log('Navigator', `[LINK CLICK] Setting window.location.href = ${linkHref}`);
         console.log(`[Navigator] [LINK CLICK] Setting window.location.href = ${linkHref}`);
@@ -1182,18 +1386,15 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
         element.click();
         logger.log('Navigator', `✓ Element clicked via .click() method (attempt ${attempt})`);
         console.log(`[Navigator] ✓ Element clicked (attempt ${attempt})`);
-        
+
         // Wait for action to complete (event-driven)
         logger.log('Navigator', `Waiting for action to complete after clicking ${actionType}`);
         console.log(`[Navigator] Waiting for action to complete`);
-        
+
         // Use a short timeout to detect if click had any effect
         const clickWorked = await Promise.race([
-          Promise.race([
-            waitForNavigation(0),
-            waitForDOMStable(500, 0),
-          ]).then(() => true),
-          new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1000)), // 1s timeout
+          Promise.race([waitForNavigation(0), waitForDOMStable(500, 0)]).then(() => true),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)), // 1s timeout
         ]);
 
         if (clickWorked || attempt === maxRetries) {
@@ -1201,11 +1402,14 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
           console.log(`[Navigator] ✓ Action completed`);
           return; // Success or max retries reached
         }
-        
+
         // Retry if click didn't have effect
-        logger.warn('Navigator', `Click attempt ${attempt} did not have visible effect, retrying...`);
+        logger.warn(
+          'Navigator',
+          `Click attempt ${attempt} did not have visible effect, retrying...`
+        );
         console.warn(`[Navigator] Click did not have effect, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         continue;
       }
     } catch (error) {
@@ -1220,20 +1424,34 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
         elementHref: isLink ? linkHref : 'N/A',
         currentUrl,
       };
-      
-      logger.error('Navigator', `[ERROR] Error clicking element ${actionType} (attempt ${attempt}/${maxRetries}):`, errorDetails);
-      console.error(`[Navigator] [ERROR] Error clicking element (attempt ${attempt}/${maxRetries}):`, error);
+
+      logger.error(
+        'Navigator',
+        `[ERROR] Error clicking element ${actionType} (attempt ${attempt}/${maxRetries}):`,
+        errorDetails
+      );
+      console.error(
+        `[Navigator] [ERROR] Error clicking element (attempt ${attempt}/${maxRetries}):`,
+        error
+      );
       console.error(`[Navigator] [ERROR] Error details:`, errorDetails);
-      
+
       if (attempt === maxRetries) {
-        logger.error('Navigator', `[ERROR] All ${maxRetries} attempts failed, throwing error`, errorDetails);
+        logger.error(
+          'Navigator',
+          `[ERROR] All ${maxRetries} attempts failed, throwing error`,
+          errorDetails
+        );
         console.error(`[Navigator] [ERROR] All attempts failed, throwing:`, lastError);
         throw lastError; // Throw on final attempt
       }
-      
-      logger.warn('Navigator', `[ERROR] Retrying after error (attempt ${attempt}/${maxRetries})...`);
+
+      logger.warn(
+        'Navigator',
+        `[ERROR] Retrying after error (attempt ${attempt}/${maxRetries})...`
+      );
       console.warn(`[Navigator] [ERROR] Retrying after error...`);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Wait before retry
+      await new Promise((resolve) => setTimeout(resolve, 500)); // Wait before retry
     }
   }
 
