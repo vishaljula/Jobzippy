@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply - Software Engineering Architect - Salesforce</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .page-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .job-header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+
+        .company {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .apply-section {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .apply-button {
+            background: #0070d2;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .apply-button:hover {
+            background: #005fb2;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .workday-popup {
+            background: white;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            position: relative;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .workday-popup-close-container {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 40px;
+        }
+
+        .workday-popup-close-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            color: #666;
+            transition: color 0.2s;
+        }
+
+        .workday-popup-close-button:hover {
+            color: #000;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+
+        .modal-subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .option-button {
+            display: block;
+            width: 100%;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            background: white;
+            border: 2px solid #0070d2;
+            color: #0070d2;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .option-button:hover {
+            background: #0070d2;
+            color: white;
+        }
+
+        .option-button.primary {
+            background: #0070d2;
+            color: white;
+        }
+
+        .option-button.primary:hover {
+            background: #005fb2;
+        }
+    </style>
+</head>
+
+<body data-ats-type="workday">
+    <div class="page-container">
+        <div class="job-header">
+            <h1>Software Engineering Architect - Front End Commerce</h1>
+            <div class="company">Salesforce - San Francisco, CA</div>
+            <p>We're looking for an experienced front-end architect to lead our commerce platform development...</p>
+        </div>
+
+        <div class="apply-section">
+            <h2>Ready to Apply?</h2>
+            <p style="margin: 20px 0;">Click below to start your application</p>
+            <button class="apply-button" id="apply-btn">Apply for this Position</button>
+        </div>
+    </div>
+
+    <!-- Workday Options Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="workday-popup" data-automation-id="wd-popup-frame" role="dialog"
+            aria-label="Start Your Application">
+            <div class="workday-popup-close-container">
+                <button class="workday-popup-close-button" data-automation-id="closeButton" aria-label="Close"
+                    onclick="closeModal()">
+                    <svg width="24" height="24" class="workday-icon-x workday-icon" focusable="false"
+                        role="presentation" viewbox="0 0 24 24">
+                        <g fill-rule="evenodd" class="workday-icon-container">
+                            <path class="workday-icon-fill" fill="currentColor"
+                                d="M5.996 4.582a.5.5 0 0 0-.717-.003l-.7.7a.504.504 0 0 0 .003.717L10.586 12l-6.004 6.004a.5.5 0 0 0-.003.717l.7.7c.197.197.514.2.717-.003L12 13.414l6.004 6.004a.5.5 0 0 0 .717.003l.7-.7a.504.504 0 0 0-.003-.717L13.414 12l6.004-6.004a.5.5 0 0 0 .003-.717l-.7-.7a.504.504 0 0 0-.717.003L12 10.586 5.996 4.582z">
+                            </path>
+                        </g>
+                    </svg>
+                </button>
+            </div>
+
+            <h2 class="modal-title">Start Your Application</h2>
+            <h3 class="modal-subtitle">Software Engineering Architect - Front End Commerce</h3>
+
+            <a href="http://localhost:3000/mocks/workday-form.html?mode=autofill" role="button"
+                data-automation-id="autofillWithResume" class="option-button primary">
+                Autofill with Resume
+            </a>
+
+            <a href="http://localhost:3000/mocks/workday-form.html?mode=manual" role="button"
+                data-automation-id="applyManually" class="option-button">
+                Apply Manually
+            </a>
+
+            <a href="http://localhost:3000/mocks/workday-form.html?mode=last" role="button"
+                data-automation-id="useMyLastApplication" class="option-button">
+                Use My Last Application
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Preserve jobId when navigating to the actual Workday form
+        (function propagateJobIdToFormLinks() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const jobId = params.get('job');
+                if (!jobId) return;
+
+                document.querySelectorAll('.workday-popup a.option-button').forEach((link) => {
+                    try {
+                        const url = new URL(link.href);
+                        url.searchParams.set('job', jobId);
+                        link.href = url.toString();
+                    } catch {
+                        // Ignore malformed URLs in mocks
+                    }
+                });
+            } catch (err) {
+                console.error('[Workday Apply Mock] Failed to propagate jobId to form links', err);
+            }
+        })();
+
+        // Show modal when Apply button is clicked
+        document.getElementById('apply-btn').addEventListener('click', function () {
+            document.getElementById('modal-overlay').classList.add('active');
+        });
+
+        // Close modal function
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('modal-overlay').addEventListener('click', function (e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+
+</html>

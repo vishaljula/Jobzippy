@@ -1,5 +1,140 @@
 import type { IntakeLLMResponse, ResumeExtractionResult } from '../types/intake.js';
 
+const SALARY_CURRENCY_FALLBACK = 'USD';
+
+const ISO_CURRENCY_CODES = [
+  'USD',
+  'CAD',
+  'MXN',
+  'EUR',
+  'GBP',
+  'CHF',
+  'SEK',
+  'NOK',
+  'DKK',
+  'PLN',
+  'CZK',
+  'HUF',
+  'RON',
+  'BGN',
+  'HRK',
+  'ISK',
+  'AUD',
+  'NZD',
+  'SGD',
+  'HKD',
+  'JPY',
+  'CNY',
+  'KRW',
+  'TWD',
+  'THB',
+  'VND',
+  'IDR',
+  'MYR',
+  'PHP',
+  'INR',
+  'PKR',
+  'BDT',
+  'LKR',
+  'AED',
+  'SAR',
+  'QAR',
+  'KWD',
+  'BHD',
+  'OMR',
+  'ZAR',
+  'NGN',
+  'GHS',
+  'KES',
+  'EGP',
+  'MAD',
+  'DZD',
+  'RUB',
+  'TRY',
+  'ILS',
+  'ARS',
+  'CLP',
+  'COP',
+  'PEN',
+  'UYU',
+  'BRL',
+] as const;
+
+const ISO_CURRENCY_SET = new Set<string>(ISO_CURRENCY_CODES);
+
+const CURRENCY_SYMBOL_HINTS: Array<{ symbol: string; code: string }> = [
+  { symbol: '€', code: 'EUR' },
+  { symbol: '£', code: 'GBP' },
+  { symbol: '₹', code: 'INR' },
+  { symbol: '₱', code: 'PHP' },
+  { symbol: '₩', code: 'KRW' },
+  { symbol: '₪', code: 'ILS' },
+  { symbol: '₺', code: 'TRY' },
+  { symbol: '₫', code: 'VND' },
+  { symbol: '฿', code: 'THB' },
+  { symbol: '₦', code: 'NGN' },
+  { symbol: '₴', code: 'UAH' },
+  { symbol: '₲', code: 'PYG' },
+  { symbol: '₡', code: 'CRC' },
+  { symbol: '₭', code: 'LAK' },
+  { symbol: '₮', code: 'MNT' },
+];
+
+const DOLLAR_VARIANT_HINTS: Array<{ token: string; code: string }> = [
+  { token: 'A$', code: 'AUD' },
+  { token: 'AU$', code: 'AUD' },
+  { token: 'C$', code: 'CAD' },
+  { token: 'CA$', code: 'CAD' },
+  { token: 'S$', code: 'SGD' },
+  { token: 'SG$', code: 'SGD' },
+  { token: 'HK$', code: 'HKD' },
+  { token: 'NZ$', code: 'NZD' },
+];
+
+const ISO_CODE_REGEX = /\b([A-Z]{3})\b/g;
+
+function collectCurrencyHints(text?: string | null): Set<string> {
+  const hints = new Set<string>();
+  if (!text) {
+    return hints;
+  }
+  CURRENCY_SYMBOL_HINTS.forEach(({ symbol, code }) => {
+    if (text.includes(symbol)) {
+      hints.add(code);
+    }
+  });
+  const upper = text.toUpperCase();
+  DOLLAR_VARIANT_HINTS.forEach(({ token, code }) => {
+    if (upper.includes(token)) {
+      hints.add(code);
+    }
+  });
+  const matches = upper.match(ISO_CODE_REGEX);
+  if (matches) {
+    matches.forEach((candidate) => {
+      if (ISO_CURRENCY_SET.has(candidate)) {
+        hints.add(candidate);
+      }
+    });
+  }
+  return hints;
+}
+
+function mergeCurrencyHints(target: Set<string>, source: Set<string>) {
+  source.forEach((code) => target.add(code));
+}
+
+function pickCurrencyFromHints(hints: Set<string>): string {
+  if (hints.size === 0) {
+    return SALARY_CURRENCY_FALLBACK;
+  }
+  if (hints.size === 1) {
+    const [only] = hints;
+    return only ?? SALARY_CURRENCY_FALLBACK;
+  }
+  return SALARY_CURRENCY_FALLBACK;
+}
+
 function extractEmail(text: string): string {
   const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
   return match?.[0] ?? '';
@@ -169,6 +304,11 @@ export async function runHeuristicIntakeLLM(
   const employment = extractExperience(extraction.text);
   const education = extractEducation(extraction.text);
 
+  const currencyHints = collectCurrencyHints(extraction.text);
+  mergeCurrencyHints(currencyHints, collectCurrencyHints(extraction.metadata?.fileName));
+  mergeCurrencyHints(currencyHints, collectCurrencyHints(extraction.metadata?.language));
+  const salaryCurrency = pickCurrencyFromHints(currencyHints);
+
   const confidenceSeed =
     (email ? 0.2 : 0) +
     (phone ? 0.15 : 0) +
@@ -193,6 +333,7 @@ export async function runHeuristicIntakeLLM(
         remote: true,
         locations: [],
         salary_min: 0,
+        salary_currency: salaryCurrency,
         start_date: '',
       },
     },

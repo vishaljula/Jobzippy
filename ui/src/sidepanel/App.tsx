@@ -6,30 +6,22 @@ import {
   BarChart3,
   Shield,
   Bell,
-  Paperclip,
-  Send,
-  Loader2,
-  Sparkles,
-  CheckCircle2,
+  ClipboardCheck,
   AlertTriangle,
-  Clock,
+  CheckCircle2,
 } from 'lucide-react';
-import clsx from 'clsx';
 
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
+import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
+import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
+import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
 import { LayoutShell } from './LayoutShell';
-import { useIntakeAgent } from '@/lib/intake';
-import type {
-  IntakeAttachment,
-  IntakeMessage,
-  IntakePreviewSection,
-  IntakeStatusStep,
-} from '@/lib/types';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -37,6 +29,18 @@ const NAV_ITEMS = [
   { key: 'vault', icon: Shield, label: 'Vault' },
   { key: 'alerts', icon: Bell, label: 'Alerts' },
 ] as const;
+
+interface ExtensionMessage {
+  type: string;
+  data?: {
+    state?: 'IDLE' | 'RUNNING' | 'PAUSED';
+    status?: string;
+    engineStatus?: string;
+    platform?: string;
+    loggedIn?: boolean;
+    [key: string]: unknown;
+  };
+}
 
 function App() {
   const { isAuthenticated, isLoading: authLoading, user, logout: handleLogout } = useAuth();
@@ -49,10 +53,44 @@ function App() {
   } = useOnboarding(isAuthenticated);
   const [isLoading, setIsLoading] = useState(true);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [composerValue, setComposerValue] = useState('');
-  const [queuedFile, setQueuedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const onboardingInitRef = useRef(false);
+  const [manualWizardOpen, setManualWizardOpen] = useState(false);
+  const [navHighlight, setNavHighlight] = useState(false);
+  const prevWizardOpenRef = useRef(isWizardOpen);
+  const [showTutorial, setShowTutorial] = useState(false);
+  // Engine state/status
+  const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
+  const [engineStatus, setEngineStatus] = useState<string>('Idle');
+  const [authNeeded, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
+  const [preflightPending, setPreflightPending] = useState(false);
+  const tabToastIdRef = useRef<string | number | null>(null);
+
+  const countdownIntervalRef = useRef<number | null>(null);
+  const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
+
+  // Log environment mode once so we can verify dev vs production behavior
+  useEffect(() => {
+    const envInfo = {
+      DEV: import.meta.env.DEV,
+      MODE: import.meta.env.MODE,
+      NODE_ENV: import.meta.env.NODE_ENV,
+    };
+    console.log('[Jobzippy] Sidepanel env info:', envInfo);
+    try {
+      chrome.runtime
+        .sendMessage({
+          type: 'LOG_MESSAGE',
+          data: {
+            component: 'SidePanel',
+            message: 'Sidepanel env info',
+            data: envInfo,
+          },
+        })
+        .catch(() => {});
+    } catch {
+      // ignore if messaging is not available yet
+    }
+  }, []);
 
   useEffect(() => {
     if (!authLoading) {
@@ -63,6 +101,8 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) {
       setIsWizardOpen(false);
+      onboardingInitRef.current = false;
+      setManualWizardOpen(false);
       return;
     }
 
@@ -70,103 +110,408 @@ function App() {
       return;
     }
 
-    if (snapshot.status === 'in_progress') {
+    if (snapshot.status === 'not_started') {
+      if (!onboardingInitRef.current) {
+        onboardingInitRef.current = true;
+        void begin();
+      }
+      setIsWizardOpen(true);
+    } else if (snapshot.status === 'in_progress') {
       setIsWizardOpen(true);
     } else {
-      setIsWizardOpen(false);
+      setIsWizardOpen(manualWizardOpen);
+      onboardingInitRef.current = false;
+      if (!manualWizardOpen) {
+        setManualWizardOpen(false);
+      }
     }
-  }, [isAuthenticated, onboardingLoading, snapshot.status]);
+  }, [begin, isAuthenticated, onboardingLoading, manualWizardOpen, snapshot.status]);
 
   const handleResumeOnboarding = useCallback(() => {
-    if (snapshot.status === 'completed') {
-      setIsWizardOpen(false);
-      return;
-    }
-    if (snapshot.status === 'not_started') {
+    if (snapshot.status === 'not_started' && !onboardingInitRef.current) {
+      onboardingInitRef.current = true;
       void begin();
     }
+    setManualWizardOpen(true);
     setIsWizardOpen(true);
   }, [begin, snapshot.status]);
 
   const handleCompleteOnboarding = useCallback(async () => {
     await complete();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [complete]);
 
   const handleSkipOnboarding = useCallback(async () => {
     await skip();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [skip]);
 
   const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
 
-  const {
-    isLoading: chatLoading,
-    isProcessing,
-    messages,
-    pendingAttachment,
-    setPendingAttachment,
-    sendMessage,
-    applyDraft,
-    requestManualEdit,
-    activeDraftMessageId,
-  } = useIntakeAgent({ enabled: isAuthenticated, user });
-
-  const sortedMessages = useMemo(
-    () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
-    [messages]
-  );
-
   useEffect(() => {
-    if (!messagesEndRef.current) return;
-    messagesEndRef.current.scrollIntoView({
-      behavior: sortedMessages.length > 1 ? 'smooth' : 'auto',
-    });
-  }, [sortedMessages.length, chatLoading]);
-
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setQueuedFile(file);
-    setPendingAttachment({
-      id: 'pending',
-      kind: 'file',
-      name: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
-  };
-
-  const handleRemoveAttachment = () => {
-    setQueuedFile(null);
-    setPendingAttachment(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    if (isWizardOpen) {
+      setNavHighlight(false);
     }
-  };
+    if (prevWizardOpenRef.current && !isWizardOpen) {
+      setNavHighlight(true);
+      timeout = setTimeout(() => setNavHighlight(false), 1200);
+    }
+    prevWizardOpenRef.current = isWizardOpen;
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [isWizardOpen]);
 
-  const handleSubmit = async () => {
-    if (!isAuthenticated || isProcessing) return;
-    if (!composerValue.trim() && !queuedFile) return;
+  const onboardingNavItems = useMemo(() => {
+    if (!isAuthenticated) {
+      return [];
+    }
+    return [
+      {
+        key: 'onboarding',
+        icon: ClipboardCheck,
+        label: 'Onboarding',
+        onClick: handleResumeOnboarding,
+        active: isWizardOpen,
+        highlight: navHighlight,
+      },
+    ];
+  }, [handleResumeOnboarding, isAuthenticated, isWizardOpen, navHighlight]);
 
-    try {
-      await sendMessage({
-        text: composerValue,
-        attachments: queuedFile ? [queuedFile] : [],
+  const {
+    jobs,
+    status: jobStatus,
+    refresh: refreshJobs,
+    error: jobError,
+  } = useJobMatches(isAuthenticated ? user : null);
+
+  // Listen for engine state broadcasts
+  useEffect(() => {
+    const handler = (message: ExtensionMessage) => {
+      if (message?.type === 'ENGINE_STATE') {
+        setEngineState(message.data?.state ?? 'IDLE');
+        setEngineStatus(message.data?.status ?? 'Idle');
+      } else if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        const loggedIn = Boolean(message.data.loggedIn);
+        setAuthNeeded((prev) => ({
+          linkedin: p === 'LinkedIn' ? !loggedIn : prev.linkedin,
+          indeed: p === 'Indeed' ? !loggedIn : prev.indeed,
+        }));
+      } else if (message?.type === 'TAB_ACTIVATED' || message?.type === 'SHOW_TAB_TOAST') {
+        // Show toast when user switches to search tab
+        const platform = message.data?.platform as 'LinkedIn' | 'Indeed';
+        console.log('[Jobzippy] TAB_ACTIVATED received:', { platform, engineState });
+        if (platform && engineState === 'RUNNING') {
+          // Dismiss previous toast if it exists to prevent accumulation
+          if (tabToastIdRef.current !== null) {
+            toast.dismiss(tabToastIdRef.current);
+          }
+          const toastId = toast.info(
+            `Jobzippy is working on ${platform}. Your actions will pause automation and it will auto-resume.`,
+            {
+              duration: Infinity,
+              closeButton: true,
+              className: 'rounded-xl border-slate-200 shadow-lg',
+            }
+          );
+          tabToastIdRef.current = toastId;
+          console.log('[Jobzippy] Toast shown for', platform, 'toastId:', toastId);
+        }
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handler);
+    };
+  }, [engineState]);
+
+  // Unified toast management - handles all toast states in one place
+  useEffect(() => {
+    // Clear existing countdown interval
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    const wasPaused = prevEngineStateRef.current === 'PAUSED';
+
+    const isNowRunning = engineState === 'RUNNING';
+    const isNowPaused = engineState === 'PAUSED';
+    const isNowIdle = engineState === 'IDLE';
+    const justResumed = wasPaused && isNowRunning;
+
+    // Dismiss all toasts when engine stops
+    if (isNowIdle) {
+      if (tabToastIdRef.current !== null) {
+        toast.dismiss(tabToastIdRef.current);
+        tabToastIdRef.current = null;
+      }
+      prevEngineStateRef.current = engineState;
+      return;
+    }
+
+    // Handle pause state with countdown
+    if (isNowPaused) {
+      // Dismiss any existing toast first
+      if (tabToastIdRef.current !== null) {
+        toast.dismiss(tabToastIdRef.current);
+      }
+
+      // Show initial countdown toast
+      const toastId = toast.loading('Paused. Resuming in 8 seconds...', {
+        duration: Infinity,
+        closeButton: true,
+        className: 'rounded-xl border-slate-200 shadow-lg',
       });
-    } finally {
-      setComposerValue('');
-      handleRemoveAttachment();
+      tabToastIdRef.current = toastId;
+
+      // Start countdown interval
+      let countdown = 8;
+      countdownIntervalRef.current = window.setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          toast.loading(`Paused. Resuming in ${countdown} seconds...`, {
+            id: toastId,
+            duration: Infinity,
+            closeButton: true,
+            className: 'rounded-xl border-slate-200 shadow-lg',
+          });
+        } else {
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+        }
+      }, 1000);
     }
-  };
+
+    // Handle resume from pause
+    if (justResumed) {
+      // Reuse the same toast ID to replace the countdown toast
+      if (tabToastIdRef.current !== null) {
+        toast.success('Jobzippy resumed', {
+          id: tabToastIdRef.current, // Reuse existing ID to replace countdown toast
+          duration: 2000,
+          closeButton: true,
+          className: 'rounded-xl border-slate-200 shadow-lg',
+        });
+        const currentToastId = tabToastIdRef.current;
+        setTimeout(() => {
+          toast.dismiss(currentToastId);
+          tabToastIdRef.current = null;
+        }, 2000);
+      }
+    }
+
+    // Update previous state
+    prevEngineStateRef.current = engineState;
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [engineState]);
+
+  // Poll engine status on mount
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'ENGINE_STATE' }, (resp) => {
+      if (resp?.state) {
+        setEngineState(resp.state);
+        if (resp.engineStatus) setEngineStatus(resp.engineStatus);
+      }
+    });
+  }, []);
+
+  const startAgent = useCallback(async () => {
+    // Preflight auth check: probe existing tabs, then open search URLs directly
+    setPreflightPending(true);
+    const required = { linkedin: true, indeed: true };
+    const received = { linkedin: false, indeed: false };
+    const results = { linkedin: false, indeed: false };
+    const openedTabIds: number[] = [];
+
+    // Build search URLs first
+    let urls: { linkedin?: string; indeed?: string } = {};
+    try {
+      const [{ deriveVaultPassword }, { vaultService }, { VAULT_STORES }, { buildSearchUrls }] =
+        await Promise.all([
+          import('@/lib/vault/utils'),
+          import('@/lib/vault/service'),
+          import('@/lib/vault/constants'),
+          import('@/lib/jobs/search'),
+        ]);
+      const password = deriveVaultPassword(user);
+      const [profile, history] = await Promise.all([
+        vaultService.load(VAULT_STORES.profile, password).catch(() => null),
+        vaultService.load(VAULT_STORES.history, password).catch(() => null),
+      ]);
+      urls = buildSearchUrls(profile, history);
+    } catch {
+      // ignore URL build errors; we'll still check auth
+    }
+
+    // Open search URLs directly (they'll trigger auth checks via content scripts)
+    if (urls.linkedin) {
+      chrome.tabs.create({ url: urls.linkedin, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+    if (urls.indeed) {
+      chrome.tabs.create({ url: urls.indeed, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+
+    // Timeout fallback (5 seconds)
+    const timeout = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(handler);
+      setPreflightPending(false);
+
+      // In dev mode, assume success if we timed out (bypass missing mock server/slow load)
+      // Check both DEV flag and MODE string for robustness
+      const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development';
+      
+      // Log the timeout event
+      chrome.runtime.sendMessage({
+        type: 'LOG_MESSAGE',
+        data: { 
+          component: 'SidePanel', 
+          message: `Auth check timed out. Dev mode: ${isDev}`, 
+          data: { 
+            env: { 
+              DEV: import.meta.env.DEV, 
+              MODE: import.meta.env.MODE 
+            }
+          } 
+        }
+      }).catch(() => {});
+
+      if (isDev) {
+        console.log('[Jobzippy] Dev mode timeout: Forcing auth success');
+        results.linkedin = true;
+        results.indeed = true;
+        // Update received tracking so start logic proceeds
+        received.linkedin = true;
+        received.indeed = true;
+      }
+
+      // If we didn't get responses, assume not logged in
+      const need = {
+        linkedin: required.linkedin && !results.linkedin,
+        indeed: required.indeed && !results.indeed,
+      };
+      setAuthNeeded(need);
+      const allMissing = need.linkedin && need.indeed;
+      if (!allMissing) {
+        chrome.runtime.sendMessage(
+          { type: 'START_AGENT', data: { maxApplications: 15 } },
+          (resp) => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                '[Jobzippy] ERROR sending START_AGENT from sidepanel:',
+                chrome.runtime.lastError.message
+              );
+            } else {
+              console.log('[Jobzippy] Sidepanel START_AGENT response:', resp);
+            }
+          }
+        );
+      }
+    }, 5000);
+
+    const handler = (message: ExtensionMessage) => {
+      if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        if (p === 'LinkedIn') {
+          received.linkedin = true;
+          results.linkedin = Boolean(message.data.loggedIn);
+        }
+        if (p === 'Indeed') {
+          received.indeed = true;
+          results.indeed = Boolean(message.data.loggedIn);
+        }
+        if (received.linkedin && received.indeed) {
+          clearTimeout(timeout);
+          chrome.runtime.onMessage.removeListener(handler);
+          setPreflightPending(false);
+          const need = {
+            linkedin: required.linkedin && !results.linkedin,
+            indeed: required.indeed && !results.indeed,
+          };
+          setAuthNeeded(need);
+          // Allow starting if at least one platform is signed in
+          const allMissing = need.linkedin && need.indeed;
+          if (!allMissing) {
+            chrome.runtime.sendMessage(
+              { type: 'START_AGENT', data: { maxApplications: 15 } },
+              () => {}
+            );
+          }
+        }
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+
+    // Probe existing tabs first (in case user already has tabs open)
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
+  }, [user]);
+  const stopAgent = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
+  }, []);
+
+  // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isAuthenticated || snapshot.status !== 'completed') {
+        if (!cancelled) setShowTutorial(false);
+        return;
+      }
+      try {
+        const [{ getStorage }, { deriveVaultPassword }, { vaultService }, { VAULT_STORES }] =
+          await Promise.all([
+            import('@/lib/storage'),
+            import('@/lib/vault/utils'),
+            import('@/lib/vault/service'),
+            import('@/lib/vault/constants'),
+          ]);
+        const dismissed = await getStorage('tutorialDismissed');
+        if (dismissed === true) {
+          if (!cancelled) setShowTutorial(false);
+          return;
+        }
+        const password = deriveVaultPassword(user);
+        const profile = await vaultService.load(VAULT_STORES.profile, password).catch(() => null);
+        if (!cancelled) {
+          setShowTutorial(Boolean(profile));
+        }
+      } catch {
+        if (!cancelled) setShowTutorial(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, snapshot.status, user]);
+
+  const handleDismissTutorial = useCallback(async () => {
+    try {
+      const { setStorage } = await import('@/lib/storage');
+      await setStorage('tutorialDismissed', true);
+    } finally {
+      setShowTutorial(false);
+    }
+  }, []);
 
   if (appLoading) {
     return (
@@ -179,18 +524,31 @@ function App() {
     );
   }
 
-  const statusLabel =
-    isAuthenticated && user ? (
-      <span className="flex items-center gap-2">
-        <span className="hidden md:inline text-slate-400">Signed in as</span>
-        <span className="font-medium text-slate-600">{user.given_name}</span>
+  // In development mode with mock pages, treat both platforms as signed-in for UI purposes.
+  // This prevents confusing "Not signed in" indicators when running against localhost mocks.
+  const isDevEnv = import.meta.env.DEV || import.meta.env.MODE === 'development';
+  const effectiveAuthNeeded: { linkedin?: boolean; indeed?: boolean } = isDevEnv
+    ? { linkedin: false, indeed: false }
+    : authNeeded;
+
+  const statusLabel = isAuthenticated ? (
+    <span className="flex items-center gap-2 text-slate-600">
+      <span
+        className={`h-2 w-2 rounded-full ${
+          engineState === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-300'
+        }`}
+      />
+      <span className="font-medium">
+        Agent: {engineState === 'RUNNING' ? 'Running' : 'Stopped'}
       </span>
-    ) : (
-      <span className="flex items-center gap-2 text-slate-500">
-        <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-        Not signed in
-      </span>
-    );
+      {engineStatus ? <span className="text-slate-400">({engineStatus})</span> : null}
+    </span>
+  ) : (
+    <span className="flex items-center gap-2 text-slate-500">
+      <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+      Not signed in
+    </span>
+  );
 
   const heroCard = (
     <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
@@ -211,170 +569,31 @@ function App() {
     </div>
   );
 
-  const conversationBody = (() => {
-    if (!isAuthenticated) {
-      return (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-6 text-sm text-slate-500">
-          Sign in to start chatting with Jobzippy. Upload your resume and the intake agent will
-          parse it in real time.
-        </div>
-      );
-    }
-
-    if (chatLoading) {
-      return (
-        <div className="flex h-48 items-center justify-center text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      );
-    }
-
-    if (sortedMessages.length === 0) {
-      return (
-        <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
-          Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon below.
-          You can also start the conversation by telling Jobzippy what you need help with.
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-5">
-        {sortedMessages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            onApplyPreview={
-              activeDraftMessageId === message.id
-                ? () => {
-                    void applyDraft();
-                  }
-                : undefined
-            }
-            onEditPreview={activeDraftMessageId === message.id ? requestManualEdit : undefined}
-            isPreviewProcessing={isProcessing && activeDraftMessageId === message.id}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-    );
-  })();
-
   const historyContent = (
     <div className="space-y-6">
       {!isAuthenticated && heroCard}
-      {isAuthenticated && snapshot.status === 'skipped' && (
-        <ResumeOnboardingCard onResume={handleResumeOnboarding} />
+      {isAuthenticated && (
+        <>
+          {snapshot.status === 'skipped' && (
+            <ResumeOnboardingCard onResume={handleResumeOnboarding} />
+          )}
+          <DashboardOverview
+            user={user}
+            onEditProfile={handleResumeOnboarding}
+            jobs={jobs}
+            jobStatus={jobStatus}
+            onRetry={refreshJobs}
+            jobError={jobError}
+          />
+        </>
       )}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700">Intake Agent</h3>
-            <p className="text-xs text-slate-400">
-              Chat-first intake · Resume parsing · Vault sync
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles className="h-4 w-4 text-indigo-500" />
-            <span>{isProcessing ? 'Processing…' : 'Live'}</span>
-            {isAuthenticated && snapshot.status !== 'completed' && (
-              <Button
-                size="sm"
-                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
-                onClick={handleResumeOnboarding}
-              >
-                Complete setup
-              </Button>
-            )}
-          </div>
-        </div>
-        {conversationBody}
-      </section>
     </div>
   );
 
-  const composerContent = isAuthenticated ? (
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur">
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:bg-slate-100"
-          onClick={handleAttachClick}
-          disabled={isProcessing}
-        >
-          <Paperclip className="h-4 w-4" />
-        </button>
-        <textarea
-          className="min-h-[72px] flex-1 resize-none border-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0"
-          placeholder="Ask Jobzippy anything or paste a job note..."
-          value={composerValue}
-          onChange={(event) => setComposerValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              void handleSubmit();
-            }
-          }}
-          disabled={isProcessing}
-        />
-      </div>
-      {(pendingAttachment || queuedFile) && (
-        <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2 text-xs text-indigo-500">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-indigo-500">
-              <Paperclip className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="font-semibold">
-                {pendingAttachment?.name ?? queuedFile?.name ?? 'pending-attachment'}
-              </p>
-              <p className="text-[11px] text-indigo-400">
-                {formatAttachmentSize(pendingAttachment?.size ?? queuedFile?.size ?? 0)} ·{' '}
-                {pendingAttachment?.mimeType ?? queuedFile?.type ?? 'Unknown format'}
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-indigo-500 hover:bg-indigo-100"
-            onClick={handleRemoveAttachment}
-            disabled={isProcessing}
-          >
-            Remove
-          </Button>
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-slate-400">
-          Commands · Attach resumes · Slash actions
-        </span>
-        <Button
-          size="sm"
-          className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-5 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
-          onClick={() => {
-            void handleSubmit();
-          }}
-          disabled={isProcessing || (!composerValue.trim() && !queuedFile)}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.doc,.docx"
-        hidden
-        onChange={handleFileChange}
-      />
-    </div>
-  ) : (
-    <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-sm text-slate-500 shadow-sm">
-      Sign in to unlock the chat composer and let Jobzippy parse your resume in real time.
+  const composerContent = (
+    <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 text-sm text-slate-500 shadow-sm">
+      Jobzippy automatically searches and applies once your onboarding answers are synced. Use the
+      Onboarding button in the rail to update your profile via the chat agent at any time.
     </div>
   );
 
@@ -387,6 +606,87 @@ function App() {
         statusLabel={statusLabel}
         headerActions={
           <div className="flex items-center gap-2">
+            {isAuthenticated && (effectiveAuthNeeded.linkedin || effectiveAuthNeeded.indeed) && (
+              <div className="mr-2 hidden items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 md:flex">
+                <span>Sign in:</span>
+                {effectiveAuthNeeded.linkedin && (
+                  <a
+                    href="https://www.linkedin.com/jobs/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    LinkedIn
+                  </a>
+                )}
+                {effectiveAuthNeeded.linkedin && effectiveAuthNeeded.indeed && <span>·</span>}
+                {effectiveAuthNeeded.indeed && (
+                  <a
+                    href="https://www.indeed.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    Indeed
+                  </a>
+                )}
+              </div>
+            )}
+            {isAuthenticated && (
+              <>
+                {(() => {
+                  const missing = [
+                    effectiveAuthNeeded.linkedin ? 'LinkedIn' : null,
+                    effectiveAuthNeeded.indeed ? 'Indeed' : null,
+                  ].filter(Boolean) as string[];
+                  const totalNeeded = 2;
+                  const okCount = totalNeeded - missing.length;
+                  const variant =
+                    okCount === 0 ? 'red' : okCount === totalNeeded ? 'green' : 'amber';
+                  const borderClass =
+                    variant === 'green'
+                      ? 'border-emerald-300 hover:border-emerald-400'
+                      : variant === 'amber'
+                        ? 'border-amber-300 hover:border-amber-400'
+                        : 'border-rose-300 hover:border-rose-400';
+                  const icon =
+                    variant === 'green' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle
+                        className={`h-3.5 w-3.5 ${variant === 'amber' ? 'text-amber-600' : 'text-rose-600'}`}
+                      />
+                    );
+                  const title =
+                    missing.length === 0
+                      ? 'All platforms signed in'
+                      : `Not signed in: ${missing.join(', ')}`;
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span title={title}>{icon}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`text-xs ${borderClass}`}
+                        onClick={startAgent}
+                        disabled={engineState === 'RUNNING' || preflightPending}
+                      >
+                        {preflightPending ? 'Checking…' : 'Start Agent'}
+                      </Button>
+                    </div>
+                  );
+                })()}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={stopAgent}
+                  disabled={engineState === 'IDLE'}
+                >
+                  Stop Agent
+                </Button>
+              </>
+            )}
             {isAuthenticated && (
               <Button
                 variant="ghost"
@@ -402,6 +702,7 @@ function App() {
         history={historyContent}
         composer={composerContent}
         navItems={NAV_ITEMS}
+        secondaryNavItems={onboardingNavItems}
         avatar={
           user
             ? {
@@ -423,244 +724,24 @@ function App() {
       />
       <OnboardingWizard
         open={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
+        onClose={() => {
+          setIsWizardOpen(false);
+          setManualWizardOpen(false);
+        }}
         onComplete={handleCompleteOnboarding}
         onSkip={handleSkipOnboarding}
+        autoCloseOnComplete={!manualWizardOpen}
       />
+      <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
+      <TutorialCarousel open={false} onClose={() => {}} />
+      <TutorialCarousel
+        open={showTutorial && !isWizardOpen}
+        onClose={handleDismissTutorial}
+        onStart={startAgent}
+      />
+      {/* No bottom-right retry prompt by design; Start button itself conveys status */}
     </>
   );
 }
 
 export default App;
-
-function formatTimestamp(iso: string) {
-  const date = new Date(iso);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatAttachmentSize(size: number) {
-  if (size === 0) return '0 KB';
-  return `${(size / 1024).toFixed(0)} KB`;
-}
-
-function AttachmentChips({ attachments }: { attachments: IntakeAttachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {attachments.map((attachment) => (
-        <span
-          key={attachment.id}
-          className="inline-flex items-center space-x-2 rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur"
-        >
-          <Paperclip className="h-3 w-3" />
-          <span className="font-medium">{attachment.name}</span>
-          <span className="text-[10px] text-slate-400">
-            {formatAttachmentSize(attachment.size)}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function StatusStep({ step }: { step: IntakeStatusStep }) {
-  const Icon =
-    step.state === 'completed'
-      ? CheckCircle2
-      : step.state === 'in_progress'
-        ? Loader2
-        : step.state === 'error'
-          ? AlertTriangle
-          : Clock;
-
-  return (
-    <div className="flex items-start space-x-3">
-      <div
-        className={clsx(
-          'mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border',
-          step.state === 'completed' && 'border-emerald-200 bg-emerald-50 text-emerald-600',
-          step.state === 'in_progress' &&
-            'border-indigo-200 bg-indigo-50 text-indigo-600 animate-pulse',
-          step.state === 'error' && 'border-rose-200 bg-rose-50 text-rose-500',
-          step.state === 'pending' && 'border-slate-200 bg-white text-slate-300'
-        )}
-      >
-        <Icon className={clsx('h-4 w-4', step.state === 'in_progress' && 'animate-spin')} />
-      </div>
-      <div>
-        <p className="text-sm font-medium text-slate-700">{step.label}</p>
-        {step.description && <p className="text-xs text-slate-500">{step.description}</p>}
-        {step.error && <p className="text-xs text-rose-500">{step.error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function StatusMessage({ message }: { message: IntakeMessage }) {
-  const steps = message.statusSteps ?? [];
-  return (
-    <div className="rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <div className="mb-3 flex items-center space-x-2">
-        <Sparkles className="h-4 w-4 text-indigo-500" />
-        <p className="text-sm font-semibold text-indigo-600">{message.content}</p>
-      </div>
-      <div className="space-y-4">
-        {steps.map((step) => (
-          <StatusStep key={step.id} step={step} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PreviewSection({ section }: { section: IntakePreviewSection }) {
-  // Clamp confidence to 0-1 range in case API returns bad values
-  const normalizedConfidence = Math.min(1, Math.max(0, section.confidence));
-  const confidencePercent = Math.round(normalizedConfidence * 100);
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700">{section.title}</h4>
-          <p className="text-xs text-slate-400">Confidence {confidencePercent}%</p>
-        </div>
-      </div>
-      <div className="mt-3 space-y-2">
-        {section.fields.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No data extracted for this section</p>
-        ) : (
-          section.fields.map((field) => (
-            <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
-              {Array.isArray(field.value) ? (
-                <p className="mt-1 text-sm text-slate-700">
-                  {field.value.length > 0 ? field.value.join(', ') : '(empty)'}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-slate-700">{field.value || '(empty)'}</p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PreviewMessage({
-  message,
-  onApply,
-  onEdit,
-  isApplying,
-}: {
-  message: IntakeMessage;
-  onApply?: () => void;
-  onEdit?: () => void;
-  isApplying?: boolean;
-}) {
-  const sections = message.previewSections ?? [];
-  const metadata = message.metadata ?? {};
-
-  return (
-    <div className="space-y-4 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-indigo-600">Resume parsed successfully</p>
-          <p className="text-xs text-slate-400">
-            Confidence {Math.round(((metadata.confidence as number) ?? 0) * 100)}%
-          </p>
-        </div>
-        <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-600">
-          {(metadata.resumeMetadata as { fileName?: string })?.fileName ?? 'Resume'}
-        </span>
-      </div>
-      <p className="text-sm text-slate-700">{message.content}</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        {sections.map((section) => (
-          <PreviewSection key={section.id} section={section} />
-        ))}
-      </div>
-      {(onApply || onEdit) && (
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
-            onClick={onEdit}
-            disabled={!onEdit}
-          >
-            Edit manually
-          </Button>
-          <Button
-            size="sm"
-            className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
-            onClick={onApply}
-            disabled={!onApply || isApplying}
-          >
-            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChatMessage({
-  message,
-  onApplyPreview,
-  onEditPreview,
-  isPreviewProcessing,
-}: {
-  message: IntakeMessage;
-  onApplyPreview?: () => void;
-  onEditPreview?: () => void;
-  isPreviewProcessing?: boolean;
-}) {
-  const isAssistant = message.role !== 'user';
-  const alignment = isAssistant ? 'items-start' : 'items-end';
-  const bubbleClass = isAssistant
-    ? 'bg-white/80 text-slate-700 border border-indigo-100 rounded-3xl rounded-tl-md'
-    : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-3xl rounded-tr-md';
-
-  if (message.kind === 'status') {
-    return (
-      <div className="flex flex-col items-start space-y-2">
-        <StatusMessage message={message} />
-        <span className="text-[10px] uppercase tracking-wide text-slate-300">
-          {formatTimestamp(message.createdAt)}
-        </span>
-      </div>
-    );
-  }
-
-  if (message.kind === 'preview') {
-    return (
-      <div className="flex flex-col items-start space-y-2">
-        <PreviewMessage
-          message={message}
-          onApply={onApplyPreview}
-          onEdit={onEditPreview}
-          isApplying={isPreviewProcessing}
-        />
-        <span className="text-[10px] uppercase tracking-wide text-slate-300">
-          {formatTimestamp(message.createdAt)}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={clsx('flex flex-col', alignment, 'space-y-2')}>
-      <div
-        className={clsx('max-w-[85%] rounded-3xl px-4 py-3 shadow-sm backdrop-blur', bubbleClass)}
-      >
-        <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
-        {message.attachments && <AttachmentChips attachments={message.attachments} />}
-      </div>
-      <span className="text-[10px] uppercase tracking-wide text-slate-300">
-        {formatTimestamp(message.createdAt)}
-      </span>
-    </div>
-  );
-}

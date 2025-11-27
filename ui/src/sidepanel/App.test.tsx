@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import App from './App';
 import { isAuthenticated, getUserInfo } from '@/lib/oauth/google-auth';
+import * as onboardingModule from '@/lib/onboarding';
 
 vi.mock('@/lib/oauth/google-auth', () => {
   return {
@@ -39,6 +40,9 @@ vi.mock('@/lib/firebase/session', () => ({
   disconnectFirebaseAuth: vi.fn(),
 }));
 
+const actualUseOnboarding = onboardingModule.useOnboarding;
+const useOnboardingSpy = vi.spyOn(onboardingModule, 'useOnboarding');
+
 // Helper to render with AuthProvider
 function renderApp() {
   return render(
@@ -50,6 +54,7 @@ function renderApp() {
 
 describe('App', () => {
   beforeEach(() => {
+    useOnboardingSpy.mockImplementation((enabled: boolean) => actualUseOnboarding(enabled));
     chrome.storage.local.get = vi.fn(
       async () => ({}) as Record<string, unknown>
     ) as unknown as typeof chrome.storage.local.get;
@@ -102,7 +107,7 @@ describe('App', () => {
     });
   });
 
-  it('lets a first-time authenticated user launch onboarding from the CTA', async () => {
+  it('opens onboarding for a first-time user and allows reopening via nav icon', async () => {
     const isAuthenticatedMock = vi.mocked(isAuthenticated);
     const getUserInfoMock = vi.mocked(getUserInfo);
 
@@ -124,15 +129,22 @@ describe('App', () => {
     const user = userEvent.setup();
     renderApp();
 
-    const ctaButton = await screen.findByRole('button', { name: /complete setup/i });
-    expect(ctaButton).toBeInTheDocument();
-    expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/finish setting up jobzippy/i)).toBeInTheDocument();
+    });
 
-    await user.click(ctaButton);
+    const closeButton = screen.getByRole('button', { name: /close onboarding wizard/i });
+    await user.click(closeButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/step 1 of/i)).toBeInTheDocument();
-      expect(screen.getByText(/welcome to jobzippy/i)).toBeInTheDocument();
+      expect(screen.queryByText(/finish setting up jobzippy/i)).not.toBeInTheDocument();
+    });
+
+    const navButton = await screen.findByRole('button', { name: /onboarding/i });
+    await user.click(navButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/finish setting up jobzippy/i)).toBeInTheDocument();
     });
 
     isAuthenticatedMock.mockResolvedValue(false);
@@ -142,7 +154,6 @@ describe('App', () => {
   it('shows resume onboarding card when onboarding was skipped', async () => {
     const isAuthenticatedMock = vi.mocked(isAuthenticated);
     const getUserInfoMock = vi.mocked(getUserInfo);
-    const storageGetMock = chrome.storage.local.get as unknown as Mock;
 
     isAuthenticatedMock.mockResolvedValue(true);
     getUserInfoMock.mockResolvedValue({
@@ -154,17 +165,23 @@ describe('App', () => {
       family_name: 'User',
       picture: 'https://example.com/avatar.png',
     });
-    storageGetMock.mockResolvedValue({
-      onboardingStatus: { status: 'skipped', updatedAt: new Date().toISOString() },
+    useOnboardingSpy.mockImplementation((enabled: boolean) => {
+      const result = actualUseOnboarding(enabled);
+      if (!enabled) {
+        return result;
+      }
+      return {
+        ...result,
+        snapshot: { ...result.snapshot, status: 'skipped' },
+      };
     });
 
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /complete setup/i })).toBeInTheDocument();
+      expect(screen.getByTestId('resume-onboarding-card')).toBeInTheDocument();
     });
 
     isAuthenticatedMock.mockResolvedValue(false);
-    storageGetMock.mockResolvedValue({});
   });
 });

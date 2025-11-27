@@ -165,4 +165,15 @@ export class FirestoreRepository {
 
     await setDoc(referralRef, payload);
   }
+
+  async updateSheetId(userId: string, sheetId: string): Promise<void> {
+    if (!userId) {
+      throw new Error('Cannot update sheet id without a userId.');
+    }
+    const userRef = doc(this.#db, 'users', userId);
+    await updateDoc(userRef, {
+      sheet_id: sheetId,
+      updated_at: Date.now(),
+    });
+  }
 }

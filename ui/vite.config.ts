@@ -17,6 +17,10 @@ export default defineConfig({
           src: 'public/icons',
           dest: '.',
         },
+        {
+          src: 'public/mocks',
+          dest: '.',
+        },
       ],
     }),
   ],
@@ -27,7 +31,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
+    emptyOutDir: false,
     sourcemap: process.env.NODE_ENV === 'development',
     rollupOptions: {
       input: {
@@ -35,16 +39,10 @@ export default defineConfig({
         'sidepanel/index': resolve(__dirname, 'src/sidepanel/index.html'),
         // Background service worker
         background: resolve(__dirname, 'src/background/index.ts'),
-        // Content scripts
-        'content-linkedin': resolve(__dirname, 'src/content/linkedin/index.ts'),
-        'content-indeed': resolve(__dirname, 'src/content/indeed/index.ts'),
       },
       output: {
         entryFileNames: (chunkInfo) => {
           // Background and content scripts should be in their own files
-          if (chunkInfo.name.startsWith('content-')) {
-            return 'content/[name].js';
-          }
           if (chunkInfo.name === 'background') {
             return 'background/index.js';
           }

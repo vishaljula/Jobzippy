@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Senior Software Engineer - LinkedIn Easy Apply</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f2ef;
+            padding: 20px;
+        }
+
+        .job-details {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #000;
+            margin-bottom: 8px;
+        }
+
+        .company {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        .apply-button {
+            background: #0a66c2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 16px 0;
+        }
+
+        .apply-button:hover {
+            background: #004182;
+        }
+
+        /* Easy Apply Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e0e0e0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .step.active {
+            border-bottom-color: #0a66c2;
+            color: #0a66c2;
+            font-weight: 600;
+        }
+
+        .step.completed {
+            border-bottom-color: #057642;
+            color: #057642;
+        }
+
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        label .required {
+            color: #d32f2f;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #0a66c2;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .file-upload {
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: #0a66c2;
+            background: #f8f9fa;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .radio-group,
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option,
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-footer {
+            padding: 20px 24px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-secondary {
+            background: #fff;
+            color: #0a66c2;
+            border: 1px solid #0a66c2;
+        }
+
+        .btn-primary {
+            background: #0a66c2;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .success-message.active {
+            display: block;
+        }
+
+        .success-icon {
+            font-size: 48px;
+            color: #057642;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="job-details">
+        <h1 id="jobTitle">Loading...</h1>
+        <div class="company" id="jobCompany"></div>
+        <p style="margin: 16px 0; color: #666;" id="jobDescription">
+        </p>
+        <button class="apply-button" aria-label="Easy Apply" data-testid="easy-apply-button">
+            Easy Apply
+        </button>
+    </div>
+
+    <!-- Easy Apply Modal -->
+    <div class="modal-overlay" id="easyApplyModal">
+        <div class="modal" role="dialog" aria-label="Easy Apply">
+            <div class="modal-header">
+                <div class="modal-title">Apply to Google</div>
+                <button class="close-button" aria-label="Close">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Step Indicator -->
+                <div class="step-indicator">
+                    <div class="step active" data-step="1">Contact info</div>
+                    <div class="step" data-step="2">Resume</div>
+                    <div class="step" data-step="3">Additional info</div>
+                    <div class="step" data-step="4">Review</div>
+                </div>
+
+                <!-- Step 1: Contact Info -->
+                <div class="form-section active" data-section="1">
+                    <div class="form-group">
+                        <label>First name <span class="required">*</span></label>
+                        <input type="text" name="firstName" autocomplete="given-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last name <span class="required">*</span></label>
+                        <input type="text" name="lastName" autocomplete="family-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email <span class="required">*</span></label>
+                        <input type="email" name="email" autocomplete="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone <span class="required">*</span></label>
+                        <input type="tel" name="phone" autocomplete="tel" required>
+                    </div>
+                </div>
+
+                <!-- Step 2: Resume -->
+                <div class="form-section" data-section="2">
+                    <div class="form-group">
+                        <label>Resume <span class="required">*</span></label>
+                        <div class="file-upload" onclick="document.getElementById('resume').click()">
+                            <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+                            <div>📄 Click to upload or drag and drop</div>
+                            <div style="color: #666; font-size: 12px; margin-top: 8px;">PDF, DOC, DOCX (Max 5MB)</div>
+                        </div>
+                        <div id="fileName" style="margin-top: 8px; color: #057642;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Cover letter (Optional)</label>
+                        <textarea name="coverLetter"
+                            placeholder="Tell us why you're interested in this role..."></textarea>
+                    </div>
+                </div>
+
+                <!-- Step 3: Additional Info -->
+                <div class="form-section" data-section="3">
+                    <div class="form-group">
+                        <label>Are you legally authorized to work in the United States? <span
+                                class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="workAuth" value="yes" required>
+                                Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="workAuth" value="no">
+                                No
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Will you now or in the future require sponsorship? <span
+                                class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="sponsorship" value="yes" required>
+                                Yes
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="sponsorship" value="no">
+                                No
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>LinkedIn profile (Optional)</label>
+                        <input type="text" name="linkedin" placeholder="https://linkedin.com/in/yourprofile">
+                    </div>
+                    <div class="form-group">
+                        <label>Website (Optional)</label>
+                        <input type="text" name="website" placeholder="https://yourwebsite.com">
+                    </div>
+                </div>
+
+                <!-- Step 4: Review -->
+                <div class="form-section" data-section="4">
+                    <h3 style="margin-bottom: 16px;">Review your application</h3>
+                    <div id="reviewContent" style="background: #f8f9fa; padding: 16px; border-radius: 4px;">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label class="checkbox-option">
+                            <input type="checkbox" name="terms" required>
+                            I agree to the terms and conditions
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Success Message -->
+                <div class="success-message" id="successMessage">
+                    <div class="success-icon">✓</div>
+                    <h2>Application submitted!</h2>
+                    <p style="color: #666; margin-top: 8px;">Your application has been sent to Google.</p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="backBtn" style="display: none;">Back</button>
+                <div style="flex: 1;"></div>
+                <button class="btn btn-primary" id="nextBtn">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Job data mapping
+        const jobData = {
+            '123456': {
+                title: 'Senior Software Engineer',
+                company: 'TechCorp Inc.',
+                location: 'San Francisco, CA',
+                description: 'We are looking for an experienced Senior Software Engineer to join our team. You will work on cutting-edge technologies including React, TypeScript, and cloud infrastructure.'
+            },
+            '123457': {
+                title: 'Product Manager',
+                company: 'StartupXYZ',
+                location: 'New York, NY',
+                description: 'Join our product team to drive innovation and build products that millions of users love. Experience with agile methodologies and user research required.'
+            },
+            '123458': {
+                title: 'Full Stack Developer',
+                company: 'DevSolutions LLC',
+                location: 'Austin, TX',
+                description: 'Looking for a Full Stack Developer proficient in modern web technologies. You will build scalable applications using Node.js, React, and PostgreSQL.'
+            },
+            '123459': {
+                title: 'Data Scientist',
+                company: 'DataCorp',
+                location: 'Seattle, WA',
+                description: 'Join our data science team to build ML models and derive insights from large datasets. Experience with Python, TensorFlow, and statistical analysis required.'
+            },
+            '123460': {
+                title: 'DevOps Engineer',
+                company: 'CloudTech',
+                location: 'Boston, MA',
+                description: 'We need a DevOps Engineer to manage our cloud infrastructure and CI/CD pipelines. Experience with AWS, Kubernetes, and Terraform is essential.'
+            },
+            '123461': {
+                title: 'UX Designer',
+                company: 'DesignHub',
+                location: 'Los Angeles, CA',
+                description: 'Create beautiful and intuitive user experiences for our products. You will conduct user research, create wireframes, and collaborate with engineers.'
+            },
+            '123462': {
+                title: 'Backend Engineer',
+                company: 'ServerSide Inc.',
+                location: 'Denver, CO',
+                description: 'Build robust backend systems and APIs. You will work with microservices architecture, databases, and distributed systems.'
+            },
+            '123463': {
+                title: 'Frontend Developer',
+                company: 'WebWorks',
+                location: 'Portland, OR',
+                description: 'Develop modern web applications using React, Vue, or Angular. You will create responsive UIs and work closely with designers and backend engineers.'
+            },
+            '123464': {
+                title: 'ML Engineer',
+                company: 'AI Innovations',
+                location: 'San Jose, CA',
+                description: 'Build and deploy machine learning models at scale. Experience with PyTorch, MLOps, and production ML systems required.'
+            }
+        };
+
+        // Get job ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const jobId = urlParams.get('job');
+        const job = jobData[jobId] || jobData['123456']; // Default to first job
+
+        // Populate job details
+        document.getElementById('jobTitle').textContent = job.title;
+        document.getElementById('jobCompany').textContent = `${job.company} · ${job.location}`;
+        document.getElementById('jobDescription').textContent = job.description;
+        document.title = `${job.title} - LinkedIn Easy Apply`;
+        document.querySelector('.modal-title').textContent = `Apply to ${job.company}`;
+
+        let currentStep = 1;
+        const totalSteps = 4;
+        const formData = {};
+
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+            }
+        }
+
+        // Open modal
+        document.querySelector('.apply-button').addEventListener('click', () => {
+            document.getElementById('easyApplyModal').classList.add('active');
+        });
+
+        // Close modal
+        document.querySelector('.close-button').addEventListener('click', () => {
+            document.getElementById('easyApplyModal').classList.remove('active');
+        });
+
+        // File upload handler
+        document.getElementById('resume').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = `✓ ${file.name}`;
+            }
+        });
+
+        // Navigation
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            if (currentStep < totalSteps) {
+                // Validate current step
+                const currentSection = document.querySelector(`[data-section="${currentStep}"]`);
+                const inputs = currentSection.querySelectorAll('input[required], textarea[required]');
+                let valid = true;
+
+                inputs.forEach(input => {
+                    if (!input.value && input.type !== 'radio' && input.type !== 'checkbox') {
+                        valid = false;
+                        input.style.borderColor = '#d32f2f';
+                    } else {
+                        input.style.borderColor = '#ccc';
+                    }
+                });
+
+                // Check radio groups
+                const radioGroups = currentSection.querySelectorAll('input[type="radio"][required]');
+                const radioNames = new Set();
+                radioGroups.forEach(radio => radioNames.add(radio.name));
+                radioNames.forEach(name => {
+                    const checked = currentSection.querySelector(`input[name="${name}"]:checked`);
+                    if (!checked) valid = false;
+                });
+
+                if (!valid) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+
+                // Save data
+                inputs.forEach(input => {
+                    if (input.type === 'radio') {
+                        if (input.checked) formData[input.name] = input.value;
+                    } else if (input.type === 'checkbox') {
+                        formData[input.name] = input.checked;
+                    } else {
+                        formData[input.name] = input.value;
+                    }
+                });
+
+                // Move to next step
+                currentStep++;
+                updateUI();
+
+                // Populate review if on last step
+                if (currentStep === totalSteps) {
+                    populateReview();
+                }
+            } else {
+                // Submit
+                submitApplication();
+            }
+        });
+
+        document.getElementById('backBtn').addEventListener('click', () => {
+            if (currentStep > 1) {
+                currentStep--;
+                updateUI();
+            }
+        });
+
+        function updateUI() {
+            // Update step indicators
+            document.querySelectorAll('.step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index + 1 === currentStep) {
+                    step.classList.add('active');
+                } else if (index + 1 < currentStep) {
+                    step.classList.add('completed');
+                }
+            });
+
+            // Update sections
+            document.querySelectorAll('.form-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.querySelector(`[data-section="${currentStep}"]`).classList.add('active');
+
+            // Update buttons
+            document.getElementById('backBtn').style.display = currentStep > 1 ? 'block' : 'none';
+            document.getElementById('nextBtn').textContent = currentStep === totalSteps ? 'Submit application' : 'Next';
+        }
+
+        function populateReview() {
+            const review = document.getElementById('reviewContent');
+            review.innerHTML = `
+        <div style="margin-bottom: 12px;"><strong>Name:</strong> ${formData.firstName} ${formData.lastName}</div>
+        <div style="margin-bottom: 12px;"><strong>Email:</strong> ${formData.email}</div>
+        <div style="margin-bottom: 12px;"><strong>Phone:</strong> ${formData.phone}</div>
+        <div style="margin-bottom: 12px;"><strong>Resume:</strong> ${document.getElementById('resume').files[0]?.name || 'Not uploaded'}</div>
+        <div style="margin-bottom: 12px;"><strong>Work Authorization:</strong> ${formData.workAuth === 'yes' ? 'Yes' : 'No'}</div>
+        <div style="margin-bottom: 12px;"><strong>Sponsorship Required:</strong> ${formData.sponsorship === 'yes' ? 'Yes' : 'No'}</div>
+      `;
+        }
+
+        function submitApplication() {
+            // Check terms
+            const terms = document.querySelector('input[name="terms"]');
+            if (!terms.checked) {
+                alert('Please agree to the terms and conditions');
+                return;
+            }
+
+            // Capture final answers including non-required fields
+            const modalRoot = document.querySelector('.modal');
+            const allInputs = modalRoot.querySelectorAll('input, textarea, select');
+            const answers = { ...formData };
+
+            allInputs.forEach((input) => {
+                if (!input.name) return;
+                if (input.type === 'file') {
+                    if (input.files && input.files[0]) {
+                        answers[input.name] = input.files[0].name || 'uploaded-file';
+                    }
+                    return;
+                }
+                if (input.type === 'radio') {
+                    if (input.checked) {
+                        answers[input.name] = input.value;
+                    }
+                    return;
+                }
+                if (input.type === 'checkbox') {
+                    answers[input.name] = !!input.checked;
+                    return;
+                }
+                answers[input.name] = input.value;
+            });
+
+            const urlParamsForJob = new URLSearchParams(window.location.search);
+            const jobIdForLog = urlParamsForJob.get('job') || jobId || null;
+
+            logMockSubmission({
+                atsType: 'linkedin_easy_apply',
+                jobId: jobIdForLog,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
+
+            // Hide form, show success
+            document.querySelectorAll('.form-section').forEach(s => s.style.display = 'none');
+            document.querySelector('.step-indicator').style.display = 'none';
+            document.querySelector('.modal-footer').style.display = 'none';
+            document.getElementById('successMessage').classList.add('active');
+
+            console.log('[LinkedIn Easy Apply] Application submitted:', formData);
+
+            // Close modal after 2 seconds
+            setTimeout(() => {
+                document.getElementById('easyApplyModal').classList.remove('active');
+            }, 2000);
+        }
+    </script>
+</body>
+
+</html>

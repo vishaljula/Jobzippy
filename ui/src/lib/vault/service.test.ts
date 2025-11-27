@@ -23,6 +23,7 @@ const SAMPLE_PROFILE: ProfileVault['profile'] = {
     remote: true,
     locations: ['London', 'Remote'],
     salary_min: 120000,
+    salary_currency: 'GBP',
     start_date: '2025-01-01',
   },
 };

@@ -13,6 +13,7 @@ import {
   type UserInfo,
 } from '@/lib/types';
 import { getStorage, removeStorage, setStorage } from '@/lib/storage';
+import { deriveVaultPassword } from '@/lib/vault/utils';
 
 interface UseIntakeAgentOptions {
   enabled: boolean;
@@ -50,14 +51,6 @@ const STATUS_TEMPLATE: IntakeStatusStep[] = [
 ];
 
 const SNAPSHOT_VERSION = 1;
-
-function deriveVaultPassword(user: UserInfo | null): string {
-  if (!user) {
-    return 'jobzippy-demo';
-  }
-  const extensionId = chrome?.runtime?.id ?? 'jobzippy';
-  return `vault-${extensionId}-${user.sub}`;
-}
 
 function applyProgressToSteps(
   steps: IntakeStatusStep[],

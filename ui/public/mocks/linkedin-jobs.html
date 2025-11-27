@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Jobs - Mock</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f3f2ef;
+    }
+
+    .jobs-search-results {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .jobs-search-results__list-item {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .job-card-list__title-link {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0a66c2;
+      text-decoration: none;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .base-search-card__subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .job-card-container__metadata-item {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .job-card-container__salary-info {
+      font-size: 14px;
+      color: #057642;
+      font-weight: 500;
+    }
+
+    button {
+      background: #0a66c2;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 32px;
+    }
+
+    .pagination button {
+      background: white;
+      color: #0a66c2;
+      border: 1px solid #0a66c2;
+    }
+
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination button.active {
+      background: #0a66c2;
+      color: white;
+    }
+
+    /* Easy Apply Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .close-button {
+      background: none !important;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .modal-footer {
+      padding: 20px 24px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #0a66c2;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="jobs-search-results">
+    <h1>LinkedIn Jobs - Mock Page (Dev Mode)</h1>
+
+    <div style="display: flex; gap: 20px;">
+      <div style="flex: 1;">
+        <ul class="jobs-search-results__list" id="jobsList">
+          <!-- Jobs will be dynamically inserted here -->
+        </ul>
+
+        <div class="pagination">
+          <button id="prevBtn" aria-label="Previous Page">Previous</button>
+          <button class="page-btn active" data-page="1">1</button>
+          <button class="page-btn" data-page="2">2</button>
+          <button class="page-btn" data-page="3">3</button>
+          <button id="nextBtn" aria-label="Next Page">Next</button>
+        </div>
+      </div>
+
+      <div class="jobs-search__job-details--container"
+        style="flex: 1; background: white; border-radius: 8px; padding: 20px; height: fit-content; position: sticky; top: 20px;">
+        <div class="jobs-details__main-content">
+          <h2 id="job-details-title">Select a job to view details</h2>
+          <div id="job-details">
+            <p>Click on a job card to see the description here.</p>
+          </div>
+          <div id="job-actions" style="margin-top: 20px;">
+            <!-- Buttons will appear here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Easy Apply Modal -->
+    <div class="modal-overlay" id="easyApplyModal">
+      <div class="modal" role="dialog" aria-label="Easy Apply">
+        <div class="modal-header">
+          <div class="modal-title" id="modalCompanyName">Apply to Company</div>
+          <button class="close-button" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label>First name <span style="color: #d32f2f;">*</span></label>
+            <input type="text" name="firstName" autocomplete="given-name" required>
+          </div>
+          <div class="form-group">
+            <label>Last name <span style="color: #d32f2f;">*</span></label>
+            <input type="text" name="lastName" autocomplete="family-name" required>
+          </div>
+          <div class="form-group">
+            <label>Email <span style="color: #d32f2f;">*</span></label>
+            <input type="email" name="email" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label>Phone <span style="color: #d32f2f;">*</span></label>
+            <input type="tel" name="phone" autocomplete="tel" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="submitApplication">Submit application</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      // All 9 jobs data (full mixed run)
+      const allJobs = [
+        // Shuffled order to vary testing sequence
+        { id: '123463', title: 'Frontend Developer', company: 'WebWorks', location: 'Portland, OR', type: 'Hybrid', salary: '$125,000 - $160,000', applyType: 'external', atsUrl: 'workday-apply.html' },            // Workday external form
+        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },          // Greenhouse
+        { id: '123456', title: 'Senior Software Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', atsUrl: null },        // LinkedIn modal
+        { id: '123464', title: 'ML Engineer', company: 'AI Innovations', location: 'San Jose, CA', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'easy_apply', atsUrl: 'linkedin-easy-apply.html' },    // LinkedIn Easy Apply in ATS
+        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'motion-recruitment-apply.html' },    // Motion Recruitment
+        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },     // Greenhouse
+        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html' },    // Workday
+        { id: '123460', title: 'DevOps Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Hybrid', salary: '$145,000 - $185,000', applyType: 'modal_apply', atsUrl: null },                          // LinkedIn modal
+        { id: '123461', title: 'UX Designer', company: 'DesignHub', location: 'Los Angeles, CA', type: 'Remote', salary: '$120,000 - $150,000', applyType: 'external', atsUrl: 'indeed-apply.html' }               // Indeed-style ATS (manual_input_required)
+      ];
+
+      let currentPage = 1;
+      const jobsPerPage = 3;
+      let currentJob = null;
+
+      // Helper to POST submission data back to the mock server
+      function logMockSubmission(payload) {
+        try {
+          fetch('/mock-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).catch((err) => {
+            console.error('[LinkedIn Jobs Mock] Failed to log submission', err);
+          });
+        } catch (err) {
+          console.error('[LinkedIn Jobs Mock] Failed to log submission', err);
+        }
+      }
+
+      function renderJobs() {
+        const totalPages = Math.max(1, Math.ceil(allJobs.length / jobsPerPage));
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        const startIndex = (currentPage - 1) * jobsPerPage;
+        const endIndex = startIndex + jobsPerPage;
+        const pageJobs = allJobs.slice(startIndex, endIndex);
+
+        const jobsList = document.getElementById('jobsList');
+        jobsList.innerHTML = '';
+
+        pageJobs.forEach(job => {
+          const li = document.createElement('li');
+          li.className = 'jobs-search-results__list-item';
+          li.setAttribute('data-job-id', job.id);
+
+          li.innerHTML = `
+            <a href="/jobs/view/${job.id}" class="job-card-list__title-link" data-control-name="job_card_title_link">
+              ${job.title}
+            </a>
+            <h4 class="base-search-card__subtitle">${job.company}</h4>
+            <span class="job-card-container__metadata-item">${job.location} • ${job.type}</span>
+            <span class="job-card-container__salary-info">${job.salary}</span>
+            ${job.applyType === 'easy_apply' ? '<button aria-label="Easy Apply">Easy Apply</button>' : ''}
+          `;
+
+          jobsList.appendChild(li);
+        });
+
+        // Update pagination
+        document.querySelectorAll('.page-btn').forEach(btn => {
+          const pageNum = parseInt(btn.dataset.page);
+          btn.style.display = pageNum <= Math.ceil(allJobs.length / jobsPerPage) ? 'inline-block' : 'none';
+          btn.classList.toggle('active', pageNum === currentPage);
+        });
+        document.getElementById('prevBtn').disabled = currentPage === 1;
+        document.getElementById('nextBtn').disabled = currentPage >= Math.ceil(allJobs.length / jobsPerPage);
+
+        // Re-attach event listeners
+        attachJobCardListeners();
+      }
+
+      function attachJobCardListeners() {
+        // Prevent title links from navigating
+        document.querySelectorAll('.job-card-list__title-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const card = link.closest('.jobs-search-results__list-item');
+            if (card) {
+              card.click();
+            }
+          });
+        });
+
+        // Handle card clicks to show job details
+        document.querySelectorAll('.jobs-search-results__list-item').forEach(item => {
+          item.style.cursor = 'pointer';
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('button[aria-label="Easy Apply"]')) {
+              return;
+            }
+
+            const jobId = item.getAttribute('data-job-id');
+            const job = allJobs.find(j => j.id === jobId);
+            if (!job) return;
+
+            currentJob = job;
+
+            const detailsContainer = document.querySelector('.jobs-details__main-content');
+            detailsContainer.querySelector('#job-details-title').textContent = job.title;
+            detailsContainer.querySelector('#job-details').innerHTML = `
+              <p><strong>${job.company}</strong> is hiring a ${job.title}.</p>
+              <p>Location: ${job.location} (${job.type})</p>
+              <p>Salary: ${job.salary}</p>
+              <p>This is a mock job description for testing purposes. It contains keywords like React, TypeScript, and Chrome Extensions.</p>
+            `;
+
+            const actionsContainer = detailsContainer.querySelector('#job-actions');
+            if (job.applyType === 'modal_apply') {
+              // Open modal on same page
+              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+
+              const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
+              if (easyApplyBtn) {
+                easyApplyBtn.addEventListener('click', () => {
+                  document.getElementById('modalCompanyName').textContent = `Apply to ${job.company}`;
+                  document.getElementById('easyApplyModal').classList.add('active');
+                });
+              }
+            } else if (job.applyType === 'easy_apply') {
+              // Open new tab
+              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+
+              const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
+              if (easyApplyBtn) {
+                easyApplyBtn.addEventListener('click', () => {
+                  window.open(`http://localhost:3000/mocks/${job.atsUrl}?job=${jobId}`, '_blank');
+                });
+              }
+            } else {
+              // External ATS
+              actionsContainer.innerHTML = `
+                <a href="http://localhost:3000/mocks/${job.atsUrl}?job=${jobId}" 
+                   target="_blank"
+                   data-testid="external-apply-button"
+                   style="background: white; color: #0a66c2; border: 1px solid #0a66c2; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 16px; display: inline-block; cursor: pointer;">
+                  Apply
+                </a>
+              `;
+            }
+          });
+        });
+      }
+
+      // Pagination handlers
+      document.getElementById('prevBtn').addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          renderJobs();
+        }
+      });
+
+      document.getElementById('nextBtn').addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(allJobs.length / jobsPerPage));
+        if (currentPage < totalPages) {
+          currentPage++;
+          renderJobs();
+        }
+      });
+
+      document.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentPage = parseInt(btn.dataset.page);
+          renderJobs();
+        });
+      });
+
+      // Initial render
+      renderJobs();
+
+      // Modal event listeners
+      document.querySelector('.close-button').addEventListener('click', () => {
+        document.getElementById('easyApplyModal').classList.remove('active');
+      });
+
+      document.getElementById('submitApplication').addEventListener('click', () => {
+        const modal = document.getElementById('easyApplyModal');
+        const inputs = modal.querySelectorAll('input');
+        const answers = {};
+
+        inputs.forEach((input) => {
+          if (!input.name) return;
+          answers[input.name] = input.value;
+        });
+
+        const jobId = currentJob?.id || null;
+
+        logMockSubmission({
+          atsType: 'linkedin_modal',
+          jobId,
+          url: window.location.href,
+          company: currentJob?.company || null,
+          title: currentJob?.title || null,
+          submittedAt: new Date().toISOString(),
+          answers,
+        });
+
+        console.log('[LinkedIn Easy Apply] Application submitted via modal', { jobId, answers });
+        alert('Application submitted successfully!');
+        document.getElementById('easyApplyModal').classList.remove('active');
+      });
+    </script>
+    <!-- Content scripts auto-inject via manifest.json for localhost URLs -->
+</body>
+
+</html>

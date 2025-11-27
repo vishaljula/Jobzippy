@@ -19,6 +19,7 @@ export interface UserProfile {
     remote: boolean;
     locations: string[];
     salary_min: number;
+    salary_currency: string;
     start_date: string;
   };
 }
@@ -166,6 +167,27 @@ export interface JobApplication {
   visa_sponsor_flag: VisaSponsorFlag;
 }
 
+// Job Scraping Types
+export interface ScrapedJob {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  platform: JobPlatform;
+  description?: string;
+  salary?: string;
+  postedDate?: string;
+  applyType?: 'easy_apply' | 'external' | 'unknown';
+}
+
+export interface ScrapePageResult {
+  jobs: ScrapedJob[];
+  hasNextPage: boolean;
+  nextPageUrl?: string;
+  currentPage: number;
+}
+
 // Message Types for chrome.runtime messaging
 export type MessageType =
   | 'PING'
@@ -173,11 +195,39 @@ export type MessageType =
   | 'SAVE_PROFILE'
   | 'JOB_APPLIED'
   | 'START_AUTO_APPLY'
-  | 'STOP_AUTO_APPLY';
+  | 'STOP_AUTO_APPLY'
+  | 'SCRAPE_JOBS'
+  | 'JOBS_SCRAPED'
+  | 'NAVIGATE_NEXT_PAGE'
+  | 'PAGE_NAVIGATED'
+  | 'ENGINE_STATE'
+  | 'AUTH_STATE'
+  | 'AUTH_PROBE'
+  | 'AUTH_PROBE_ALL'
+  | 'PAGE_ACTIVE'
+  | 'USER_INTERACTION'
+  | 'TAB_ACTIVATED';
 
 export interface Message<T = unknown> {
   type: MessageType;
   data?: T;
+}
+
+// Engine State Types
+export interface EngineStateData {
+  state: 'IDLE' | 'RUNNING' | 'PAUSED';
+  status: string;
+  ts: number;
+  currentPlatform?: JobPlatform;
+  jobsScraped?: number;
+  jobsProcessed?: number;
+  dailyLimit?: number;
+  platformLimit?: number;
+}
+
+export interface AuthStateData {
+  platform: JobPlatform;
+  loggedIn: boolean;
 }
 
 export interface MessageResponse<T = unknown> {
@@ -202,15 +252,34 @@ export interface OnboardingSnapshot {
   updatedAt: string;
 }
 
+export interface OnboardingConversationSnapshot {
+  version: number;
+  messages: IntakeMessage[];
+  deferredTasks: IntakeDeferredTask[];
+  pendingFieldPath?: string | null;
+  missingFields: string[];
+  progress: {
+    completed: number;
+    total: number;
+    percentage: number;
+    status: 'idle' | 'collecting' | 'ready' | 'saving';
+  };
+  draft?: ProfileVault | null;
+  hasResume?: boolean;
+  lastUpdated: string;
+}
+
 export interface ExtensionStorage {
   version: string;
   installedAt: string;
   onboardingStatus?: OnboardingSnapshot;
+  onboardingConversations?: Record<string, OnboardingConversationSnapshot>;
   sheetId?: string;
   userId?: string;
   lastSync?: string;
   intakeConversation?: IntakeConversationSnapshot;
   intakeDraft?: ProfileVault;
+  tutorialDismissed?: boolean;
 }
 
 // Job Filters

@@ -4,10 +4,19 @@
   "description": "Your personal agentic AI assistant who manages your job applications",
   "type": "module",
   "scripts": {
-    "dev": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --watch --mode development",
-    "build": "tsc && cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build",
+    "clean": "rm -rf dist",
+    "dev": "npm run clean && (npm run dev:main & npm run dev:content)",
+    "dev:main": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --watch --mode development",
+    "dev:content": "npm run build:linkedin -- --watch & npm run build:indeed -- --watch & npm run build:ats -- --watch",
+    "dev:mock": "node scripts/dev-mock-server.js",
+    "build:dev": "npm run clean && tsc && cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --mode development --minify false --sourcemap true",
+    "build": "npm run clean && tsc && vite build && npm run build:content",
+    "build:content": "npm run build:linkedin && npm run build:indeed && npm run build:ats",
+    "build:linkedin": "CONTENT_ENTRY=content-linkedin CONTENT_PATH=src/content/linkedin/index.ts vite build -c vite.content.config.ts",
+    "build:indeed": "CONTENT_ENTRY=content-indeed CONTENT_PATH=src/content/indeed/index.ts vite build -c vite.content.config.ts",
+    "build:ats": "CONTENT_ENTRY=content-ats CONTENT_PATH=src/content/ats/index.ts vite build -c vite.content.config.ts",
     "preview": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite preview",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
     "type-check": "tsc --noEmit",
@@ -16,7 +25,9 @@
     "test:run": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vitest run",
     "test:coverage": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "log-server": "node log-server.js",
+    "clear-logs": "echo '=== Agent Logs - '$(date -u +\"%Y-%m-%dT%H:%M:%S.000Z\")' ===' > agent-logs.txt && echo 'Logs cleared!'"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -37,6 +48,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^10.0.0",
+    "ws": "^8.18.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -45,6 +57,7 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "^0.0.268",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.5.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

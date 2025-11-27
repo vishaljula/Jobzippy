@@ -18,7 +18,17 @@
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
   },
-  "permissions": ["activeTab", "storage", "alarms", "sidePanel", "identity", "cookies", "tabs"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "alarms",
+    "sidePanel",
+    "identity",
+    "cookies",
+    "tabs",
+    "scripting",
+    "webNavigation"
+  ],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://www.indeed.com/*",
@@ -27,27 +37,52 @@
     "https://www.ziprecruiter.com/*",
     "https://sheets.googleapis.com/*",
     "https://www.googleapis.com/*",
-    "https://accounts.google.com/*"
+    "https://accounts.google.com/*",
+    "https://*.greenhouse.io/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.lever.co/*",
+    "http://localhost:*/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*"],
+      "matches": [
+        "https://www.linkedin.com/*",
+        "http://localhost:*/mocks/linkedin-jobs.html",
+        "http://localhost:*/mocks/linkedin-easy-apply.html"
+      ],
       "js": ["content/content-linkedin.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.indeed.com/*"],
+      "matches": [
+        "https://www.indeed.com/*",
+        "http://localhost:*/mocks/indeed-jobs.html",
+        "http://localhost:*/mocks/indeed-apply.html"
+      ],
       "js": ["content/content-indeed.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.lever.co/*",
+        "https://*.icims.com/*",
+        "https://*.taleo.net/*",
+        "http://localhost:*/mocks/greenhouse-apply.html",
+        "http://localhost:*/mocks/*-apply.html"
+      ],
+      "js": ["content/content-ats.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/*"],
+      "resources": ["assets/*", "mocks/*", "content/*", "page-script.js"],
       "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   }
 }
