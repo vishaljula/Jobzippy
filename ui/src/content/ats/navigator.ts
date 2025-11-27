@@ -346,19 +346,23 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
         console.log('[Navigator] Clicking submit button despite validation failure...');
         await clickElement(submitAction, 'submit_button_force');
 
-        // Wait for success indicators to appear (event-driven)
+        // Wait for potential success indicators to appear (event-driven)
         await waitForDOMStable(500, 3000);
 
-        // Check for success indicators
-        const successIndicators = [
-          document.querySelector('.success-message'),
-          document.body.textContent?.toLowerCase().includes('submitted'),
-          document.body.textContent?.toLowerCase().includes('success'),
-        ];
+        // Reuse the same strict success detection we use in submitForm.
+        const forcedHasSuccess = hasVisibleSuccessIndicator(
+          (document.querySelector('form') as HTMLFormElement | null) || null,
+          submitAction.element as HTMLElement | null
+        );
 
-        if (successIndicators.some((ind) => ind)) {
-          logger.log('Navigator', '✓ Form submitted successfully (despite validation failure)');
-          console.log('[Navigator] ✓ Form submitted successfully (despite validation failure)');
+        if (forcedHasSuccess) {
+          logger.log(
+            'Navigator',
+            '✓ Form submitted successfully (despite validation failure) based on strict success indicators'
+          );
+          console.log(
+            '[Navigator] ✓ Form submitted successfully (despite validation failure) based on strict success indicators'
+          );
           return {
             success: true,
             finalClassification: classification,
@@ -373,11 +377,15 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
         'Form filled but not submitted (validation failed and submission attempt failed)'
       );
       console.warn('[Navigator] Form filled but not submitted (validation failed)');
+      // Treat this as a non-success so we do NOT count it as an applied job.
+      // The user can still manually submit, but from the agent’s perspective this is
+      // "manual input required", not an automatic submission.
       return {
-        success: true, // Still return success since we filled the form - user can manually submit
+        success: false,
         finalClassification: classification,
-        reason: 'form_found',
-        message: 'Application form filled (manual submission required - validation failed)',
+        reason: 'manual_input_required',
+        message:
+          'Application form was filled but could not be auto-submitted (validation failed). Please review and submit manually.',
       };
     }
   } catch (error) {
@@ -785,6 +793,10 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
   logger.log('Navigator', 'Attempting to submit form...');
   console.log('[Navigator] Attempting to submit form...');
 
+  // Snapshot pre-submit state for lightweight before/after comparison
+  const beforeUrl = window.location.href.toLowerCase();
+  const beforeText = (document.body.innerText || document.body.textContent || '').toLowerCase();
+
   // Find submit button
   const submitAction = findBestAction(classification, 'submit');
   if (!submitAction) {
@@ -953,30 +965,13 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
     // Wait for DOM to update (event-driven)
     await waitForDOMStable(500, 3000);
 
-    // Check for success indicators in the DOM
-    const successIndicators = [
-      // Success message elements
-      document.querySelector('.success-message'),
-      document.querySelector('[class*="success"]'),
-      document.querySelector('[id*="success"]'),
-      // Text content checks
-      document.body.textContent?.toLowerCase().includes('application submitted'),
-      document.body.textContent?.toLowerCase().includes('submitted successfully'),
-      document.body.textContent?.toLowerCase().includes('thank you for applying'),
-      // Form state - if form is gone or disabled, might indicate success
-      formElement && formElement.style.display === 'none',
-      submitAction.element.disabled &&
-        submitAction.element.textContent?.toLowerCase().includes('submitted'),
-    ];
-
-    const hasSuccessIndicator = successIndicators.some((ind) => {
-      if (typeof ind === 'boolean') return ind;
-      if (ind instanceof Element) {
-        const isVisible = window.getComputedStyle(ind).display !== 'none';
-        return isVisible;
-      }
-      return false;
-    });
+    // 1) Structural / visual checks (preferred)
+    // IMPORTANT: We only treat this as success if we see a *visible* success state,
+    // not just success text hidden somewhere in the DOM.
+    const hasSuccessIndicator = hasVisibleSuccessIndicator(
+      formElement as HTMLFormElement | null,
+      submitAction.element as HTMLElement | null
+    );
 
     if (hasSuccessIndicator) {
       logger.log('Navigator', 'Success indicator found in DOM');
@@ -984,13 +979,76 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
       return true;
     }
 
+    // 2) Lightweight before/after heuristic based on URL + page text,
+    // inspired by common post-submit classifiers used by other tools.
+    const afterUrl = window.location.href.toLowerCase();
+    const afterText = (document.body.innerText || document.body.textContent || '').toLowerCase();
+    const urlChanged = afterUrl !== beforeUrl;
+    const textChanged = afterText !== beforeText;
+
+    const successTextPatterns = [
+      'application submitted',
+      'submitted successfully',
+      'thank you for applying',
+      'thanks for applying',
+      'we received your application',
+      'we have received your application',
+      'your application has been submitted',
+      'your application was submitted',
+      'you have successfully submitted',
+    ];
+
+    const errorTextPatterns = [
+      'went wrong',
+      'try again',
+      'unable to submit',
+      'unable to process',
+      'unexpected error',
+      'error',
+      'failed',
+      'problem submitting',
+    ];
+
+    const successUrlPatterns = ['thank', 'success', 'submitted', 'confirmation'];
+
+    const containsAny = (text: string, patterns: string[]): boolean =>
+      patterns.some((p) => text.includes(p));
+
+    // URL-based success: redirect to confirmation-like URL
+    if (urlChanged && containsAny(afterUrl, successUrlPatterns)) {
+      logger.log('Navigator', 'Heuristic URL-based success detected after submission', {
+        beforeUrl,
+        afterUrl,
+      });
+      console.log('[Navigator] Heuristic URL-based success detected:', {
+        beforeUrl,
+        afterUrl,
+      });
+      return true;
+    }
+
+    // Text-based success: page text changed and now clearly contains success language,
+    // without obvious fatal error language.
+    if (
+      textChanged &&
+      containsAny(afterText, successTextPatterns) &&
+      !containsAny(afterText, errorTextPatterns)
+    ) {
+      logger.log('Navigator', 'Heuristic text-based success detected after submission', {
+        beforeSnippet: beforeText.slice(0, 200),
+        afterSnippet: afterText.slice(0, 200),
+      });
+      console.log('[Navigator] Heuristic text-based success detected');
+      return true;
+    }
+
     // No success detected - return false to indicate failure
     logger.log(
       'Navigator',
-      'WARNING: No success alert or DOM indicator detected - form submission may have failed'
+      'WARNING: No success alert or DOM/heuristic indicator detected - form submission may have failed'
     );
     console.warn(
-      '[Navigator] No success alert or DOM indicator detected - form submission may have failed'
+      '[Navigator] No success alert or DOM/heuristic indicator detected - form submission may have failed'
     );
     return false;
   } catch (error) {
@@ -1003,6 +1061,60 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Detect whether the page is clearly in a "submission succeeded" state.
+ * This is intentionally conservative to avoid false positives where the UI
+ * contains success text but the form was never actually submitted.
+ */
+function hasVisibleSuccessIndicator(
+  formElement: HTMLFormElement | null,
+  submitElement: HTMLElement | null
+): boolean {
+  const href = window.location.href || '';
+
+  // Helper: success heuristics tuned for mocks AND safe for real ATS
+  const checkDomSuccess = () => {
+    // 1) Visible "success" UI elements with explicit success IDs/classes
+    const explicitSelectors = ['.success-message', '#success-message'];
+    for (const selector of explicitSelectors) {
+      const el = document.querySelector(selector) as HTMLElement | null;
+      if (el && isElementActuallyVisible(el)) {
+        return true;
+      }
+    }
+
+    // 2) Form is no longer visible (hidden or removed)
+    if (formElement) {
+      const style = window.getComputedStyle(formElement);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        return true;
+      }
+    }
+
+    // 3) Submit control is disabled AND clearly indicates a submitted state
+    if (submitElement) {
+      const control = submitElement as HTMLButtonElement | HTMLInputElement;
+      const isDisabled = control.disabled ?? false;
+      const text = control.textContent?.toLowerCase() || '';
+      if (isDisabled && (text.includes('application submitted') || text.includes('submitted'))) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // For localhost mocks, we want an especially tight coupling between visible success
+  // state and our notion of "submitted", because the mocks only flip these states
+  // after their own submit handlers (which also POST to /mock-submissions).
+  if (href.startsWith('http://localhost:') || href.includes('/mocks/')) {
+    return checkDomSuccess();
+  }
+
+  // For real ATS pages, reuse the same conservative heuristics.
+  return checkDomSuccess();
+}
 
 /**
  * Check if an element is actually rendered and not hidden by styles.

@@ -148,6 +148,12 @@ function isATSUrl(url: string): boolean {
   // For development: detect localhost mocks
   // Check for /mocks/ path OR ATS names in path (e.g., greenhouse-apply.html, workday-form.html)
   if (url.startsWith('http://localhost:')) {
+    // IMPORTANT: Treat platform search pages as NON-ATS so we never close them as "stray" ATS tabs.
+    // These are the root mock search pages the engine operates on.
+    if (url.includes('linkedin-jobs.html') || url.includes('indeed-jobs.html')) {
+      return false;
+    }
+
     const atsNames = [
       'greenhouse',
       'workday',
@@ -1867,12 +1873,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return; // Handled by new architecture
   }
 
-  // If no JobSession found, log warning (this shouldn't happen with new architecture)
+  // If no JobSession found, log warning and proactively close the stray ATS tab.
+  // This can happen when the browser opens a duplicate tab (e.g., both window.open and target="_blank"),
+  // leaving an extra ATS tab that isn't tied to any active JobSession.
   console.warn(`[Jobzippy] External ATS tab loaded but no JobSession found for tabId=${tabId}`);
   logToContentScripts('Background', `External ATS tab loaded but no JobSession found`, {
     tabId,
     url: tab.url,
   });
+  try {
+    chrome.tabs.remove(tabId).catch(() => {});
+  } catch {
+    // Ignore errors - worst case the stray tab stays open, but this should be rare.
+  }
 });
 
 // Set up default alarms (placeholder for now)
