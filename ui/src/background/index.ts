@@ -15,7 +15,7 @@ import {
   persistJobCompleted,
   jobIdToMetadata,
 } from './job-persistence';
-import { jobExists, upsertJob } from '../lib/jobs/store';
+import { jobExists } from '../lib/jobs/store';
 import type {
   JobSession,
   ApplyJobStartMessage,
@@ -47,7 +47,7 @@ async function logToContentScripts(component: string, message: string, data?: an
               type: 'LOG_MESSAGE',
               data: { component, message, data },
             })
-            .catch(() => { });
+            .catch(() => {});
         }
       });
     });
@@ -299,11 +299,11 @@ function handleATSTimeout(jobId: string, source: string, expectedTimerId?: numbe
         error: `ATS timeout/failure (source: ${source})`,
       },
     })
-    .catch(() => { });
+    .catch(() => {});
 
   // Close ATS tab
   if (session.atsTabId) {
-    chrome.tabs.remove(session.atsTabId).catch(() => { });
+    chrome.tabs.remove(session.atsTabId).catch(() => {});
   }
 
   // Cleanup
@@ -444,7 +444,7 @@ function broadcastEngineState() {
             : 0,
       },
     })
-    .catch(() => { });
+    .catch(() => {});
 }
 
 async function startEngine() {
@@ -476,7 +476,7 @@ async function startEngine() {
             // Content scripts auto-inject via manifest
             // Wait for tab to be ready via tabs.onUpdated event (event-driven)
             // Send messages immediately - content script will handle if not ready
-            chrome.tabs.sendMessage(tab.id!, { type: 'AUTH_PROBE' }).catch(() => { });
+            chrome.tabs.sendMessage(tab.id!, { type: 'AUTH_PROBE' }).catch(() => {});
             // Note: We don't send SCRAPE_JOBS here if START_AGENT is about to be sent
             // The START_AGENT command triggers AgentController which handles scraping
           }
@@ -564,34 +564,33 @@ async function processJobQueue(platform: 'LinkedIn' | 'Indeed') {
   if (!job) return;
 
   // Check for duplicates before processing
-  const { jobExists, upsertJob: upsert } = await import('../lib/jobs/store');
+  const { jobExists } = await import('../lib/jobs/store');
   const existing = await jobExists(platform.toLowerCase(), job.url);
   if (existing) {
-    // If job already completed, failed, or skipped, mark as skipped and move on
-    if (existing.status === 'completed' || existing.status === 'failed' || existing.status === 'skipped') {
-      console.log(`[Jobzippy] ${platform}: Skipping duplicate job ${job.id} (already ${existing.status})`);
-
-      // Update to skipped if not already skipped (in case it was failed before)
-      if (existing.status !== 'skipped') {
-        await upsert(platform.toLowerCase(), job.url, {
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          status: 'skipped',
-          errorMessage: `Duplicate: already ${existing.status}`,
-          applyType: job.applyType,
-        }).catch((err) => {
-          console.error(`[Jobzippy] Error marking duplicate as skipped:`, err);
-        });
-      }
+    // If job already has a terminal status (completed, failed, or skipped),
+    // do NOT modify the database - simply abort and move to next job
+    if (
+      existing.status === 'completed' ||
+      existing.status === 'failed' ||
+      existing.status === 'skipped'
+    ) {
+      console.log(
+        `[Jobzippy] ${platform}: Duplicate detected - job ${job.id} already ${existing.status}. Leaving database unchanged and moving to next job.`
+      );
 
       state.isProcessingJob = false;
       processJobQueue(platform); // Process next job
       return;
     }
-    // If job is in progress, also skip (don't restart)
-    if (existing.status === 'applying' || existing.status === 'ats_filling' || existing.status === 'queued') {
-      console.log(`[Jobzippy] ${platform}: Skipping job ${job.id} (already in progress: ${existing.status})`);
+    // If job is in progress, also abort (don't restart)
+    if (
+      existing.status === 'applying' ||
+      existing.status === 'ats_filling' ||
+      existing.status === 'queued'
+    ) {
+      console.log(
+        `[Jobzippy] ${platform}: Duplicate detected - job ${job.id} already in progress (${existing.status}). Aborting and moving to next job.`
+      );
       state.isProcessingJob = false;
       processJobQueue(platform);
       return;
@@ -738,31 +737,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           // Check for duplicates before registering
           const existingJob = await jobExists(platform.toLowerCase(), url);
           if (existingJob) {
-            // If already completed/failed/skipped, mark as skipped and return
+            // If already completed/failed/skipped, do NOT modify database - simply abort
             if (['completed', 'failed', 'skipped'].includes(existingJob.status)) {
-              console.log(`[Jobzippy] APPLY_JOB_START: Job ${jobId} already ${existingJob.status}, marking as skipped`);
+              console.log(
+                `[Jobzippy] APPLY_JOB_START: Duplicate detected - job ${jobId} already ${existingJob.status}. Leaving database unchanged and aborting.`
+              );
 
-              // Update to skipped if not already skipped
-              if (existingJob.status !== 'skipped') {
-                await upsertJob(platform.toLowerCase(), url, {
-                  title: title || '',
-                  company: company || '',
-                  location: location,
-                  status: 'skipped',
-                  errorMessage: `Duplicate: already ${existingJob.status}`,
-                  applyType,
-                }).catch((err) => {
-                  console.error(`[Jobzippy] Error marking duplicate as skipped:`, err);
-                });
-              }
-
-              sendResponse({ status: 'skipped', reason: `Already ${existingJob.status}` });
+              sendResponse({ status: 'duplicate', reason: `Already ${existingJob.status}` });
               return;
             }
-            // If in progress, also skip
+            // If in progress, also abort (don't restart)
             if (['applying', 'ats_filling', 'queued'].includes(existingJob.status)) {
-              console.log(`[Jobzippy] APPLY_JOB_START: Job ${jobId} already in progress (${existingJob.status}), skipping`);
-              sendResponse({ status: 'skipped', reason: `Already in progress` });
+              console.log(
+                `[Jobzippy] APPLY_JOB_START: Duplicate detected - job ${jobId} already in progress (${existingJob.status}). Aborting.`
+              );
+              sendResponse({ status: 'duplicate', reason: `Already in progress` });
               return;
             }
           }
@@ -802,7 +791,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ status: 'ok', sessionId: jobId });
         } catch (error) {
           console.error(`[Jobzippy] Error in APPLY_JOB_START handler:`, error);
-          sendResponse({ status: 'error', message: error instanceof Error ? error.message : 'Unknown error' });
+          sendResponse({
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Unknown error',
+          });
         }
       })();
 
@@ -1147,7 +1139,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Close ATS tab after delay
       if (session.atsTabId) {
         setTimeout(() => {
-          chrome.tabs.remove(session.atsTabId!).catch(() => { });
+          chrome.tabs.remove(session.atsTabId!).catch(() => {});
         }, 1000);
       }
 
@@ -1177,7 +1169,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               tab.url.startsWith('http://localhost:') && tab.url.includes('indeed-jobs.html');
 
             if (isLinkedInReal || isIndeedReal || isLinkedInMock || isIndeedMock) {
-              chrome.tabs.sendMessage(tab.id, { type: 'AUTH_PROBE' }).catch(() => { });
+              chrome.tabs.sendMessage(tab.id, { type: 'AUTH_PROBE' }).catch(() => {});
             }
           }
         });
@@ -1523,7 +1515,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             type: 'SHOW_TAB_TOAST',
             data: { platform: data.platform },
           })
-          .catch(() => { });
+          .catch(() => {});
       }
       sendResponse({ status: 'ok' });
       break;
@@ -1629,7 +1621,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
           type: 'TAB_ACTIVATED',
           data: { platform: 'LinkedIn', tabId: activeInfo.tabId },
         })
-        .catch(() => { });
+        .catch(() => {});
     } else if (isIndeedTab) {
       // User switched to Indeed search tab - show toast
       chrome.runtime
@@ -1637,7 +1629,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
           type: 'TAB_ACTIVATED',
           data: { platform: 'Indeed', tabId: activeInfo.tabId },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
   });
 });
@@ -1777,7 +1769,7 @@ if (chrome.webNavigation && chrome.webNavigation.onCreatedNavigationTarget) {
       tabId,
       url,
     });
-    chrome.tabs.remove(tabId).catch(() => { });
+    chrome.tabs.remove(tabId).catch(() => {});
   });
 }
 
@@ -1947,7 +1939,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         if (otherSession.timerId) {
           clearTimeout(otherSession.timerId);
         }
-        chrome.tabs.remove(otherSession.atsTabId).catch(() => { });
+        chrome.tabs.remove(otherSession.atsTabId).catch(() => {});
         handleATSTimeout(otherJobId, 'cleanup_old_session'); // Cleanup old session
       }
     }
@@ -2022,7 +2014,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     url: tab.url,
   });
   try {
-    chrome.tabs.remove(tabId).catch(() => { });
+    chrome.tabs.remove(tabId).catch(() => {});
   } catch {
     // Ignore errors - worst case the stray tab stays open, but this should be rare.
   }
@@ -2039,4 +2031,4 @@ chrome.sidePanel
   .catch((error) => console.error('[Jobzippy] Error setting panel behavior:', error));
 
 // Export for testing (if needed)
-export { };
+export {};
