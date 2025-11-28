@@ -34,6 +34,13 @@ export interface ApplyJobStartMessage {
   data: {
     jobId: string;
     sourceTabId?: number; // Optional - background script will get it from sender.tab.id
+    // Job metadata for persistence
+    title?: string;
+    company?: string;
+    location?: string;
+    url?: string;
+    platform?: 'LinkedIn' | 'Indeed';
+    applyType?: 'easy_apply' | 'external' | 'unknown';
   };
 }
 

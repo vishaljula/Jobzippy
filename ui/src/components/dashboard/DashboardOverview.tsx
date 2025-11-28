@@ -1,59 +1,51 @@
-import { Loader2, MapPin, Briefcase, PenSquare, Globe } from 'lucide-react';
+import { Loader2, PenSquare, Briefcase, MapPin } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { UserInfo } from '@/lib/types';
-import type { JobMatch } from '@/lib/jobs/types';
+import { useApplicationsData } from '@/lib/jobs/useApplicationsData';
+import type { JobRecord } from '@/lib/jobs/store-types';
 
 interface DashboardOverviewProps {
   user: UserInfo | null;
   onEditProfile: () => void;
-  jobs: JobMatch[];
-  jobStatus: 'idle' | 'loading' | 'success' | 'error';
-  onRetry?: () => void;
-  jobError?: string | null;
 }
 
-const donutData = [
-  { label: 'Applied', value: 28, color: '#4f46e5' },
-  { label: 'Under review', value: 11, color: '#a855f7' },
-  { label: 'Interviews', value: 3, color: '#f97316' },
-  { label: 'Offers', value: 1, color: '#0ea5e9' },
-  { label: 'Rejected', value: 4, color: '#94a3b8' },
-];
+interface DonutChartProps {
+  stats: {
+    completed: number;
+    applying: number;
+    ats_filling: number;
+    queued: number;
+    failed: number;
+    skipped: number;
+    total: number;
+  };
+}
 
-const fallbackJobs: JobMatch[] = [
-  {
-    id: 'demo-1',
-    company: 'Fjord Analytics',
-    title: 'Senior Product Manager',
-    location: 'Remote (US)',
-    status: 'applying',
-    remote: true,
-    tags: [],
-    jobTypes: [],
-    publishedAt: new Date().toISOString(),
-    snippet: 'Working with product squads to ship delightful user experiences.',
-    url: '#',
-    source: 'arbeitnow',
-  },
-  {
-    id: 'demo-2',
-    company: 'Northwind Labs',
-    title: 'Growth Marketing Lead',
-    location: 'New York, NY',
-    status: 'in-progress',
-    remote: false,
-    tags: [],
-    jobTypes: [],
-    publishedAt: new Date().toISOString(),
-    snippet: 'Partner with product to launch multi-channel growth experiments.',
-    url: '#',
-    source: 'arbeitnow',
-  },
-];
+function DonutChart({ stats }: DonutChartProps) {
+  // Only show final states in donut chart - "where your apps stand" means final outcomes
+  // Intermediate states (queued, applying, ats_filling) are transient and shown in table only
+  const donutData = [
+    { label: 'Applied', value: stats.completed, color: '#4f46e5' }, // Indigo
+    { label: 'Failed', value: stats.failed, color: '#ef4444' }, // Red
+    { label: 'Skipped', value: stats.skipped, color: '#94a3b8' }, // Grey
+  ].filter((item) => item.value > 0);
 
-function DonutChart() {
-  const total = donutData.reduce((sum, item) => sum + item.value, 0);
+  // Total for donut = only final states (completed, failed, skipped)
+  const total = stats.completed + stats.failed + stats.skipped;
+
+  // Calculate active/pending jobs (for display context)
+  const activeJobs = stats.applying + stats.ats_filling;
+  const pendingJobs = stats.queued;
+
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <p className="text-sm text-slate-500">No applications yet</p>
+      </div>
+    );
+  }
+
   let accumulated = 0;
   const gradientStops = donutData
     .map((segment) => {
@@ -71,8 +63,13 @@ function DonutChart() {
         style={{ background: `conic-gradient(${gradientStops})` }}
       >
         <div className="absolute inset-5 rounded-full bg-white shadow-inner flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold text-slate-900">41</span>
+          <span className="text-3xl font-semibold text-slate-900">{total}</span>
           <span className="text-xs uppercase tracking-wide text-slate-400">Total apps</span>
+          {(activeJobs > 0 || pendingJobs > 0) && (
+            <span className="text-[10px] text-slate-500 mt-0.5">
+              {activeJobs + pendingJobs} in progress
+            </span>
+          )}
         </div>
       </div>
       <ul className="space-y-3 text-sm">
@@ -93,7 +90,7 @@ function DonutChart() {
   );
 }
 
-function JobStatusBadge({ status }: { status: string }) {
+function JobStatusBadge({ status }: { status: JobRecord['status'] }) {
   if (status === 'applying') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
@@ -101,10 +98,10 @@ function JobStatusBadge({ status }: { status: string }) {
       </span>
     );
   }
-  if (status === 'in-progress') {
+  if (status === 'ats_filling') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
-        <Loader2 className="h-3 w-3 animate-spin" /> In progress
+        <Loader2 className="h-3 w-3 animate-spin" /> Filling form
       </span>
     );
   }
@@ -115,10 +112,10 @@ function JobStatusBadge({ status }: { status: string }) {
       </span>
     );
   }
-  if (status === 'rejected') {
+  if (status === 'failed') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
-        Rejected
+        Failed
       </span>
     );
   }
@@ -129,6 +126,13 @@ function JobStatusBadge({ status }: { status: string }) {
       </span>
     );
   }
+  if (status === 'skipped') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+        Skipped
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
       {status}
@@ -136,8 +140,48 @@ function JobStatusBadge({ status }: { status: string }) {
   );
 }
 
-function formatAppliedDate(value: string): string {
-  const date = new Date(value);
+/**
+ * Format error message as short enum-like code
+ */
+function formatReason(status: JobRecord['status'], errorMessage?: string): string | null {
+  // Successfully applied jobs
+  if (status === 'completed') {
+    return 'SUBMITTED';
+  }
+
+  // No error message means no reason to show
+  if (!errorMessage) {
+    return null;
+  }
+
+  const errorLower = errorMessage.toLowerCase();
+
+  // Map error messages to enum-like codes
+  if (errorLower.includes('captcha') || errorLower.includes('verification required')) {
+    return 'CAPTCHA_REQUIRED';
+  }
+  if (errorLower.includes('create account') || errorLower.includes('account required') || errorLower.includes('sign up')) {
+    return 'ACCOUNT_REQUIRED';
+  }
+  if (errorLower.includes('manual_input_required') || errorLower.includes('required fields missing') || errorLower.includes('invalid')) {
+    return 'MANUAL_INPUT_REQUIRED';
+  }
+  if (errorLower.includes('duplicate') || errorLower.includes('already')) {
+    return 'DUPLICATE';
+  }
+  if (errorLower.includes('timeout')) {
+    return 'TIMEOUT';
+  }
+
+  // Generic error fallback
+  return 'ERROR';
+}
+
+function formatAppliedDate(timestamp: number | undefined): string {
+  if (!timestamp) {
+    return '—';
+  }
+  const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
     return '—';
   }
@@ -147,22 +191,40 @@ function formatAppliedDate(value: string): string {
   });
 }
 
-export function DashboardOverview({
-  user,
-  onEditProfile,
-  jobs,
-  jobStatus,
-  onRetry,
-  jobError,
-}: DashboardOverviewProps) {
+export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProps) {
+  const { inProgress, history, stats, isLoading, error, refresh } = useApplicationsData();
   const displayName = user?.given_name ?? user?.name?.split(' ')[0] ?? 'Job seeker';
   const profileSummary = [
     { label: 'Visa', value: 'H‑1B (needs sponsorship)' },
     { label: 'Locations', value: 'Remote • Austin, TX • NYC' },
     { label: 'Min salary', value: '$150k USD' },
   ];
-  const tableJobs = jobs.length ? jobs : fallbackJobs;
-  const isLoading = jobStatus === 'loading';
+
+  // Combine in-progress and recent history for the table (show latest 20)
+  // Deduplicate by id to prevent duplicate rows
+  const allJobs = [...inProgress, ...history];
+  const uniqueJobsMap = new Map<string, JobRecord>();
+  for (const job of allJobs) {
+    // Keep the most recent version if duplicate
+    const existing = uniqueJobsMap.get(job.id);
+    if (!existing || job.updatedAt > existing.updatedAt) {
+      uniqueJobsMap.set(job.id, job);
+    }
+  }
+  const tableJobs = Array.from(uniqueJobsMap.values())
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 20);
+
+  // Use stats for donut chart, fallback to empty stats
+  const donutStats = stats ?? {
+    completed: 0,
+    applying: 0,
+    ats_filling: 0,
+    queued: 0,
+    failed: 0,
+    skipped: 0,
+    total: 0,
+  };
 
   return (
     <div className="space-y-6">
@@ -175,7 +237,13 @@ export function DashboardOverview({
             </div>
           </div>
           <div className="mt-6">
-            <DonutChart />
+            {isLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <DonutChart stats={donutStats} />
+            )}
           </div>
           <p className="mt-4 text-xs text-slate-500">
             Updates automatically as new roles are queued.
@@ -232,18 +300,16 @@ export function DashboardOverview({
             <Loader2
               className={`h-3 w-3 ${isLoading ? 'animate-spin text-indigo-500' : 'text-slate-400'}`}
             />
-            {isLoading ? 'Searching live roles…' : 'Auto-applying'}
+            {isLoading ? 'Loading…' : 'Auto-applying'}
           </span>
         </div>
-        {jobError && (
+        {error && (
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             <div className="flex items-center justify-between gap-3">
-              <p>{jobError}</p>
-              {onRetry && (
-                <Button size="sm" variant="outline" className="text-xs" onClick={onRetry}>
-                  Retry
-                </Button>
-              )}
+              <p>{error}</p>
+              <Button size="sm" variant="outline" className="text-xs" onClick={refresh}>
+                Retry
+              </Button>
             </div>
           </div>
         )}
@@ -254,32 +320,53 @@ export function DashboardOverview({
                 <th className="pb-3">Company / Organization</th>
                 <th className="pb-3">Location</th>
                 <th className="pb-3">Status</th>
+                <th className="pb-3">Reason</th>
                 <th className="pb-3">Date applied</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {tableJobs.map((job) => (
-                <tr key={job.id}>
-                  <td className="py-3">
-                    <p className="font-semibold text-slate-900">{job.company}</p>
-                    <p className="text-xs text-slate-500">{job.title}</p>
-                    {job.remote && (
-                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        <Globe className="h-3 w-3" /> Remote-friendly
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 text-slate-600">{job.location}</td>
-                  <td className="py-3">
-                    <JobStatusBadge status={job.status} />
-                  </td>
-                  <td className="py-3 text-slate-500">{formatAppliedDate(job.publishedAt)}</td>
-                </tr>
-              ))}
-              {!tableJobs.length && (
+              {isLoading && tableJobs.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-6 text-center text-slate-500">
-                    No matches yet. Update your profile to start the search.
+                    <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" />
+                    Loading applications...
+                  </td>
+                </tr>
+              ) : tableJobs.length > 0 ? (
+                tableJobs.map((job) => {
+                  const reason = formatReason(job.status, job.errorMessage);
+                  return (
+                    <tr key={job.id}>
+                      <td className="py-3">
+                        <p className="font-semibold text-slate-900">{job.company}</p>
+                        <p className="text-xs text-slate-500">{job.title}</p>
+                      </td>
+                      <td className="py-3 text-slate-600">{job.location ?? '—'}</td>
+                      <td className="py-3">
+                        <JobStatusBadge status={job.status} />
+                      </td>
+                      <td className="py-3">
+                        {reason ? (
+                          <span
+                            title={job.errorMessage || undefined}
+                            className="text-xs font-mono text-slate-600"
+                          >
+                            {reason}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-slate-500">
+                        {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                    No applications yet. Start the agent to begin applying to jobs.
                   </td>
                 </tr>
               )}

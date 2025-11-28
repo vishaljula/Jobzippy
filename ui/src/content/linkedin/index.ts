@@ -16,6 +16,7 @@ export interface JobCard {
   title: string;
   company: string;
   location: string;
+  url?: string;
   applyType?: 'easy_apply' | 'external' | 'unknown';
 }
 
@@ -295,9 +296,25 @@ class AgentController {
       // 1. Register job with background BEFORE clicking anything
       // Note: Background script will extract sourceTabId from message sender
       logger.log('AgentController', 'Step 1: Registering job with background...');
+      // Get job URL - try from job object, fallback to current page or construct from jobId
+      let jobUrl = job.url;
+      if (!jobUrl) {
+        // Try to find the job link in the DOM
+        const jobLink = document.querySelector(`[data-job-id="${jobId}"] a[href*="/jobs/view/"]`) as HTMLAnchorElement;
+        jobUrl = jobLink?.href || window.location.href;
+      }
+      
       await chrome.runtime.sendMessage({
         type: 'APPLY_JOB_START',
-        data: { jobId },
+        data: {
+          jobId,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          url: jobUrl,
+          platform: this.config.platform,
+          applyType: job.applyType,
+        },
       } as ApplyJobStartMessage);
       logger.log('AgentController', `Job ${jobId} registered with background`);
       this.logJobEvent(jobId, 'APPLY_JOB_START_SENT');

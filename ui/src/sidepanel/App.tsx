@@ -86,7 +86,7 @@ function App() {
             data: envInfo,
           },
         })
-        .catch(() => {});
+        .catch(() => { });
     } catch {
       // ignore if messaging is not available yet
     }
@@ -380,21 +380,21 @@ function App() {
       // In dev mode, assume success if we timed out (bypass missing mock server/slow load)
       // Check both DEV flag and MODE string for robustness
       const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development';
-      
+
       // Log the timeout event
       chrome.runtime.sendMessage({
         type: 'LOG_MESSAGE',
-        data: { 
-          component: 'SidePanel', 
-          message: `Auth check timed out. Dev mode: ${isDev}`, 
-          data: { 
-            env: { 
-              DEV: import.meta.env.DEV, 
-              MODE: import.meta.env.MODE 
+        data: {
+          component: 'SidePanel',
+          message: `Auth check timed out. Dev mode: ${isDev}`,
+          data: {
+            env: {
+              DEV: import.meta.env.DEV,
+              MODE: import.meta.env.MODE
             }
-          } 
+          }
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
       if (isDev) {
         console.log('[Jobzippy] Dev mode timeout: Forcing auth success');
@@ -454,7 +454,7 @@ function App() {
           if (!allMissing) {
             chrome.runtime.sendMessage(
               { type: 'START_AGENT', data: { maxApplications: 15 } },
-              () => {}
+              () => { }
             );
           }
         }
@@ -463,10 +463,10 @@ function App() {
     chrome.runtime.onMessage.addListener(handler);
 
     // Probe existing tabs first (in case user already has tabs open)
-    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => { });
   }, [user]);
   const stopAgent = useCallback(() => {
-    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => { });
   }, []);
 
   // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
@@ -534,9 +534,8 @@ function App() {
   const statusLabel = isAuthenticated ? (
     <span className="flex items-center gap-2 text-slate-600">
       <span
-        className={`h-2 w-2 rounded-full ${
-          engineState === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-300'
-        }`}
+        className={`h-2 w-2 rounded-full ${engineState === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-300'
+          }`}
       />
       <span className="font-medium">
         Agent: {engineState === 'RUNNING' ? 'Running' : 'Stopped'}
@@ -580,10 +579,6 @@ function App() {
           <DashboardOverview
             user={user}
             onEditProfile={handleResumeOnboarding}
-            jobs={jobs}
-            jobStatus={jobStatus}
-            onRetry={refreshJobs}
-            jobError={jobError}
           />
         </>
       )}
@@ -706,9 +701,9 @@ function App() {
         avatar={
           user
             ? {
-                src: user.picture,
-                alt: user.name,
-              }
+              src: user.picture,
+              alt: user.name,
+            }
             : null
         }
         railFooter={
@@ -733,7 +728,7 @@ function App() {
         autoCloseOnComplete={!manualWizardOpen}
       />
       <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
-      <TutorialCarousel open={false} onClose={() => {}} />
+      <TutorialCarousel open={false} onClose={() => { }} />
       <TutorialCarousel
         open={showTutorial && !isWizardOpen}
         onClose={handleDismissTutorial}
