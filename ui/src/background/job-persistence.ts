@@ -1,6 +1,6 @@
 /**
  * Job Persistence Helper for Background Worker
- * 
+ *
  * Maps between background worker's jobId (page job ID) and IndexedDB job records
  * using the normalized URL format.
  */
@@ -21,14 +21,10 @@ export const jobIdToMetadata = new Map<
   }
 >();
 
-
 /**
  * Register a job from the queue with its metadata
  */
-export function registerJobFromQueue(
-  jobId: string,
-  queueItem: JobQueueItem
-): void {
+export function registerJobFromQueue(jobId: string, queueItem: JobQueueItem): void {
   jobIdToMetadata.set(jobId, {
     platform: queueItem.platform,
     url: queueItem.url,
@@ -62,10 +58,11 @@ export async function persistJobQueued(
   try {
     console.log(`[JobPersistence] Persisting job queued: ${jobId}`, metadata);
     const platform = metadata.platform.toLowerCase();
-    const record = await upsertJob(platform, metadata.url, {
+    const record = await upsertJob(platform, jobId, {
       title: metadata.title,
       company: metadata.company,
       location: metadata.location,
+      url: metadata.url,
       status: 'queued',
       sourceTabId,
       applyType: metadata.applyType,
@@ -84,19 +81,18 @@ export async function persistJobQueued(
 /**
  * Update job status to applying
  */
-export async function persistJobApplying(
-  jobId: string
-): Promise<JobRecord | null> {
+export async function persistJobApplying(jobId: string): Promise<JobRecord | null> {
   const metadata = getJobMetadata(jobId);
   if (!metadata) {
     return null;
   }
 
   const platform = metadata.platform.toLowerCase();
-  const record = await upsertJob(platform, metadata.url, {
+  const record = await upsertJob(platform, jobId, {
     title: metadata.title,
     company: metadata.company,
     location: metadata.location,
+    url: metadata.url,
     status: 'applying',
     applyType: metadata.applyType,
   });
@@ -118,10 +114,11 @@ export async function persistJobAtsFilling(
   }
 
   const platform = metadata.platform.toLowerCase();
-  const record = await upsertJob(platform, metadata.url, {
+  const record = await upsertJob(platform, jobId, {
     title: metadata.title,
     company: metadata.company,
     location: metadata.location,
+    url: metadata.url,
     status: 'ats_filling',
     atsTabId,
     applyType: metadata.applyType,
@@ -141,36 +138,44 @@ function shouldSkipJob(error?: string): boolean {
   const errorLower = error.toLowerCase();
 
   // Duplicate/already applied scenarios
-  if (errorLower.includes('duplicate') ||
+  if (
+    errorLower.includes('duplicate') ||
     errorLower.includes('already applied') ||
     errorLower.includes('already exists') ||
     errorLower.includes('already completed') ||
-    errorLower.includes('already failed')) {
+    errorLower.includes('already failed')
+  ) {
     return true;
   }
 
   // CAPTCHA scenarios
-  if (errorLower.includes('captcha') ||
+  if (
+    errorLower.includes('captcha') ||
     errorLower.includes('verification required') ||
     errorLower.includes('human verification') ||
-    errorLower.includes('complex_captcha')) {
+    errorLower.includes('complex_captcha')
+  ) {
     return true;
   }
 
   // Account creation required
-  if (errorLower.includes('create account') ||
+  if (
+    errorLower.includes('create account') ||
     errorLower.includes('sign up') ||
     errorLower.includes('registration required') ||
     errorLower.includes('account required') ||
     errorLower.includes('account_required') ||
-    errorLower.includes('please create an account')) {
+    errorLower.includes('please create an account')
+  ) {
     return true;
   }
 
   // Manual input required (often means form can't be auto-filled)
-  if (errorLower.includes('manual_input_required') ||
+  if (
+    errorLower.includes('manual_input_required') ||
     errorLower.includes('manual input') ||
-    errorLower.includes('required fields missing')) {
+    errorLower.includes('required fields missing')
+  ) {
     return true;
   }
 
@@ -202,10 +207,11 @@ export async function persistJobCompleted(
     status = 'failed';
   }
 
-  const record = await upsertJob(platform, metadata.url, {
+  const record = await upsertJob(platform, jobId, {
     title: metadata.title,
     company: metadata.company,
     location: metadata.location,
+    url: metadata.url,
     status,
     errorMessage: error,
     applyType: metadata.applyType,
@@ -235,7 +241,10 @@ function broadcastJobUpdate(record: JobRecord): void {
       (_response) => {
         if (chrome.runtime.lastError) {
           // Sidepanel might not be open - this is expected
-          console.log('[JobPersistence] Message not delivered (sidepanel may be closed):', chrome.runtime.lastError.message);
+          console.log(
+            '[JobPersistence] Message not delivered (sidepanel may be closed):',
+            chrome.runtime.lastError.message
+          );
         } else {
           console.log('[JobPersistence] Job update broadcasted successfully');
         }
@@ -252,4 +261,3 @@ function broadcastJobUpdate(record: JobRecord): void {
 export function cleanupJobMetadata(jobId: string): void {
   jobIdToMetadata.delete(jobId);
 }
-

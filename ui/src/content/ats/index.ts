@@ -20,11 +20,11 @@ console.log('[Jobzippy] Universal ATS content script loaded');
 import { intelligentNavigate, NavigationResult } from './navigator';
 import { logger } from '../../lib/logger';
 import {
-  waitForElementRemoval,
-  waitForNavigation,
-  waitForElement,
-  waitForFormReady,
-  waitForDOMStable,
+  // waitForElementRemoval,
+  // waitForNavigation,
+  // waitForElement,
+  // waitForFormReady,
+  // waitForDOMStable,
   waitForCheckboxChecked,
 } from '../../lib/dom-events';
 
@@ -43,12 +43,14 @@ function extractJobIdFromUrl(): string | null {
 const jobId = extractJobIdFromUrl();
 if (jobId) {
   console.log(`[ATS] Extracted jobId from URL: ${jobId}`);
-  chrome.runtime.sendMessage({
-    type: 'ATS_CONTENT_SCRIPT_READY',
-    data: { jobId },
-  }).catch(() => {
-    // Ignore if background script isn't ready yet
-  });
+  chrome.runtime
+    .sendMessage({
+      type: 'ATS_CONTENT_SCRIPT_READY',
+      data: { jobId },
+    })
+    .catch(() => {
+      // Ignore if background script isn't ready yet
+    });
 } else {
   // Fallback: send without jobId, background will look it up
   console.log('[ATS] No jobId in URL, sending ready signal without jobId');
@@ -771,59 +773,70 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Clear the safety timeout since we received the command
       clearTimeout(safetyTimeout);
       fillCommandReceived = true;
-      
+
       // Get jobId from message or URL
       const jobId = message.data?.jobId || extractJobIdFromUrl() || 'unknown';
-      
-      logger.log('ATS', `Received FILL_EXTERNAL_ATS for jobId=${jobId}, starting intelligent navigation...`);
+
+      logger.log(
+        'ATS',
+        `Received FILL_EXTERNAL_ATS for jobId=${jobId}, starting intelligent navigation...`
+      );
       console.log('[ATS] Received FILL_EXTERNAL_ATS, starting intelligent navigation...');
       console.log('[ATS] Current URL:', window.location.href);
       console.log('[ATS] JobId:', jobId);
-      
+
       intelligentNavigate()
         .then((result: NavigationResult | null) => {
           logger.log('ATS', 'intelligentNavigate result', result);
           console.log('[ATS] intelligentNavigate result:', result);
-          
+
           // Safety check: ensure result is not null
           if (!result) {
             logger.error('ATS', 'intelligentNavigate returned null - this should not happen');
             console.error('[ATS] intelligentNavigate returned null');
             const errorMsg = 'Navigation returned null result';
-            chrome.runtime.sendMessage({
-              type: 'ATS_COMPLETE',
-              data: { jobId, success: false, error: errorMsg },
-            }).catch(() => {});
+            chrome.runtime
+              .sendMessage({
+                type: 'ATS_COMPLETE',
+                data: { jobId, success: false, error: errorMsg },
+              })
+              .catch(() => {});
             sendResponse({ success: false, error: errorMsg });
             return;
           }
-          
+
           // NEW ARCHITECTURE: Send ATS_COMPLETE with jobId
           if (result.success) {
             logger.log('ATS', 'External form filled successfully');
             console.log('[ATS] External form filled successfully');
-            chrome.runtime.sendMessage({
-              type: 'ATS_COMPLETE',
-              data: { jobId, success: true },
-            }).catch(() => {});
+            chrome.runtime
+              .sendMessage({
+                type: 'ATS_COMPLETE',
+                data: { jobId, success: true },
+              })
+              .catch(() => {});
             sendResponse({ success: true });
           } else {
             logger.error('ATS', 'External form fill failed', { error: result.message });
             console.error('[ATS] External form fill failed:', result.message);
-            chrome.runtime.sendMessage({
-              type: 'ATS_COMPLETE',
-              data: { jobId, success: false, error: result.message },
-            }).catch(() => {});
+            chrome.runtime
+              .sendMessage({
+                type: 'ATS_COMPLETE',
+                data: { jobId, success: false, error: result.message },
+              })
+              .catch(() => {});
             sendResponse({ success: false, error: result.message });
           }
         })
         .catch((error) => {
           logger.error('ATS', 'Error filling external form', error);
           console.error('[ATS] Error filling external form:', error);
-          chrome.runtime.sendMessage({
-            type: 'ATS_COMPLETE',
-            data: { jobId, success: false, error: String(error) },
-          }).catch(() => {});
+          chrome.runtime
+            .sendMessage({
+              type: 'ATS_COMPLETE',
+              data: { jobId, success: false, error: String(error) },
+            })
+            .catch(() => {});
           sendResponse({ success: false, error: String(error) });
         });
       return true; // Keep channel open for async response
@@ -839,7 +852,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // This prevents race conditions where navigation happens before the background script
 // can send the fill command, which would put the tab in back/forward cache and break messaging.
 // The background script will send FILL_EXTERNAL_ATS after receiving the ready signal.
-console.log('[ATS] Content script loaded, waiting for FILL_EXTERNAL_ATS command from background script');
+console.log(
+  '[ATS] Content script loaded, waiting for FILL_EXTERNAL_ATS command from background script'
+);
 
 // Safety timeout: If FILL_EXTERNAL_ATS doesn't arrive within 30 seconds, proceed anyway
 // This handles edge cases where the background script fails or message is lost
@@ -847,41 +862,53 @@ let fillCommandReceived = false;
 const safetyTimeout = setTimeout(() => {
   if (!fillCommandReceived) {
     logger.log('ATS', 'WARNING: FILL_EXTERNAL_ATS not received within 30s, proceeding anyway');
-    console.warn('[ATS] FILL_EXTERNAL_ATS not received within 30 seconds, proceeding with intelligent navigation...');
-    
+    console.warn(
+      '[ATS] FILL_EXTERNAL_ATS not received within 30 seconds, proceeding with intelligent navigation...'
+    );
+
     // Proceed with intelligent navigation as fallback
     intelligentNavigate()
       .then((result: NavigationResult) => {
         logger.log('ATS', 'intelligentNavigate result (fallback)', result);
         console.log('[ATS] intelligentNavigate result (fallback):', result);
-        
-          const jobId = extractJobIdFromUrl() || 'unknown';
-          if (result.success) {
-            logger.log('ATS', 'External form filled successfully (fallback)');
-            console.log('[ATS] External form filled successfully (fallback)');
-            chrome.runtime.sendMessage({
+
+        const jobId = extractJobIdFromUrl() || 'unknown';
+        if (result.success) {
+          logger.log('ATS', 'External form filled successfully (fallback)');
+          console.log('[ATS] External form filled successfully (fallback)');
+          chrome.runtime
+            .sendMessage({
               type: 'ATS_COMPLETE',
               data: { jobId, success: true },
-            }).catch(() => {});
-} else {
-            logger.error('ATS', 'External form fill failed (fallback)', result.message);
-            console.error('[ATS] External form fill failed (fallback):', result.message);
-            chrome.runtime.sendMessage({
+            })
+            .catch(() => {});
+        } else {
+          logger.error('ATS', 'External form fill failed (fallback)', result.message);
+          console.error('[ATS] External form fill failed (fallback):', result.message);
+          chrome.runtime
+            .sendMessage({
               type: 'ATS_COMPLETE',
-              data: { jobId, success: false, error: result.message || 'Timeout waiting for fill command' },
-            }).catch(() => {});
-          }
+              data: {
+                jobId,
+                success: false,
+                error: result.message || 'Timeout waiting for fill command',
+              },
+            })
+            .catch(() => {});
+        }
       })
       .catch((error) => {
         logger.error('ATS', 'Error filling external form (fallback)', error);
         console.error('[ATS] Error filling external form (fallback):', error);
-            const jobId = extractJobIdFromUrl() || 'unknown';
-            chrome.runtime.sendMessage({
-              type: 'ATS_COMPLETE',
-              data: { jobId, success: false, error: `Timeout: ${String(error)}` },
-            }).catch(() => {});
+        const jobId = extractJobIdFromUrl() || 'unknown';
+        chrome.runtime
+          .sendMessage({
+            type: 'ATS_COMPLETE',
+            data: { jobId, success: false, error: `Timeout: ${String(error)}` },
+          })
+          .catch(() => {});
       });
   }
 }, 30000); // 30 second timeout
 
-export { };
+export {};

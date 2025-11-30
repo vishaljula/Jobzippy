@@ -357,6 +357,12 @@
 
             currentJob = job;
 
+            // Update URL with currentJobId parameter (like real LinkedIn)
+            const url = new URL(window.location.href);
+            url.searchParams.set('currentJobId', jobId);
+            window.history.pushState({}, '', url);
+            console.log('[LinkedIn Mock] Updated URL with currentJobId:', jobId, url.href);
+
             const detailsContainer = document.querySelector('.jobs-details__main-content');
             detailsContainer.querySelector('#job-details-title').textContent = job.title;
             detailsContainer.querySelector('#job-details').innerHTML = `

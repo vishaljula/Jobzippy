@@ -166,6 +166,26 @@ class AgentController {
             break;
           }
 
+          // Check for duplicates - check against IndexedDB via background script
+          // We must ask background script because content script has different DB origin
+          const checkResult = await chrome.runtime.sendMessage({
+            type: 'CHECK_JOB_EXISTS',
+            data: {
+              platform: this.config.platform.toLowerCase(),
+              jobId: job.id,
+            },
+          });
+
+          if (checkResult.status === 'success' && checkResult.exists) {
+            console.log(
+              `[AgentController] Skipping duplicate job ${job.id} (status: ${checkResult.jobStatus})`
+            );
+            logger.log('AgentController', `Skipping duplicate job ${job.id}`, {
+              status: checkResult.jobStatus,
+            });
+            continue; // Skip to next job
+          }
+
           // Check max applications limit
           if (
             this.config.maxApplications &&
@@ -300,10 +320,12 @@ class AgentController {
       let jobUrl = job.url;
       if (!jobUrl) {
         // Try to find the job link in the DOM
-        const jobLink = document.querySelector(`[data-job-id="${jobId}"] a[href*="/jobs/view/"]`) as HTMLAnchorElement;
+        const jobLink = document.querySelector(
+          `[data-job-id="${jobId}"] a[href*="/jobs/view/"]`
+        ) as HTMLAnchorElement;
         jobUrl = jobLink?.href || window.location.href;
       }
-      
+
       await chrome.runtime.sendMessage({
         type: 'APPLY_JOB_START',
         data: {
@@ -777,7 +799,7 @@ class AgentController {
       for (const scope of scopes) {
         if (!scope) continue;
         const element = scope.querySelector(selector) as T | null;
-        if (element && (element as HTMLElement).offsetParent !== null) {
+        if (element && (element as unknown as HTMLElement).offsetParent !== null) {
           return element;
         }
       }

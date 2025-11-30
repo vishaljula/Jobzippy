@@ -1,4 +1,17 @@
 /**
+ * LEGACY/UNUSED CODE
+ *
+ * This file is NOT currently used by the LinkedIn flow.
+ * LinkedIn defines its own AgentController class in src/content/linkedin/index.ts
+ *
+ * This appears to be a generic/base implementation that may have been intended
+ * for other platforms (Indeed, etc.) or is legacy code.
+ *
+ * Commented out to avoid confusion with the active LinkedIn implementation.
+ */
+
+/*
+/**
  * Agent Controller
  * Orchestrates the complete job application flow:
  * 1. Find jobs on page
@@ -7,7 +20,7 @@
  * 4. Fill form
  * 5. Submit
  * 6. Move to next job
- */
+ *\/
 
 export interface JobCard {
   id: string;
@@ -46,7 +59,7 @@ export class AgentController {
 
   /**
    * Start the agent
-   */
+   *\/
   async start(): Promise<AgentResult> {
     console.log('[AgentController] Starting agent for', this.config.platform);
 
@@ -98,7 +111,7 @@ export class AgentController {
 
   /**
    * Stop the agent
-   */
+   *\/
   stop(): void {
     console.log('[AgentController] Stopping agent...');
     this.shouldStop = true;
@@ -106,10 +119,10 @@ export class AgentController {
 
   /**
    * Process a single job
-   */
+   *\/
   /**
    * Process a single job by delegating to background script
-   */
+   *\/
   private async processJob(job: JobCard): Promise<void> {
     console.log('[AgentController] Processing job:', job.title, 'at', job.company);
     this.results.jobsProcessed++;
@@ -141,7 +154,7 @@ export class AgentController {
 
   /**
    * Get jobs from the current page
-   */
+   *\/
   private async getJobs(): Promise<JobCard[]> {
     // Send message to platform-specific content script
     const response = await chrome.runtime.sendMessage({
@@ -154,7 +167,7 @@ export class AgentController {
 
   /**
    * Delay helper
-   */
+   *\/
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -162,8 +175,9 @@ export class AgentController {
 
 /**
  * Create and start agent
- */
+ *\/
 export async function startAgent(config: AgentConfig): Promise<AgentResult> {
   const controller = new AgentController(config);
   return await controller.start();
 }
+*/

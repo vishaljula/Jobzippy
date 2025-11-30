@@ -101,6 +101,18 @@ class FileLogger {
     this.send(fullLog);
   }
 
+  warn(component: string, message: string, data?: any): void {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] [${component}] WARN: ${message}`;
+
+    // Log to console
+    console.warn(logEntry, data || '');
+
+    // Send to file via WebSocket
+    const fullLog = data ? `${logEntry} ${JSON.stringify(data)}` : logEntry;
+    this.send(fullLog);
+  }
+
   disconnect(): void {
     if (this.reconnectTimeout) {
       if (typeof globalThis !== 'undefined' && globalThis.clearTimeout) {

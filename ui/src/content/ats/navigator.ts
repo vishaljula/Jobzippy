@@ -38,6 +38,7 @@ interface NavigationState {
   clickedElements: Set<string>;
   attempts: number;
   maxAttempts: number;
+  initialUrl?: string;
   /**
    * Whether we've already treated a "form" / "form_modal" page as an intermediate
    * step (clicked an Apply-style button) on the current URL. This prevents us
@@ -495,7 +496,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
 
       if (visibleShowModalButtons.length > 0) {
         // Click the first visible button that shows the modal
-        const showButton = visibleShowModalButtons[0];
+        const showButton = visibleShowModalButtons[0]!;
         logger.log(
           'Navigator',
           `Clicking button to show modal: ${showButton.textContent?.substring(0, 50)}`
@@ -506,7 +507,7 @@ async function handleModal(classification: PageClassification): Promise<Navigati
           {
             element: showButton,
             purpose: 'apply',
-            type: showButton.tagName.toLowerCase() as 'button' | 'a',
+            type: showButton.tagName.toLowerCase() as any,
             confidence: 0.8,
             selectors: [],
           },

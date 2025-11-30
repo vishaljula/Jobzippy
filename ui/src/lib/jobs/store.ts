@@ -1,34 +1,16 @@
 import type { JobRecord, JobStats } from './store-types';
 import * as db from './db';
+import { logger } from '../logger';
+
+// Re-export types for convenience
+export type { JobRecord, JobStats };
 
 /**
- * Normalize a job URL by removing query parameters and trailing slashes
+ * Generate a unique database ID from platform and job ID
+ * Job ID comes from data-job-id (LinkedIn) or data-jk (Indeed)
  */
-export function normalizeUrl(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    // Remove query params and hash
-    urlObj.search = '';
-    urlObj.hash = '';
-    // Remove trailing slash
-    let normalized = urlObj.toString();
-    if (normalized.endsWith('/')) {
-      normalized = normalized.slice(0, -1);
-    }
-    return normalized;
-  } catch {
-    // If URL parsing fails, just remove query string manually
-    const parts = url.split('?');
-    const withoutQuery = parts[0]?.split('#')[0] || url;
-    return withoutQuery.endsWith('/') ? withoutQuery.slice(0, -1) : withoutQuery;
-  }
-}
-
-/**
- * Generate a unique job ID from platform and normalized URL
- */
-export function generateJobId(platform: string, normalizedUrl: string): string {
-  return `${platform}::${normalizedUrl}`;
+export function generateJobId(platform: string, jobId: string): string {
+  return `${platform}::${jobId}`;
 }
 
 /**
@@ -36,11 +18,12 @@ export function generateJobId(platform: string, normalizedUrl: string): string {
  */
 export async function upsertJob(
   platform: string,
-  rawUrl: string,
+  jobId: string,
   data: {
     title: string;
     company: string;
     location?: string;
+    url?: string;
     status?: JobRecord['status'];
     sourceTabId?: number;
     atsTabId?: number;
@@ -48,8 +31,7 @@ export async function upsertJob(
     errorMessage?: string;
   }
 ): Promise<JobRecord> {
-  const normalizedUrl = normalizeUrl(rawUrl);
-  const id = generateJobId(platform, normalizedUrl);
+  const id = generateJobId(platform, jobId);
 
   const existing = await db.getJob(id);
   const now = Date.now();
@@ -61,12 +43,15 @@ export async function upsertJob(
       ...data,
       status: data.status ?? existing.status,
       updatedAt: now,
-      attempts: data.status && data.status !== existing.status ? existing.attempts + 1 : existing.attempts,
-      lastAppliedAt: data.status === 'applying' || data.status === 'ats_filling' ? now : existing.lastAppliedAt,
+      attempts:
+        data.status && data.status !== existing.status ? existing.attempts + 1 : existing.attempts,
+      lastAppliedAt:
+        data.status === 'applying' || data.status === 'ats_filling' ? now : existing.lastAppliedAt,
       errorMessage: data.errorMessage ?? existing.errorMessage,
       sourceTabId: data.sourceTabId ?? existing.sourceTabId,
       atsTabId: data.atsTabId ?? existing.atsTabId,
       applyType: data.applyType ?? existing.applyType,
+      url: data.url ?? existing.url,
     };
     await db.putJob(updated);
     return updated;
@@ -75,8 +60,8 @@ export async function upsertJob(
     const newRecord: JobRecord = {
       id,
       platform,
-      normalizedUrl,
-      rawUrl,
+      jobId,
+      url: data.url,
       title: data.title,
       company: data.company,
       location: data.location,
@@ -148,10 +133,22 @@ export async function getJobStats(): Promise<JobStats> {
 /**
  * Check if a job already exists (for duplicate detection)
  */
-export async function jobExists(platform: string, url: string): Promise<JobRecord | null> {
-  const normalizedUrl = normalizeUrl(url);
-  const id = generateJobId(platform, normalizedUrl);
+export async function jobExists(platform: string, jobId: string): Promise<JobRecord | null> {
+  const start = Date.now();
+  const id = generateJobId(platform, jobId);
+  logger.log('JobStore', `jobExists check - Generated ID: ${id}`);
+
   const existing = await db.getJob(id);
+
+  const duration = (Date.now() - start).toFixed(2);
+  logger.log(
+    'JobStore',
+    `jobExists result for ${id}: ${existing ? 'FOUND' : 'NOT FOUND'} (${duration}ms)`
+  );
+  if (existing) {
+    logger.log('JobStore', `Existing record status: ${existing.status}`);
+  }
+
   return existing ?? null;
 }
 
@@ -176,4 +173,3 @@ export async function getDashboardJobs(): Promise<{
 
   return { inProgress, history };
 }
-

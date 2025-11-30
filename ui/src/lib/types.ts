@@ -206,7 +206,16 @@ export type MessageType =
   | 'AUTH_PROBE_ALL'
   | 'PAGE_ACTIVE'
   | 'USER_INTERACTION'
-  | 'TAB_ACTIVATED';
+  | 'TAB_ACTIVATED'
+  | 'CHECK_JOB_EXISTS';
+
+export interface CheckJobExistsMessage {
+  type: 'CHECK_JOB_EXISTS';
+  data: {
+    platform: string;
+    jobId: string;
+  };
+}
 
 export interface Message<T = unknown> {
   type: MessageType;

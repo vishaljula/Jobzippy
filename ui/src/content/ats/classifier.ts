@@ -4,6 +4,7 @@
  */
 
 import { classifyPage } from './page-classifier';
+import { waitForDOMStable } from '../../lib/dom-events';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -352,12 +353,13 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0.9,
   },
 
+  // Generic experience selector (e.g. "Years of experience")
+  experience: {
+    selectors: ['select[name*="experience" i]', 'select[id*="experience" i]'],
+    weight: 0.8,
+  },
+
   website: {
-    // Generic experience selector (e.g. "Years of experience")
-    experience: {
-      selectors: ['select[name*="experience" i]', 'select[id*="experience" i]'],
-      weight: 0.8,
-    },
     selectors: [
       'input[type="url"]',
       'input[name*="website" i]',

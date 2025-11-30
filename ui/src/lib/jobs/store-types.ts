@@ -1,10 +1,10 @@
 export type JobStatus = 'queued' | 'applying' | 'ats_filling' | 'completed' | 'failed' | 'skipped';
 
 export interface JobRecord {
-  id: string; // `${platform}::${normalizedUrl}`
+  id: string; // `${platform}::${jobId}` - e.g., "linkedin::4333911132" or "indeed::abc123"
   platform: 'linkedin' | 'indeed' | string;
-  normalizedUrl: string; // cleaned URL (no query params, no trailing slash)
-  rawUrl: string; // original URL as found
+  jobId: string; // Job ID from data-job-id (LinkedIn) or data-jk (Indeed)
+  url?: string; // Optional URL for reference
 
   title: string;
   company: string;
@@ -33,4 +33,3 @@ export interface JobStats {
   failed: number;
   skipped: number;
 }
-

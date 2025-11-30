@@ -173,9 +173,18 @@
   <script>
     document.querySelectorAll('.jobsearch-SerpJobCard').forEach(item => {
       item.addEventListener('click', () => {
+        const jobKey = item.getAttribute('data-jk');
         const title = item.querySelector('.jobTitle a').textContent.trim();
         const company = item.querySelector('.companyName').textContent.trim();
         const applyBtn = item.querySelector('a[aria-label="Apply"]');
+
+        // Update URL with vjk parameter (like real Indeed)
+        if (jobKey) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('vjk', jobKey);
+          window.history.pushState({}, '', url);
+          console.log('[Indeed Mock] Updated URL with vjk:', jobKey, url.href);
+        }
 
         const detailsContainer = document.querySelector('#vjs-container');
         detailsContainer.querySelector('#vjs-jobtitle').textContent = title;

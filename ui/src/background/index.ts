@@ -565,7 +565,7 @@ async function processJobQueue(platform: 'LinkedIn' | 'Indeed') {
 
   // Check for duplicates before processing
   const { jobExists } = await import('../lib/jobs/store');
-  const existing = await jobExists(platform.toLowerCase(), job.url);
+  const existing = await jobExists(platform.toLowerCase(), job.id);
   if (existing) {
     // If job already has a terminal status (completed, failed, or skipped),
     // do NOT modify the database - simply abort and move to next job
@@ -735,7 +735,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       (async () => {
         try {
           // Check for duplicates before registering
-          const existingJob = await jobExists(platform.toLowerCase(), url);
+          const platformName = platform ? platform.toLowerCase() : 'unknown';
+          const existingJob = await jobExists(platformName, jobId);
           if (existingJob) {
             // If already completed/failed/skipped, do NOT modify database - simply abort
             if (['completed', 'failed', 'skipped'].includes(existingJob.status)) {
@@ -1313,7 +1314,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             const bytes = new Uint8Array(resumeArrayBuffer);
             let binary = '';
             for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
+              binary += String.fromCharCode(bytes[i] || 0);
             }
             const base64 = btoa(binary);
             sendResponse({
@@ -1340,6 +1341,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // ========================================================================
     // JOB QUEUE MANAGEMENT
     // ========================================================================
+    case 'CHECK_JOB_EXISTS':
+      (async () => {
+        const { platform, jobId } = message.data;
+        try {
+          const existing = await jobExists(platform, jobId);
+          sendResponse({
+            status: 'success',
+            exists: !!existing,
+            jobStatus: existing?.status,
+          });
+        } catch (error) {
+          console.error('[Jobzippy] Error checking job existence:', error);
+          sendResponse({
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+      return true;
+
     case 'PROCESS_JOB':
       (async () => {
         const { job, platform } = message.data;
@@ -1733,7 +1754,7 @@ if (chrome.webNavigation && chrome.webNavigation.onCreatedNavigationTarget) {
             expected: 60000,
           });
         }
-        handleATSTimeout(session.jobId, timerId);
+        handleATSTimeout(session.jobId, String(timerId));
       }, 60000) as unknown as number; // TESTING: 60 seconds (was 3 minutes)
       session.timerId = timerId;
       registerTimeout(session.jobId, timerId);
@@ -1812,7 +1833,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
           expected: 60000,
         });
       }
-      handleATSTimeout(session.jobId, timerId);
+      handleATSTimeout(session.jobId, String(timerId));
     }, 60000) as unknown as number; // TESTING: 60 seconds (was 3 minutes)
     session.timerId = timerId;
     registerTimeout(session.jobId, timerId);
@@ -1855,7 +1876,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
           if ((window as any).jobzippyAlertHandlerInstalled) return;
           (window as any).jobzippyAlertHandlerInstalled = true;
           console.log('[Jobzippy] Installing alert handler in MAIN world');
-          const _originalAlert = window.alert;
+          // const _originalAlert = window.alert;
           window.alert = function (message: string) {
             console.log('[Jobzippy] Intercepted alert:', message);
             let alertDiv = document.getElementById('jobzippy-last-alert');
@@ -1870,11 +1891,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             window.dispatchEvent(new CustomEvent('jobzippy-alert', { detail: message }));
             return true;
           };
-          window.confirm = function (message: string) {
+          (window as any).confirm = function (message: string) {
             console.log('[Jobzippy] Intercepted confirm:', message);
             return true;
           };
-          window.prompt = function (message: string) {
+          (window as any).prompt = function (message: string) {
             console.log('[Jobzippy] Intercepted prompt:', message);
             return '';
           };
@@ -1957,7 +1978,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
           if ((window as any).jobzippyAlertHandlerInstalled) return;
           (window as any).jobzippyAlertHandlerInstalled = true;
           console.log('[Jobzippy] Installing alert handler in MAIN world');
-          const _originalAlert = window.alert;
+          // const _originalAlert = window.alert;
           window.alert = function (message: string) {
             console.log('[Jobzippy] Intercepted alert:', message);
             let alertDiv = document.getElementById('jobzippy-last-alert');
@@ -1972,11 +1993,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             window.dispatchEvent(new CustomEvent('jobzippy-alert', { detail: message }));
             return true;
           };
-          window.confirm = function (message: string) {
+          (window as any).confirm = function (message: string) {
             console.log('[Jobzippy] Intercepted confirm:', message);
             return true;
           };
-          window.prompt = function (message: string) {
+          (window as any).prompt = function (message: string) {
             console.log('[Jobzippy] Intercepted prompt:', message);
             return '';
           };
