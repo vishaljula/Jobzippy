@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   AlertTriangle,
   CheckCircle2,
+  Upload,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,49 @@ import { LayoutShell } from './LayoutShell';
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
   { key: 'insights', icon: BarChart3, label: 'Insights' },
-  { key: 'vault', icon: Shield, label: 'Vault' },
+  {
+    key: 'vault',
+    icon: Shield,
+    label: 'Vault',
+    onClick: async () => {
+      try {
+        const backupSheetId = await chrome.storage.local.get('backupSheetId');
+        if (backupSheetId.backupSheetId) {
+          window.open(
+            `https://docs.google.com/spreadsheets/d/${backupSheetId.backupSheetId}/edit`,
+            '_blank'
+          );
+        } else {
+          console.warn('No backup sheet ID found');
+        }
+      } catch (error) {
+        console.error('Failed to open backup sheet:', error);
+      }
+    },
+  },
+  {
+    key: 'backup',
+    icon: Upload,
+    label: 'Backup',
+    onClick: async () => {
+      try {
+        const { forceBackup } = await import('@/lib/backup-scheduler');
+        const { toast } = await import('sonner');
+        const tokens = await chrome.storage.local.get('oauth_tokens');
+        if (tokens.oauth_tokens?.access_token) {
+          toast.loading('Backing up to Google Sheets...', { id: 'backup' });
+          await forceBackup(tokens.oauth_tokens.access_token);
+          toast.success('Backup completed!', { id: 'backup' });
+        } else {
+          toast.error('No OAuth token found', { id: 'backup' });
+        }
+      } catch (error) {
+        const { toast } = await import('sonner');
+        toast.error('Backup failed', { id: 'backup' });
+        console.error('Manual backup failed:', error);
+      }
+    },
+  },
   { key: 'alerts', icon: Bell, label: 'Alerts' },
 ] as const;
 
@@ -43,15 +86,24 @@ interface ExtensionMessage {
 }
 
 function App() {
-  const { isAuthenticated, isLoading: authLoading, user, logout: handleLogout } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    isReady,
+    needsOnboarding,
+    user,
+    logout: handleLogout,
+  } = useAuth();
+
+  // Only load onboarding state if user needs onboarding
   const {
     snapshot,
     isLoading: onboardingLoading,
     begin,
     complete,
     skip,
-  } = useOnboarding(isAuthenticated);
-  const [isLoading, setIsLoading] = useState(true);
+  } = useOnboarding(isAuthenticated && needsOnboarding);
+
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const onboardingInitRef = useRef(false);
   const [manualWizardOpen, setManualWizardOpen] = useState(false);
@@ -92,20 +144,22 @@ function App() {
     }
   }, []);
 
+  // Simple onboarding control - only if user needs onboarding
   useEffect(() => {
-    if (!authLoading) {
-      setTimeout(() => setIsLoading(false), 300);
-    }
-  }, [authLoading]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !isReady) {
       setIsWizardOpen(false);
       onboardingInitRef.current = false;
       setManualWizardOpen(false);
       return;
     }
 
+    // If user doesn't need onboarding, don't show wizard
+    if (!needsOnboarding) {
+      setIsWizardOpen(false);
+      return;
+    }
+
+    // User needs onboarding
     if (onboardingLoading) {
       return;
     }
@@ -121,11 +175,16 @@ function App() {
     } else {
       setIsWizardOpen(manualWizardOpen);
       onboardingInitRef.current = false;
-      if (!manualWizardOpen) {
-        setManualWizardOpen(false);
-      }
     }
-  }, [begin, isAuthenticated, onboardingLoading, manualWizardOpen, snapshot.status]);
+  }, [
+    begin,
+    isAuthenticated,
+    isReady,
+    needsOnboarding,
+    onboardingLoading,
+    manualWizardOpen,
+    snapshot.status,
+  ]);
 
   const handleResumeOnboarding = useCallback(() => {
     if (snapshot.status === 'not_started' && !onboardingInitRef.current) {
@@ -150,7 +209,8 @@ function App() {
     setManualWizardOpen(false);
   }, [skip]);
 
-  const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
+  // App is loading until auth is ready (which includes restore check)
+  const appLoading = authLoading || !isReady;
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | null = null;

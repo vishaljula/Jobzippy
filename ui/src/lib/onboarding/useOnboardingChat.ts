@@ -273,7 +273,7 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
     async (file: File) => {
       setIsThinking(true);
       try {
-        logger.log('Onboarding', `Processing resume: ${file.name} (${file.size} bytes)`);
+        logger.log('Onboarding', `📄 Processing resume: ${file.name} (${file.size} bytes)`);
 
         // Convert file to base64 for storage
         const buffer = await file.arrayBuffer();
@@ -282,7 +282,9 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
         if (vaultPassword) {
           // vaultService.saveResume expects ArrayBuffer
           await vaultService.saveResume(buffer, vaultPassword);
-          logger.log('Onboarding', 'Resume blob saved to vault');
+          logger.log('Onboarding', '✓ Resume blob saved to vault');
+        } else {
+          logger.error('Onboarding', '✗ No vault password available, cannot save resume!');
         }
 
         // Prepare conversation history for the agent
@@ -299,77 +301,84 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
           },
           conversation,
         });
-        logger.log('Onboarding', 'Resume extraction result', extractedData);
+        logger.log('Onboarding', '✓ Resume extraction complete', extractedData);
 
         // Merge extracted data into draft
         const nextDraft = mergeExtractedData(draft, extractedData);
-        logger.log('Onboarding', 'Merged draft after resume', nextDraft);
+        logger.log('Onboarding', '✓ Merged draft after resume processing');
 
         setDraft(nextDraft);
         setHasResume(true);
         const remaining = computeMissingFields(nextDraft);
         setMissingFields(remaining);
+        logger.log('Onboarding', `→ Missing fields after resume: ${remaining.length}`);
         updateProgressState(remaining.length, nextDraft);
 
-        if (remaining.length > 0) {
-          const previewSections = [
-            {
-              id: 'resume-identity',
-              title: 'Personal Details',
-              confidence: 0.9,
-              fields: Object.entries(extractedData.llm.profile.identity || {}).map(
-                ([key, value]) => ({
-                  id: key,
-                  label: key.replace(/_/g, ' '),
-                  value: String(value),
-                })
-              ),
-            },
-          ];
+        // ALWAYS show resume preview, regardless of missing fields
+        // This allows user to review and confirm the extracted data
+        const previewSections = [
+          {
+            id: 'resume-identity',
+            title: 'Personal Details',
+            confidence: 0.9,
+            fields: Object.entries(extractedData.llm.profile.identity || {}).map(
+              ([key, value]) => ({
+                id: key,
+                label: key.replace(/_/g, ' '),
+                value: String(value),
+              })
+            ),
+          },
+        ];
 
-          if (extractedData.llm.history?.employment?.length) {
-            previewSections.push({
-              id: 'resume-experience',
-              title: 'Experience',
-              confidence: 0.9,
-              fields: extractedData.llm.history.employment.map((job, idx) => ({
-                id: `job-${idx}`,
-                label: job.company,
-                value: `${job.title} ${job.start ? `(${job.start} - ${job.end || 'Present'})` : ''}`,
-              })),
-            });
-          }
-
-          if (extractedData.llm.history?.education?.length) {
-            previewSections.push({
-              id: 'resume-education',
-              title: 'Education',
-              confidence: 0.9,
-              fields: extractedData.llm.history.education.map((edu, idx) => ({
-                id: `edu-${idx}`,
-                label: edu.school,
-                value: `${edu.degree} ${edu.start ? `(${edu.start} - ${edu.end || 'Present'})` : ''}`,
-              })),
-            });
-          }
-
-          // Create a preview message for the resume data
-          const previewMessage: IntakeMessage = {
-            id: uuid(),
-            role: 'assistant',
-            kind: 'preview',
-            content: 'Here is what I found in your resume:',
-            previewSections,
-            createdAt: new Date().toISOString(),
-          };
-
-          const historyAfterResume = [...messages, previewMessage];
-
-          // Show the preview message to the user
-          appendMessage(previewMessage);
-
-          await runAssistantTurn(historyAfterResume, nextDraft, remaining);
+        if (extractedData.llm.history?.employment?.length) {
+          previewSections.push({
+            id: 'resume-experience',
+            title: 'Experience',
+            confidence: 0.9,
+            fields: extractedData.llm.history.employment.map((job, idx) => ({
+              id: `job-${idx}`,
+              label: job.company,
+              value: `${job.title} ${job.start ? `(${job.start} - ${job.end || 'Present'})` : ''}`,
+            })),
+          });
         }
+
+        if (extractedData.llm.history?.education?.length) {
+          previewSections.push({
+            id: 'resume-education',
+            title: 'Education',
+            confidence: 0.9,
+            fields: extractedData.llm.history.education.map((edu, idx) => ({
+              id: `edu-${idx}`,
+              label: edu.school,
+              value: `${edu.degree} ${edu.start ? `(${edu.start} - ${edu.end || 'Present'})` : ''}`,
+            })),
+          });
+        }
+
+        // Create a preview message for the resume data
+        logger.log('Onboarding', `Creating resume preview with ${previewSections.length} sections`);
+        const previewMessage: IntakeMessage = {
+          id: uuid(),
+          role: 'assistant',
+          kind: 'preview',
+          content: 'Here is what I found in your resume:',
+          previewSections,
+          createdAt: new Date().toISOString(),
+        };
+
+        const historyAfterResume = [...messages, previewMessage];
+
+        // Show the preview message to the user
+        logger.log(
+          'Onboarding',
+          '📋 Showing resume preview to user (Apply updates / Edit manually screen)'
+        );
+        appendMessage(previewMessage);
+
+        // Run assistant turn to ask for missing fields (if any) or confirm completion
+        await runAssistantTurn(historyAfterResume, nextDraft, remaining);
       } catch (error) {
         logger.error('Onboarding', 'Resume processing failed', error);
         appendMessage({
@@ -629,23 +638,48 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
   }, [userKey]);
 
   useEffect(() => {
-    if (!draft || missingFields.length > 0 || !hasResume || completedAt) return;
+    if (!draft || missingFields.length > 0 || !hasResume || completedAt) {
+      if (!completedAt) {
+        logger.log(
+          'Onboarding',
+          `Auto-save check: draft=${!!draft}, missing=${missingFields.length}, hasResume=${hasResume}`
+        );
+      }
+      return;
+    }
 
+    logger.log('Onboarding', '💾 All conditions met, starting auto-save to vault...');
     setProgress((prev) => ({ ...prev, status: 'saving' }));
     void (async () => {
       try {
         await syncDraftToVault(draft);
+        logger.log('Onboarding', '✓ Draft synced to vault');
+
+        // Trigger backup to Google Sheets after vault sync
+        try {
+          logger.log('Onboarding', '☁️ Triggering backup to Google Sheets...');
+          const { forceBackup } = await import('@/lib/backup-scheduler');
+          const tokens = await getStorage('oauth_tokens');
+          if (tokens?.access_token) {
+            await forceBackup(tokens.access_token);
+            logger.log('Onboarding', '✓ Backup to Google Sheets completed');
+          }
+        } catch (backupError) {
+          logger.error('Onboarding', 'Backup to Google Sheets failed', backupError);
+          // Don't block onboarding completion if backup fails
+        }
       } catch (error) {
-        console.error('[Onboarding] Failed to persist final draft', error);
+        logger.error('Onboarding', 'Failed to persist final draft', error);
       }
       setProgress((prev) => ({ ...prev, status: 'ready' }));
       setCompletedAt(new Date().toISOString());
+      logger.log('Onboarding', '✅ Onboarding complete, showing completion message');
       appendMessage({
         id: uuid(),
         role: 'assistant',
         kind: 'notice',
         content:
-          'All set! Your secure Jobzippy vault is ready. I’m routing you to the dashboard so you can see applied jobs and stats.',
+          "All set! Your secure Jobzippy vault is ready. I'm routing you to the dashboard so you can see applied jobs and stats.",
         createdAt: new Date().toISOString(),
       });
     })();

@@ -1674,125 +1674,74 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // EXTERNAL ATS TAB LIFECYCLE LISTENERS
 // ============================================================================
 
+// NOTE: webNavigation permission was removed because it breaks Chrome's native context menu
+// (right-click "Open in new tab" stopped working globally)
+// Using chrome.tabs.onCreated instead - it provides openerTabId without breaking context menus
+
 // Detect when external ATS tabs are created via link clicks or window.open()
-// Using webNavigation API because it reliably captures sourceTabId even with window.open()
-if (chrome.webNavigation && chrome.webNavigation.onCreatedNavigationTarget) {
-  chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
-    console.log('[Jobzippy] webNavigation.onCreatedNavigationTarget fired:', details);
-    logToContentScripts('Background', 'webNavigation.onCreatedNavigationTarget fired', details);
+// Using tabs.onCreated with openerTabId instead of webNavigation
+chrome.tabs.onCreated.addListener((tab) => {
+  const { id: tabId, openerTabId } = tab;
 
-    const { sourceTabId, tabId, url } = details;
+  if (!openerTabId || !tabId) {
+    // No opener means it's a new user-created tab, not an apply flow
+    return;
+  }
 
-    if (!sourceTabId || !tabId) {
-      console.log('[Jobzippy] Missing sourceTabId or tabId, ignoring');
-      logToContentScripts('Background', 'Missing sourceTabId or tabId, ignoring');
-      return;
-    }
+  console.log('[Jobzippy] tabs.onCreated fired:', { tabId, openerTabId });
+  logToContentScripts('Background', 'tabs.onCreated fired', { tabId, openerTabId });
 
-    // NEW ARCHITECTURE: Check JobSession first
-    // Try to extract jobId from URL first (e.g., ?job=123457)
-    const urlParams = new URL(url).searchParams;
-    const jobIdFromUrl = urlParams.get('job');
+  // Find session by openerTabId (sourceTabId), or find ANY pending session
+  let session = findJobSessionBySourceTab(openerTabId);
 
-    // Find session by jobId from URL if available, otherwise fall back to sourceTabId
-    let session: JobSession | undefined;
-    if (jobIdFromUrl) {
-      session = jobSessions.get(jobIdFromUrl);
-      if (session && session.status === 'pending' && session.sourceTabId === sourceTabId) {
-        console.log(
-          `[Jobzippy] NEW: External ATS detected via JobSession (matched by jobId from URL): jobId=${session.jobId}, tabId=${tabId}`
-        );
-      } else {
-        session = undefined; // JobId mismatch, try fallback
+  // Fallback: If not found by sourceTabId, find any pending session
+  // This handles cases where tabs are opened from intermediate tabs (e.g., LinkedIn search results -> job details -> ATS)
+  if (!session) {
+    for (const s of jobSessions.values()) {
+      if (s.status === 'pending' && !s.atsTabId) {
+        session = s;
+        console.log(`[Jobzippy] Found pending JobSession by fallback: jobId=${s.jobId}`);
+        break;
       }
     }
+  }
 
-    // Fallback: find by sourceTabId (for cases where URL doesn't have jobId)
-    if (!session) {
-      session = findJobSessionBySourceTab(sourceTabId);
-    }
+  if (session) {
+    console.log(
+      `[Jobzippy] NEW: External ATS tab created for JobSession: jobId=${session.jobId}, tabId=${tabId}`
+    );
+    logToContentScripts(
+      'Background',
+      `NEW: External ATS tab created: jobId=${session.jobId}, tabId=${tabId}`
+    );
 
-    if (session && isATSUrl(url)) {
-      console.log(
-        `[Jobzippy] NEW: External ATS detected via JobSession: jobId=${session.jobId}, tabId=${tabId}`
-      );
-      logToContentScripts(
-        'Background',
-        `NEW: External ATS detected: jobId=${session.jobId}, tabId=${tabId}`
-      );
+    // Store the ATS tab ID in the session immediately
+    session.atsTabId = tabId;
+    session.status = 'ats-opened';
 
-      session.atsTabId = tabId;
-      session.status = 'ats-opened';
-
-      // Set timeout for entire ATS flow
-      // Clear ALL existing timeouts first (defensive - prevent stale timeouts)
-      clearAllTimeoutsForJob(session.jobId);
-
-      const timeoutReason = 'ATS tab opened';
-      const timeoutCreatedAt = Date.now();
-      const timerId = setTimeout(() => {
-        const timeSinceCreation = Date.now() - timeoutCreatedAt;
-        console.log(
-          `[Jobzippy] [TIMEOUT] setTimeout callback FIRED: timerId=${timerId}, jobId=${session.jobId}, reason="${timeoutReason}", timeSinceCreation=${timeSinceCreation}ms (expected: 60000ms)`
-        );
-        logToContentScripts('Background', `[TIMEOUT] setTimeout callback FIRED`, {
-          timerId,
-          jobId: session.jobId,
-          reason: timeoutReason,
-          timeSinceCreation,
-          expected: 60000,
-        });
-        if (timeSinceCreation < 1000) {
-          console.error(
-            `[Jobzippy] [TIMEOUT] BUG: Timeout fired too early! Only ${timeSinceCreation}ms elapsed, expected 60000ms`
-          );
-          logToContentScripts('Background', `[TIMEOUT] BUG: Timeout fired too early!`, {
-            timerId,
-            jobId: session.jobId,
-            reason: timeoutReason,
-            timeSinceCreation,
-            expected: 60000,
-          });
-        }
-        handleATSTimeout(session.jobId, String(timerId));
-      }, 60000) as unknown as number; // TESTING: 60 seconds (was 3 minutes)
-      session.timerId = timerId;
-      registerTimeout(session.jobId, timerId);
-      console.log(
-        `[Jobzippy] [TIMEOUT] setTimeout CREATED: timerId=${timerId}, jobId=${session.jobId}, reason="${timeoutReason}", createdAt=${timeoutCreatedAt}, willFireAt=${timeoutCreatedAt + 60000}`
-      );
-      logToContentScripts('Background', `[TIMEOUT] Creating ATS timeout`, {
-        jobId: session.jobId,
-        reason: timeoutReason,
-        duration: 60000,
-        timerId,
+    // Immediately notify LinkedIn tab that ATS tab was opened
+    chrome.tabs
+      .sendMessage(session.sourceTabId, {
+        type: 'EXTERNAL_ATS_OPENED',
+        data: { jobId: session.jobId, atsTabId: tabId },
+      } as ExternalATSOpenedMessage)
+      .catch((err) => {
+        console.error(`[Jobzippy] Failed to send EXTERNAL_ATS_OPENED:`, err);
       });
 
-      // Immediately notify LinkedIn tab
-      chrome.tabs
-        .sendMessage(session.sourceTabId, {
-          type: 'EXTERNAL_ATS_OPENED',
-          data: { jobId: session.jobId, atsTabId: tabId },
-        } as ExternalATSOpenedMessage)
-        .catch((err) => {
-          console.error(`[Jobzippy] Failed to send EXTERNAL_ATS_OPENED:`, err);
-        });
-
-      return; // Handled by new architecture
-    }
-
-    // If no JobSession found, log warning and close the stray tab to avoid leaving it open
+    // Note: Timeout and URL validation will be handled in tabs.onUpdated when URL loads
+  } else {
+    // If no JobSession found, log warning and close the stray tab
     console.warn(
-      `[Jobzippy] External ATS tab detected but no JobSession found for sourceTabId=${sourceTabId}`
+      `[Jobzippy] External ATS tab created but no JobSession found for openerTabId=${openerTabId}`
     );
-    logToContentScripts('Background', `External ATS tab detected but no JobSession found`, {
-      sourceTabId,
+    logToContentScripts('Background', `External ATS tab created but no JobSession found`, {
+      openerTabId,
       tabId,
-      url,
     });
     chrome.tabs.remove(tabId).catch(() => {});
-  });
-}
+  }
+});
 
 // Detect when external ATS tabs finish loading
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

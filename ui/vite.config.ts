@@ -5,6 +5,7 @@ import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  envDir: resolve(__dirname, '..'), // Look for .env in project root
   plugins: [
     react(),
     viteStaticCopy({

@@ -1,6 +1,8 @@
 import type { JobRecord, JobStats } from './store-types';
 import * as db from './db';
 import { logger } from '../logger';
+import { scheduleBackup } from '../backup-scheduler';
+import { getStorage } from '../storage';
 
 // Re-export types for convenience
 export type { JobRecord, JobStats };
@@ -11,6 +13,21 @@ export type { JobRecord, JobStats };
  */
 export function generateJobId(platform: string, jobId: string): string {
   return `${platform}::${jobId}`;
+}
+
+/**
+ * Trigger backup to Google Sheets (debounced)
+ * Gets OAuth token from storage and schedules backup
+ */
+async function triggerBackup(): Promise<void> {
+  try {
+    const tokens = await getStorage('oauth_tokens');
+    if (tokens?.access_token) {
+      scheduleBackup(tokens.access_token);
+    }
+  } catch (error) {
+    logger.error('JobStore', 'Failed to trigger backup', error);
+  }
 }
 
 /**
@@ -54,6 +71,10 @@ export async function upsertJob(
       url: data.url ?? existing.url,
     };
     await db.putJob(updated);
+
+    // Schedule backup after job update
+    triggerBackup();
+
     return updated;
   } else {
     // Create new record
@@ -76,6 +97,10 @@ export async function upsertJob(
       applyType: data.applyType,
     };
     await db.putJob(newRecord);
+
+    // Schedule backup after job creation
+    triggerBackup();
+
     return newRecord;
   }
 }
@@ -104,6 +129,10 @@ export async function updateJobStatus(
   };
 
   await db.putJob(updated);
+
+  // Schedule backup after status update (e.g., Gmail replies)
+  triggerBackup();
+
   return updated;
 }
 

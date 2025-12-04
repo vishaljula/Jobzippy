@@ -26,8 +26,7 @@
     "identity",
     "cookies",
     "tabs",
-    "scripting",
-    "webNavigation"
+    "scripting"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",

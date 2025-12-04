@@ -251,6 +251,8 @@ export interface AuthState {
   isLoading: boolean;
   user: UserInfo | null;
   error: string | null;
+  isReady: boolean; // True when restore check is complete
+  needsOnboarding: boolean; // True if user needs to complete onboarding
 }
 
 // Onboarding Types
@@ -284,11 +286,13 @@ export interface ExtensionStorage {
   onboardingStatus?: OnboardingSnapshot;
   onboardingConversations?: Record<string, OnboardingConversationSnapshot>;
   sheetId?: string;
+  backupSheetId?: string; // Google Sheets backup spreadsheet ID
   userId?: string;
   lastSync?: string;
   intakeConversation?: IntakeConversationSnapshot;
   intakeDraft?: ProfileVault;
   tutorialDismissed?: boolean;
+  oauth_tokens?: OAuthTokens; // Google OAuth tokens for API access
 }
 
 // Job Filters
