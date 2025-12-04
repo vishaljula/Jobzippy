@@ -40,13 +40,10 @@ export async function connectFirebaseAuth(user: UserInfo): Promise<void> {
 
   try {
     let firebaseUid: string;
-    let _isNewUser = false;
-
     if (!auth.currentUser) {
       logger.log('FirebaseSession', '📝 No current Firebase user, signing in...');
       const credentialResult = await signInWithCredential(auth, credential);
       firebaseUid = credentialResult.user.uid;
-      _isNewUser = true;
       logger.log('FirebaseSession', `✓ Firebase sign-in complete. UID: ${firebaseUid}`);
 
       await ensureUserDocument(firebaseUid, {

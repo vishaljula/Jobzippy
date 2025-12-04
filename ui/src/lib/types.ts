@@ -288,6 +288,7 @@ export interface ExtensionStorage {
   sheetId?: string;
   backupSheetId?: string; // Google Sheets backup spreadsheet ID
   userId?: string;
+  user_info?: UserInfo; // Google user info from OAuth
   lastSync?: string;
   intakeConversation?: IntakeConversationSnapshot;
   intakeDraft?: ProfileVault;

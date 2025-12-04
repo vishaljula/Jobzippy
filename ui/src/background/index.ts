@@ -1688,9 +1688,6 @@ chrome.tabs.onCreated.addListener((tab) => {
     return;
   }
 
-  console.log('[Jobzippy] tabs.onCreated fired:', { tabId, openerTabId });
-  logToContentScripts('Background', 'tabs.onCreated fired', { tabId, openerTabId });
-
   // Find session by openerTabId (sourceTabId), or find ANY pending session
   let session = findJobSessionBySourceTab(openerTabId);
 
@@ -1707,6 +1704,11 @@ chrome.tabs.onCreated.addListener((tab) => {
   }
 
   if (session) {
+    console.log('[Jobzippy] tabs.onCreated: matched JobSession', {
+      tabId,
+      openerTabId,
+      jobId: session.jobId,
+    });
     console.log(
       `[Jobzippy] NEW: External ATS tab created for JobSession: jobId=${session.jobId}, tabId=${tabId}`
     );
@@ -1730,17 +1732,9 @@ chrome.tabs.onCreated.addListener((tab) => {
       });
 
     // Note: Timeout and URL validation will be handled in tabs.onUpdated when URL loads
-  } else {
-    // If no JobSession found, log warning and close the stray tab
-    console.warn(
-      `[Jobzippy] External ATS tab created but no JobSession found for openerTabId=${openerTabId}`
-    );
-    logToContentScripts('Background', `External ATS tab created but no JobSession found`, {
-      openerTabId,
-      tabId,
-    });
-    chrome.tabs.remove(tabId).catch(() => {});
   }
+  // If no session found, it's likely a normal user navigation (right-click, etc.)
+  // We silently ignore these - they're not part of the apply flow
 });
 
 // Detect when external ATS tabs finish loading

@@ -361,8 +361,10 @@ async function restoreVault(accessToken: string, sheetId: string): Promise<boole
   let salt: string | null = null;
 
   for (const [storeName, iv, ciphertext] of rows) {
+    if (!storeName) continue; // Skip empty rows
+
     if (storeName === '_salt') {
-      salt = ciphertext; // Salt is stored in ciphertext column
+      salt = ciphertext || null; // Salt is stored in ciphertext column
       continue;
     }
 
@@ -405,22 +407,24 @@ async function restoreJobs(accessToken: string, sheetId: string): Promise<JobRec
   const data = await response.json();
   const rows: string[][] = data.values || [];
 
-  const jobs: JobRecord[] = rows.map((row) => ({
-    id: row[0],
-    platform: row[1],
-    jobId: row[2],
-    title: row[3],
-    company: row[4],
-    location: row[5] || undefined,
-    status: row[6] as JobRecord['status'],
-    attempts: Number(row[7]),
-    createdAt: new Date(row[8]).getTime(),
-    updatedAt: new Date(row[9]).getTime(),
-    lastAppliedAt: row[10] ? new Date(row[10]).getTime() : undefined,
-    url: row[11] || undefined,
-    errorMessage: row[12] || undefined,
-    applyType: (row[13] as any) || undefined,
-  }));
+  const jobs: JobRecord[] = rows
+    .filter((row) => row[0] && row[1] && row[2]) // Must have id, platform, jobId
+    .map((row) => ({
+      id: row[0]!,
+      platform: row[1]! as JobRecord['platform'],
+      jobId: row[2]!,
+      title: row[3] || '',
+      company: row[4] || '',
+      location: row[5] || undefined,
+      status: (row[6] as JobRecord['status']) || 'pending',
+      attempts: Number(row[7]) || 0,
+      createdAt: row[8] ? new Date(row[8]).getTime() : Date.now(),
+      updatedAt: row[9] ? new Date(row[9]).getTime() : Date.now(),
+      lastAppliedAt: row[10] ? new Date(row[10]).getTime() : undefined,
+      url: row[11] || undefined,
+      errorMessage: row[12] || undefined,
+      applyType: (row[13] as any) || undefined,
+    }));
 
   logger.log('SheetsBackup', `✓ Jobs restored (${jobs.length} records)`);
   return jobs;
