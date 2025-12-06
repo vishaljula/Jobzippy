@@ -10,9 +10,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 });
 
 /**
- * Creates an embedded Stripe Checkout session for subscription
+ * Creates a Stripe Checkout session for subscription (hosted mode)
  */
-export const createEmbeddedCheckout = functions.https.onCall(async (data, context) => {
+export const createCheckoutSession = functions.https.onCall(async (data, context) => {
   // Verify user is authenticated
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
@@ -28,9 +28,8 @@ export const createEmbeddedCheckout = functions.https.onCall(async (data, contex
   functions.logger.info(`Creating checkout session for user: ${userId}`);
 
   try {
-    // Create Stripe Checkout Session with embedded UI mode
+    // Create Stripe Checkout Session in hosted mode (opens in new tab)
     const session = await stripe.checkout.sessions.create({
-      ui_mode: 'embedded', // Enables embedded checkout
       mode: 'subscription',
       customer_email: userEmail,
       line_items: [
@@ -45,14 +44,15 @@ export const createEmbeddedCheckout = functions.https.onCall(async (data, contex
           userId, // Link subscription to Firebase user
         },
       },
-      // Return URL for after payment (extension side panel)
-      return_url: `${data.returnUrl || 'https://jobzippy.ai'}?session_id={CHECKOUT_SESSION_ID}`,
+      // Success/cancel URLs
+      success_url: data.successUrl,
+      cancel_url: data.cancelUrl,
     });
 
     functions.logger.info(`Checkout session created: ${session.id}`);
 
     return {
-      clientSecret: session.client_secret,
+      url: session.url, // Hosted checkout URL
       sessionId: session.id,
     };
   } catch (error) {

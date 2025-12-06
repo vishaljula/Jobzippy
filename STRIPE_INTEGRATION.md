@@ -1,20 +1,20 @@
 # Stripe Integration Setup Guide
 
-**Status:** ✅ Embedded Checkout Implemented  
-**Last Updated:** December 5, 2025
+**Status:** ✅ Hosted Checkout Implemented  
+**Last Updated:** December 6, 2025
 
 ---
 
 ## 🎉 What's Been Implemented
 
-### **Embedded Stripe Checkout** (Modal-based, stays in extension)
+### **Hosted Stripe Checkout** (Opens in new tab, officially supported for Chrome extensions)
 
 ✅ **Cloud Functions:**
-- `createEmbeddedCheckout` - Creates Stripe checkout session
+- `createCheckoutSession` - Creates Stripe checkout session
 - `stripeWebhook` - Handles subscription lifecycle events
 
 ✅ **UI Components:**
-- `SubscriptionCard` - Beautiful trial offer with embedded checkout
+- `SubscriptionCard` - Beautiful trial offer card
 - `SubscriptionStatus` - Shows trial/active status and usage
 
 ✅ **Features:**
@@ -22,7 +22,7 @@
 - $9.99/month after trial
 - 300 applications/month limit
 - Card required upfront
-- Embedded checkout (no tab switching!)
+- Secure hosted checkout (Stripe's officially recommended approach for extensions)
 
 ---
 
@@ -116,10 +116,10 @@ npm run dev
 1. **Sign in** to the extension
 2. **See SubscriptionCard** on dashboard
 3. **Click "Start Free Trial"**
-4. **Modal opens** with Stripe checkout (stays in extension!)
+4. **New tab opens** with Stripe hosted checkout page
 5. **Enter test card:** `4242 4242 4242 4242`
 6. **Submit payment**
-7. **Modal closes**, see **"Trial Started!"**
+7. **Redirected back** to extension sidepanel
 8. **Check Firestore:** `users/{userId}` should have `subscription` object
 
 ### **3. Verify in Stripe Dashboard**
