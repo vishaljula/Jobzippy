@@ -32,6 +32,13 @@ const envSchema = z.object({
     .pipe(z.number().int().positive()),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Firebase Admin
+  FIREBASE_PROJECT_ID: z.string().min(1, 'FIREBASE_PROJECT_ID is required'),
+  FIREBASE_PRIVATE_KEY: z.string().optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().optional(),
+  // Stripe
+  STRIPE_SECRET_KEY: z.string().min(1, 'STRIPE_SECRET_KEY is required'),
+  STRIPE_PRICE_ID: z.string().min(1, 'STRIPE_PRICE_ID is required'),
 });
 
 const parsed = envSchema.parse({
@@ -45,6 +52,11 @@ const parsed = envSchema.parse({
   PORT: process.env.PORT ?? process.env.API_PORT ?? '8787',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID ?? (isTestEnvironment ? 'test-project' : undefined),
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? (isTestEnvironment ? 'test-stripe-key' : undefined),
+  STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID ?? (isTestEnvironment ? 'test-price-id' : undefined),
 });
 
 const allowedOrigins = parsed.ALLOWED_ORIGINS
@@ -68,6 +80,15 @@ export const config = {
   },
   anthropic: {
     apiKey: parsed.ANTHROPIC_API_KEY,
+  },
+  firebase: {
+    projectId: parsed.FIREBASE_PROJECT_ID,
+    privateKey: parsed.FIREBASE_PRIVATE_KEY,
+    clientEmail: parsed.FIREBASE_CLIENT_EMAIL,
+  },
+  stripe: {
+    secretKey: parsed.STRIPE_SECRET_KEY,
+    priceId: parsed.STRIPE_PRICE_ID,
   },
 } as const;
 
