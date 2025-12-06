@@ -2,9 +2,9 @@
 
 import { Check, Sparkles, Zap, Lock } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 
-export default function WelcomePage() {
+function WelcomeContent() {
   const searchParams = useSearchParams();
   const isInstalled = searchParams.get('installed') === 'true';
   const [showConfetti, setShowConfetti] = useState(false);
@@ -240,6 +240,14 @@ export default function WelcomePage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function WelcomePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <WelcomeContent />
+    </Suspense>
   );
 }
 
