@@ -33,6 +33,21 @@ import type {
 // logger.log('Background', 'Background service worker initialized');
 console.log('[Jobzippy] Background service worker initialized');
 
+// -----------------------------------------------------------------------------
+// Extension Lifecycle - Welcome Page on Install
+// -----------------------------------------------------------------------------
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    console.log('[Jobzippy] Extension installed - opening welcome page');
+    chrome.tabs.create({
+      url: 'https://jobzippy.ai/welcome?installed=true',
+    });
+  } else if (details.reason === 'update') {
+    console.log('[Jobzippy] Extension updated to version:', chrome.runtime.getManifest().version);
+    // Optionally show what's new page on updates
+  }
+});
+
 // Helper to log to content scripts (which can write to agent-logs.txt)
 async function logToContentScripts(component: string, message: string, data?: any) {
   console.log(`[${component}] ${message}`, data || '');
