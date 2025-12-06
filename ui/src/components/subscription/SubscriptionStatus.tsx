@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { getFirestoreDb } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ export function SubscriptionStatus() {
   useEffect(() => {
     if (!user) return;
 
+    const db = getFirestoreDb();
     const unsubscribe = onSnapshot(
       doc(db, 'users', user.sub),
       (snapshot) => {
