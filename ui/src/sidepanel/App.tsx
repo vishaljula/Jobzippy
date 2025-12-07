@@ -24,6 +24,7 @@ import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
 import { SubscriptionCard, SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
+import { logger } from '@/lib/logger';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -415,14 +416,14 @@ function App() {
         const userDoc = await getDoc(userDocRef);
         const sub = userDoc.data()?.subscription;
 
-        console.log('[Subscription] Checked status for user:', user.sub);
-        console.log('[Subscription] Subscription object:', sub);
+        logger.log('[Subscription] Checked status for user:', user.sub);
+        logger.log('[Subscription] Subscription object:', sub);
         setSubscriptionStatus(sub);
         setSubscriptionChecked(true);
 
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
           // No subscription - open Stripe checkout
-          console.log('[Subscription] No subscription, opening Stripe...');
+          logger.log('[Subscription] No subscription, opening Stripe...');
           setShowPricing(false);
           setCheckoutLoading(true);
 
@@ -442,12 +443,12 @@ function App() {
             });
 
             const { url } = result.data as { url: string; sessionId: string };
-            console.log('[Subscription] Opening Stripe checkout:', url);
+            logger.log('[Subscription] Opening Stripe checkout:', url);
 
             chrome.tabs.create({ url });
             toast.info('Complete payment in the opened tab');
           } catch (error) {
-            console.error('[Subscription] Failed to create checkout:', error);
+            logger.error('[Subscription] Failed to create checkout:', error);
             toast.error('Failed to open payment page');
             setShowPricing(true); // Go back to pricing on error
           } finally {
@@ -455,11 +456,11 @@ function App() {
           }
         } else {
           // Has subscription - show dashboard
-          console.log('[Subscription] Active subscription, showing dashboard');
+          logger.log('[Subscription] Active subscription, showing dashboard');
           setShowPricing(false);
         }
       } catch (error) {
-        console.error('[Subscription] Error checking status:', error);
+        logger.error('[Subscription] Error checking status:', error);
 
         // If error checking subscription (e.g., stale token, permissions),
         // still mark as checked and show dashboard - let user try from there
@@ -478,7 +479,7 @@ function App() {
   useEffect(() => {
     const handler = async (message: { type: string; sessionId?: string }) => {
       if (message.type === 'SUBSCRIPTION_ACTIVE') {
-        console.log('[Subscription] Received activation message from success page');
+        logger.log('[Subscription] Received activation message from success page');
         // Refresh subscription status with retry (webhook might be slow)
         if (user) {
           const maxRetries = 5;
@@ -494,7 +495,7 @@ function App() {
               const userDoc = await getDoc(userDocRef);
               const sub = userDoc.data()?.subscription;
 
-              console.log('[Subscription] Retry', retryCount + 1, '- Sub status:', sub?.status);
+              logger.log('[Subscription] Retry', retryCount + 1, '- Sub status:', sub?.status);
 
               setSubscriptionStatus(sub);
               if (sub?.status === 'active' || sub?.status === 'trialing') {
@@ -505,7 +506,7 @@ function App() {
 
               return false; // Not ready yet
             } catch (error) {
-              console.error('[Subscription] Error refreshing status:', error);
+              logger.error('[Subscription] Error refreshing status:', error);
               return false;
             }
           };
@@ -555,7 +556,7 @@ function App() {
   }, []);
 
   const handleStartTrial = useCallback(() => {
-    console.log('[Subscription] Closing pricing, showing main app with sign-in...');
+    logger.log('[Subscription] Closing pricing, showing main app with sign-in...');
     setShowPricing(false);
   }, []);
 
