@@ -24,8 +24,6 @@ import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
 import { SubscriptionCard, SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -461,9 +459,14 @@ function App() {
     setCheckoutLoading(true);
 
     try {
-      // Step 1: Ensure user is signed in
-      const auth = getAuth();
+      // Get Firebase app instance first
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getAuth: getAuthInstance } = await import('firebase/auth');
 
+      const firebaseApp = getFirebaseApp();
+      const auth = getAuthInstance(firebaseApp);
+
+      // Step 1: Ensure user is signed in
       if (!auth.currentUser) {
         console.log('[Subscription] User not signed in, triggering Google OAuth...');
         toast.info('Please sign in with Google to continue');
@@ -489,10 +492,8 @@ function App() {
       console.log('[Subscription] Creating checkout session...');
 
       // Step 3: Call Firebase Function to create checkout
-      const { getFirebaseApp } = await import('@/lib/firebase/client');
       const { getFunctions, httpsCallable } = await import('firebase/functions');
 
-      const firebaseApp = getFirebaseApp();
       const functions = getFunctions(firebaseApp);
       const createCheckout = httpsCallable(functions, 'createCheckoutSession');
 
