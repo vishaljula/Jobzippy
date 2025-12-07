@@ -81,6 +81,9 @@
       "matches": ["<all_urls>"]
     }
   ],
+  "externally_connectable": {
+    "matches": ["https://jobzippy.ai/*", "http://localhost:3333/*"]
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://localhost:* https://*.googleapis.com https://*.cloudfunctions.net https://firestore.googleapis.com https://identitytoolkit.googleapis.com;"
   }

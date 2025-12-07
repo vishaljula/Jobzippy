@@ -22,8 +22,10 @@ import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
-import { SubscriptionCard, SubscriptionStatus } from '@/components/subscription';
+import { SubscriptionCard, SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -117,6 +119,11 @@ function App() {
   const [authNeeded, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
   const [preflightPending, setPreflightPending] = useState(false);
   const tabToastIdRef = useRef<string | number | null>(null);
+
+  // Subscription state
+  const [, setSubscriptionStatus] = useState<any>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -383,6 +390,62 @@ function App() {
     };
   }, [engineState]);
 
+  // Check subscription status
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setShowPricing(false);
+      return;
+    }
+
+    const checkSubscription = async () => {
+      try {
+        const firestore = getFirestore();
+        const userDocRef = doc(firestore, `users/${user.sub}`);
+        const userDoc = await getDoc(userDocRef);
+        const sub = userDoc.data()?.subscription;
+
+        setSubscriptionStatus(sub);
+
+        // Show pricing if no active subscription
+        if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
+          setShowPricing(true);
+        } else {
+          setShowPricing(false);
+        }
+      } catch (error) {
+        console.error('[Subscription] Error checking status:', error);
+        setShowPricing(true); // Default to showing pricing on error
+      }
+    };
+
+    checkSubscription();
+  }, [isAuthenticated, user]);
+
+  // Listen for subscription updates from success page
+  useEffect(() => {
+    const handler = (message: any) => {
+      if (message.type === 'SUBSCRIPTION_ACTIVE') {
+        console.log('[Subscription] Received activation message from success page');
+        // Refresh subscription status
+        if (user) {
+          const firestore = getFirestore();
+          const userDocRef = doc(firestore, `users/${user.sub}`);
+          getDoc(userDocRef).then((userDoc) => {
+            const sub = userDoc.data()?.subscription;
+            setSubscriptionStatus(sub);
+            if (sub?.status === 'active' || sub?.status === 'trialing') {
+              setShowPricing(false);
+              toast.success('Trial started! Welcome to JobZippy 🎉');
+            }
+          });
+        }
+      }
+    };
+
+    chrome.runtime.onMessageExternal.addListener(handler);
+    return () => chrome.runtime.onMessageExternal.removeListener(handler);
+  }, [user]);
+
   // Poll engine status on mount
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'ENGINE_STATE' }, (resp) => {
@@ -391,6 +454,54 @@ function App() {
         if (resp.engineStatus) setEngineStatus(resp.engineStatus);
       }
     });
+  }, []);
+
+  const handleStartTrial = useCallback(async () => {
+    setCheckoutLoading(true);
+
+    try {
+      // Get Firebase ID token
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+
+      if (!token) {
+        toast.error('Please sign in first');
+        return;
+      }
+
+      console.log('[Subscription] Creating checkout session...');
+
+      // Call API to create checkout
+      const response = await fetch('http://localhost:8787/checkout/create-checkout', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+          cancelUrl: 'https://jobzippy.ai/welcome',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create checkout');
+      }
+
+      const { url } = await response.json();
+      console.log('[Subscription] Opening Stripe checkout:', url);
+
+      // Open Stripe in new tab
+      chrome.tabs.create({ url });
+
+      toast.info('Complete payment in the opened tab');
+    } catch (error) {
+      console.error('[Subscription] Checkout failed:', error);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setCheckoutLoading(false);
+    }
   }, []);
 
   const startAgent = useCallback(async () => {
@@ -584,6 +695,16 @@ function App() {
           <p className="text-gray-600 font-medium">Loading Jobzippy...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show pricing page if no subscription
+  if (isAuthenticated && showPricing) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
+      </>
     );
   }
 
