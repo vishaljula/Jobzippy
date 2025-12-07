@@ -237,7 +237,7 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
+        <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Pipeline</p>
@@ -257,7 +257,7 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
             Updates automatically as new roles are queued.
           </p>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
+        <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Profile</p>
@@ -298,7 +298,7 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
+      <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-400">Live matches</p>
