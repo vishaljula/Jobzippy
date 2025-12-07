@@ -398,7 +398,10 @@ function App() {
 
     const checkSubscription = async () => {
       try {
-        const firestore = getFirestore();
+        const { getFirestoreDb } = await import('@/lib/firebase/client');
+        const { doc, getDoc } = await import('firebase/firestore');
+
+        const firestore = getFirestoreDb();
         const userDocRef = doc(firestore, `users/${user.sub}`);
         const userDoc = await getDoc(userDocRef);
         const sub = userDoc.data()?.subscription;
@@ -422,21 +425,28 @@ function App() {
 
   // Listen for subscription updates from success page
   useEffect(() => {
-    const handler = (message: any) => {
+    const handler = async (message: any) => {
       if (message.type === 'SUBSCRIPTION_ACTIVE') {
         console.log('[Subscription] Received activation message from success page');
         // Refresh subscription status
         if (user) {
-          const firestore = getFirestore();
-          const userDocRef = doc(firestore, `users/${user.sub}`);
-          getDoc(userDocRef).then((userDoc) => {
+          try {
+            const { getFirestoreDb } = await import('@/lib/firebase/client');
+            const { doc, getDoc } = await import('firebase/firestore');
+
+            const firestore = getFirestoreDb();
+            const userDocRef = doc(firestore, `users/${user.sub}`);
+            const userDoc = await getDoc(userDocRef);
             const sub = userDoc.data()?.subscription;
+
             setSubscriptionStatus(sub);
             if (sub?.status === 'active' || sub?.status === 'trialing') {
               setShowPricing(false);
               toast.success('Trial started! Welcome to JobZippy 🎉');
             }
-          });
+          } catch (error) {
+            console.error('[Subscription] Error refreshing status:', error);
+          }
         }
       }
     };
