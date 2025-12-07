@@ -744,17 +744,7 @@ function App() {
     );
   }
 
-  // Show pricing page if NOT authenticated OR no subscription
-  if (!isAuthenticated || showPricing) {
-    return (
-      <>
-        <Toaster position="top-right" />
-        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
-      </>
-    );
-  }
-
-  // Show sign-in page after clicking "Start Free Trial"
+  // Show sign-in page after clicking "Start Free Trial" (check this FIRST!)
   if (showSignIn) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
@@ -791,6 +781,16 @@ function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Show pricing page if NOT authenticated OR no subscription
+  if (!isAuthenticated || showPricing) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
+      </>
     );
   }
 
