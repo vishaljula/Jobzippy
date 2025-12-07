@@ -489,8 +489,11 @@ function App() {
       console.log('[Subscription] Creating checkout session...');
 
       // Step 3: Call Firebase Function to create checkout
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
       const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
+
+      const firebaseApp = getFirebaseApp();
+      const functions = getFunctions(firebaseApp);
       const createCheckout = httpsCallable(functions, 'createCheckoutSession');
 
       const result = await createCheckout({
