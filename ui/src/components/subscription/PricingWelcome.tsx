@@ -92,12 +92,12 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
                     <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />
                     <span>Start Free Trial</span>
                   </>
                 )}
@@ -145,7 +145,7 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
                 {[
                   'Everything in Basic, plus:',
                   'AI cover letters',
-                  'Indeed, Glassdoor, Dice & ZipRecruiter',
+                  'Indeed, Dice & Others',
                   'Unlimited apps',
                   'Priority support',
                 ].map((feature, i) => (
