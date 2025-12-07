@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { SignInWithGoogle } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
 import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
@@ -94,6 +93,7 @@ function App() {
     isReady,
     needsOnboarding,
     user,
+    login,
     logout: handleLogout,
   } = useAuth();
 
@@ -129,6 +129,7 @@ function App() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(!isAuthenticated); // Start with pricing if not authenticated
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
+  const [signInLoading, setSignInLoading] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -829,69 +830,94 @@ function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
         <Toaster position="top-right" />
-        <div className="w-full max-w-lg">
-          {/* Sign-in card matching pricing page style */}
-          <div className="space-y-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 p-8 shadow-2xl">
-            {/* Logo with neon glow */}
-            <div className="relative mx-auto h-24 w-24 mb-4">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
-              <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
-                <Rocket className="h-12 w-12 text-black" strokeWidth={2.5} />
-              </div>
-            </div>
-
-            {/* Header */}
-            <div className="text-center space-y-3">
-              <h1 className="text-4xl font-bold text-white bg-gradient-to-r from-[#00f0ff] to-[#00ff9d] bg-clip-text text-transparent">
-                Welcome to Jobzippy!
-              </h1>
-              <p className="text-lg text-slate-300">
-                Your personal agentic AI assistant who manages your job applications
-              </p>
-            </div>
-
-            {/* Sign-in button */}
-            <div className="space-y-4 pt-4">
-              <SignInWithGoogle includeGmailScope={true} />
-            </div>
-
-            {/* Gmail consent message with neon styling */}
-            <div className="mt-6 p-4 bg-[#00f0ff]/10 border border-[#00f0ff]/20 rounded-xl">
-              <p className="text-sm text-slate-300 leading-relaxed">
-                <strong className="text-[#00f0ff]">Email Sync (Optional):</strong> Jobzippy can read{' '}
-                <strong className="text-white">metadata only</strong> (From/Subject/Date) from a{' '}
-                <strong className="text-white">Gmail label you choose</strong> (e.g.,
-                Jobzippy/Recruiters) to update your application status when recruiters reply.
-                Jobzippy <strong className="text-white">does not</strong> read or store email bodies
-                or your other labels.
-              </p>
-            </div>
-
-            {/* Trust signals */}
-            <div className="mt-6 text-center border-t border-white/10 pt-6">
-              <p className="text-slate-400 text-xs mb-3">Trusted by job seekers worldwide</p>
-              <div className="flex justify-center gap-6 text-slate-400 text-[10px]">
-                <div>
-                  <div className="text-lg font-bold text-[#00f0ff] mb-0.5">10K+</div>
-                  <div>Applications sent</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-[#00ff9d] mb-0.5">500+</div>
-                  <div>Users hired</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-[#7000ff] mb-0.5">4.8/5</div>
-                  <div>User rating</div>
-                </div>
-              </div>
+        <div className="w-full max-w-md text-center space-y-8">
+          {/* Logo with neon glow */}
+          <div className="relative mx-auto h-20 w-20">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
+              <Rocket className="h-10 w-10 text-black" strokeWidth={2.5} />
             </div>
           </div>
 
-          {/* Footer note */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-slate-500">
-              Jobzippy automatically searches and applies once your onboarding answers are synced
+          {/* Header */}
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold text-white">Welcome to Jobzippy</h1>
+            <p className="text-lg text-slate-400">
+              Your personal AI assistant for job applications
             </p>
+          </div>
+
+          {/* Sign-in button styled like pricing button */}
+          <button
+            onClick={async () => {
+              try {
+                setSignInLoading(true);
+                await login(true); // includeGmailScope
+                toast.success('Successfully signed in!');
+              } catch (error) {
+                logger.error('[SignIn] Error:', error);
+                toast.error('Failed to sign in. Please try again.');
+              } finally {
+                setSignInLoading(false);
+              }
+            }}
+            disabled={signInLoading}
+            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 transition-opacity font-medium text-white shadow-lg shadow-[#00f0ff]/20 flex items-center justify-center gap-2 text-base disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {signInLoading ? (
+              <>Signing in...</>
+            ) : (
+              <>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54772 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                </svg>
+                Continue with Google
+              </>
+            )}
+          </button>
+
+          {/* Trust signals - minimal */}
+          <div className="pt-8 space-y-3">
+            <p className="text-slate-500 text-sm">Trusted by job seekers worldwide</p>
+            <div className="flex justify-center gap-8 text-slate-400 text-xs">
+              <div>
+                <div className="text-xl font-bold text-[#00f0ff]">10K+</div>
+                <div className="text-slate-500">Applications</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-[#00ff9d]">500+</div>
+                <div className="text-slate-500">Hired</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-[#7000ff]">4.8/5</div>
+                <div className="text-slate-500">Rating</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
