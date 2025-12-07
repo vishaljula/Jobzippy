@@ -488,25 +488,17 @@ function App() {
 
       console.log('[Subscription] Creating checkout session...');
 
-      // Step 3: Call API to create checkout
-      const response = await fetch('http://localhost:8787/checkout/create-checkout', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
-          cancelUrl: 'https://jobzippy.ai/welcome',
-        }),
+      // Step 3: Call Firebase Function to create checkout
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+      const result = await createCheckout({
+        successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+        cancelUrl: 'https://jobzippy.ai/welcome',
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create checkout');
-      }
-
-      const { url } = await response.json();
+      const { url } = result.data as { url: string; sessionId: string };
       console.log('[Subscription] Opening Stripe checkout:', url);
 
       // Step 4: Open Stripe in new tab
