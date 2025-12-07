@@ -469,11 +469,22 @@ function App() {
       // Step 1: Ensure user is signed in
       if (!auth.currentUser) {
         console.log('[Subscription] User not signed in, triggering Google OAuth...');
-        toast.info('Please sign in with Google to continue');
+        toast.info('Please sign in with Google to continue', { duration: 3000 });
 
         try {
           await login(true); // includeGmailScope = true for sheets access
-          console.log('[Subscription] Sign-in successful');
+          console.log('[Subscription] Sign-in initiated, waiting for completion...');
+
+          // Wait a moment for auth state to propagate
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Re-check auth status
+          const updatedAuth = getAuthInstance(firebaseApp);
+          if (!updatedAuth.currentUser) {
+            throw new Error('Sign-in did not complete successfully');
+          }
+
+          console.log('[Subscription] Sign-in verified, user:', updatedAuth.currentUser.email);
         } catch (loginError) {
           console.error('[Subscription] Sign-in failed:', loginError);
           toast.error('Sign-in was cancelled or failed. Please try again.');
@@ -481,13 +492,17 @@ function App() {
         }
       }
 
-      // Step 2: Get Firebase ID token
-      const token = await auth.currentUser?.getIdToken();
+      // Step 2: Get Firebase ID token (re-get auth to ensure latest state)
+      const currentAuth = getAuthInstance(firebaseApp);
+      const token = await currentAuth.currentUser?.getIdToken();
 
       if (!token) {
-        toast.error('Failed to get authentication token');
+        console.error('[Subscription] No ID token after sign-in');
+        toast.error('Authentication failed. Please try again.');
         return;
       }
+
+      console.log('[Subscription] Got ID token for user:', currentAuth.currentUser?.email);
 
       console.log('[Subscription] Creating checkout session...');
 

@@ -50,16 +50,19 @@ function SuccessContent() {
   }, [sessionId]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-6">
         {/* Success Icon */}
-        <div className="mx-auto w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
-          <Check className="w-10 h-10 text-white" strokeWidth={3} />
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-full blur-xl opacity-50 animate-pulse"></div>
+          <div className="relative mx-auto w-20 h-20 bg-gradient-to-br from-[#00f0ff] to-[#7000ff] rounded-full flex items-center justify-center shadow-2xl">
+            <Check className="w-10 h-10 text-white" strokeWidth={3} />
+          </div>
         </div>
 
         {/* Success Message */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-white">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-[#00f0ff] to-[#7000ff] bg-clip-text text-transparent">
             🎉 Payment Successful!
           </h1>
           <p className="text-xl text-slate-300">
@@ -68,9 +71,11 @@ function SuccessContent() {
         </div>
 
         {/* Details */}
-        <div className="bg-slate-900/50 border border-slate-700 rounded-xl p-6 space-y-4 backdrop-blur">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4 backdrop-blur-lg">
           <div className="flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <div className="w-5 h-5 rounded-full bg-[#00ff9d]/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Check className="w-3 h-3 text-[#00ff9d]" />
+            </div>
             <div className="text-left">
               <p className="text-white font-medium">Trial activated</p>
               <p className="text-sm text-slate-400">You have 3 days to try all features</p>
@@ -78,7 +83,9 @@ function SuccessContent() {
           </div>
           
           <div className="flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <div className="w-5 h-5 rounded-full bg-[#00ff9d]/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Check className="w-3 h-3 text-[#00ff9d]" />
+            </div>
             <div className="text-left">
               <p className="text-white font-medium">300 applications/month</p>
               <p className="text-sm text-slate-400">Your monthly allowance is ready</p>
@@ -86,7 +93,9 @@ function SuccessContent() {
           </div>
           
           <div className="flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <div className="w-5 h-5 rounded-full bg-[#00ff9d]/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Check className="w-3 h-3 text-[#00ff9d]" />
+            </div>
             <div className="text-left">
               <p className="text-white font-medium">No charges until {new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString()}</p>
               <p className="text-sm text-slate-400">Cancel anytime during trial</p>
@@ -96,17 +105,20 @@ function SuccessContent() {
 
         {/* Extension Status */}
         {extensionNotified ? (
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-            <div className="flex items-center justify-center gap-2 text-green-400">
+          <div className="bg-[#00ff9d]/10 border border-[#00ff9d]/30 rounded-xl p-4">
+            <div className="flex items-center justify-center gap-2 text-[#00ff9d]">
               <Sparkles className="w-5 h-5" />
               <span className="font-medium">Extension activated! You can close this tab.</span>
             </div>
           </div>
         ) : (
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-            <p className="text-sm text-blue-300">
-              Activating your extension...
-            </p>
+          <div className="bg-[#00f0ff]/10 border border-[#00f0ff]/30 rounded-xl p-4">
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-4 h-4 border-2 border-[#00f0ff] border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-sm text-[#00f0ff]">
+                Activating your extension...
+              </p>
+            </div>
           </div>
         )}
 
@@ -129,8 +141,11 @@ function SuccessContent() {
 export default function SuccessPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 border-2 border-[#00f0ff] border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-white">Loading...</div>
+        </div>
       </div>
     }>
       <SuccessContent />

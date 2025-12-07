@@ -103,15 +103,25 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
         functions.logger.info(`Checkout completed for session: ${session.id}`);
 
         // Get subscription from session
-        if (session.subscription && session.metadata?.userId) {
+        if (session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
             session.subscription as string
           );
 
+          // Get userId from subscription metadata (not session metadata!)
+          const userId = subscription.metadata.userId;
+          
+          if (!userId) {
+            functions.logger.error('No userId found in subscription metadata');
+            break;
+          }
+
+          functions.logger.info(`Processing subscription for user: ${userId}`);
+
           // Update user's subscription status in Firestore
           await admin
             .firestore()
-            .doc(`users/${session.metadata.userId}`)
+            .doc(`users/${userId}`)
             .set(
               {
                 subscription: {
@@ -132,7 +142,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
               { merge: true }
             );
 
-          functions.logger.info(`Subscription created for user: ${session.metadata.userId}`);
+          functions.logger.info(`Subscription created for user: ${userId}`);
         }
         break;
       }
