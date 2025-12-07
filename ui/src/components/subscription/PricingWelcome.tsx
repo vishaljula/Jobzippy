@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 interface PricingWelcomeProps {
   onStartTrial: () => void;
   loading?: boolean;
+  onRefreshAuth?: () => void;
 }
 
-export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
+export function PricingWelcome({ onStartTrial, loading, onRefreshAuth }: PricingWelcomeProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617]">
       <div className="max-w-5xl w-full">
@@ -192,6 +193,18 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
             </div>
           </div>
         </div>
+
+        {/* Refresh Auth Link */}
+        {onRefreshAuth && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={onRefreshAuth}
+              className="text-xs text-slate-500 hover:text-[#00f0ff] underline transition-colors"
+            >
+              Already subscribed? Refresh to activate
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

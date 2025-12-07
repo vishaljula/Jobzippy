@@ -406,7 +406,10 @@ function App() {
         const userDoc = await getDoc(userDocRef);
         const sub = userDoc.data()?.subscription;
 
-        console.log('[Subscription] Checked status for user:', user.sub, 'Sub:', sub);
+        console.log('[Subscription] Checked status for user:', user.sub);
+        console.log('[Subscription] Document exists:', userDoc.exists());
+        console.log('[Subscription] Full user data:', userDoc.data());
+        console.log('[Subscription] Subscription object:', sub);
         setSubscriptionStatus(sub);
 
         // Show pricing if no active subscription
@@ -766,6 +769,24 @@ function App() {
     }
   }, []);
 
+  // Refresh auth handler - clears stale tokens and re-authenticates
+  const handleRefreshAuth = useCallback(async () => {
+    try {
+      toast.info('Refreshing authentication...');
+
+      // Clear stale tokens
+      await chrome.storage.local.remove(['oauth_tokens', 'firebase_custom_token']);
+
+      // Trigger fresh login
+      await login(true);
+
+      toast.success('Authentication refreshed!');
+    } catch (error) {
+      console.error('[Subscription] Refresh auth failed:', error);
+      toast.error('Failed to refresh. Please try again.');
+    }
+  }, [login]);
+
   if (appLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
@@ -782,7 +803,11 @@ function App() {
     return (
       <>
         <Toaster position="top-right" />
-        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
+        <PricingWelcome
+          onStartTrial={handleStartTrial}
+          loading={checkoutLoading}
+          onRefreshAuth={handleRefreshAuth}
+        />
       </>
     );
   }
