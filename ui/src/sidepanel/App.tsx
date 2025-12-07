@@ -744,48 +744,41 @@ function App() {
     );
   }
 
-  // Show sign-in page after clicking "Start Free Trial" (check this FIRST!)
-  if (showSignIn) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
-        <Toaster position="top-right" />
-        <div className="w-full max-w-md">
-          <div className="space-y-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 p-8 shadow-2xl">
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="relative mx-auto h-16 w-16 mb-4">
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
-                <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
-                  <Rocket className="h-8 w-8 text-black" strokeWidth={2.5} />
+  // Show pricing page if NOT authenticated OR no subscription
+  if (!isAuthenticated || showPricing) {
+    // But if they clicked "Start Free Trial", show sign-in instead
+    if (showSignIn) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
+          <Toaster position="top-right" />
+          <div className="w-full max-w-md space-y-4">
+            {/* Reuse existing heroCard - defined below */}
+            <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
+              <div className="relative mx-auto h-20 w-20">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 opacity-20 blur-xl" />
+                <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-secondary-500">
+                  <Rocket className="h-10 w-10 text-white" strokeWidth={2.5} />
                 </div>
               </div>
-              <h2 className="text-3xl font-bold text-white">Welcome to JobZippy!</h2>
-              <p className="text-slate-300">Sign in to start your 3-day free trial</p>
+              <h2 className="text-center text-2xl font-bold text-gray-900">Welcome to Jobzippy!</h2>
+              <p className="text-center text-gray-600">Sign in to start your 3-day free trial</p>
+              <div className="space-y-3">
+                <SignInWithGoogle includeGmailScope={true} />
+              </div>
             </div>
 
-            {/* Sign In Button */}
-            <div className="space-y-4">
-              <SignInWithGoogle includeGmailScope={true} />
-              <p className="text-center text-xs text-slate-400">
-                By signing in, you agree to our Terms of Service
-              </p>
-            </div>
-
-            {/* Back to pricing */}
+            {/* Back to pricing link */}
             <button
               onClick={() => setShowSignIn(false)}
-              className="w-full text-center text-sm text-slate-400 hover:text-[#00f0ff] transition-colors"
+              className="w-full text-center text-sm text-slate-600 hover:text-primary-600 transition-colors"
             >
               ← Back to pricing
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // Show pricing page if NOT authenticated OR no subscription
-  if (!isAuthenticated || showPricing) {
     return (
       <>
         <Toaster position="top-right" />
