@@ -392,7 +392,7 @@ function App() {
   // Check subscription status
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      setShowPricing(false);
+      setShowPricing(true); // Show pricing if not authenticated
       return;
     }
 
@@ -406,12 +406,15 @@ function App() {
         const userDoc = await getDoc(userDocRef);
         const sub = userDoc.data()?.subscription;
 
+        console.log('[Subscription] Checked status for user:', user.sub, 'Sub:', sub);
         setSubscriptionStatus(sub);
 
         // Show pricing if no active subscription
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
+          console.log('[Subscription] No active subscription, showing pricing');
           setShowPricing(true);
         } else {
+          console.log('[Subscription] Active subscription found, hiding pricing');
           setShowPricing(false);
         }
       } catch (error) {
@@ -428,24 +431,62 @@ function App() {
     const handler = async (message: any) => {
       if (message.type === 'SUBSCRIPTION_ACTIVE') {
         console.log('[Subscription] Received activation message from success page');
-        // Refresh subscription status
+        // Refresh subscription status with retry (webhook might be slow)
         if (user) {
-          try {
-            const { getFirestoreDb } = await import('@/lib/firebase/client');
-            const { doc, getDoc } = await import('firebase/firestore');
+          const maxRetries = 5;
+          let retryCount = 0;
 
-            const firestore = getFirestoreDb();
-            const userDocRef = doc(firestore, `users/${user.sub}`);
-            const userDoc = await getDoc(userDocRef);
-            const sub = userDoc.data()?.subscription;
+          const checkWithRetry = async () => {
+            try {
+              const { getFirestoreDb } = await import('@/lib/firebase/client');
+              const { doc, getDoc } = await import('firebase/firestore');
 
-            setSubscriptionStatus(sub);
-            if (sub?.status === 'active' || sub?.status === 'trialing') {
-              setShowPricing(false);
-              toast.success('Trial started! Welcome to JobZippy 🎉');
+              const firestore = getFirestoreDb();
+              const userDocRef = doc(firestore, `users/${user.sub}`);
+              const userDoc = await getDoc(userDocRef);
+              const sub = userDoc.data()?.subscription;
+
+              console.log('[Subscription] Retry', retryCount + 1, '- Sub status:', sub?.status);
+
+              setSubscriptionStatus(sub);
+              if (sub?.status === 'active' || sub?.status === 'trialing') {
+                setShowPricing(false);
+                toast.success('Trial started! Welcome to JobZippy 🎉');
+                return true; // Success
+              }
+
+              return false; // Not ready yet
+            } catch (error) {
+              console.error('[Subscription] Error refreshing status:', error);
+              return false;
             }
-          } catch (error) {
-            console.error('[Subscription] Error refreshing status:', error);
+          };
+
+          // Try immediately
+          const success = await checkWithRetry();
+
+          // If not successful, retry every 2 seconds up to 5 times
+          if (!success) {
+            const interval = setInterval(async () => {
+              retryCount++;
+              console.log(
+                '[Subscription] Webhook may be slow, retrying...',
+                retryCount,
+                '/',
+                maxRetries
+              );
+
+              const success = await checkWithRetry();
+              if (success || retryCount >= maxRetries) {
+                clearInterval(interval);
+                if (!success) {
+                  console.warn(
+                    '[Subscription] Max retries reached, subscription may not be active yet'
+                  );
+                  toast.info("Please refresh if your subscription doesn't activate");
+                }
+              }
+            }, 2000);
           }
         }
       }
