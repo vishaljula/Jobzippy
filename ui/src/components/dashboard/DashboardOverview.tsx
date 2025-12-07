@@ -160,10 +160,18 @@ function formatReason(status: JobRecord['status'], errorMessage?: string): strin
   if (errorLower.includes('captcha') || errorLower.includes('verification required')) {
     return 'CAPTCHA_REQUIRED';
   }
-  if (errorLower.includes('create account') || errorLower.includes('account required') || errorLower.includes('sign up')) {
+  if (
+    errorLower.includes('create account') ||
+    errorLower.includes('account required') ||
+    errorLower.includes('sign up')
+  ) {
     return 'ACCOUNT_REQUIRED';
   }
-  if (errorLower.includes('manual_input_required') || errorLower.includes('required fields missing') || errorLower.includes('invalid')) {
+  if (
+    errorLower.includes('manual_input_required') ||
+    errorLower.includes('required fields missing') ||
+    errorLower.includes('invalid')
+  ) {
     return 'MANUAL_INPUT_REQUIRED';
   }
   if (errorLower.includes('duplicate') || errorLower.includes('already')) {
@@ -229,85 +237,90 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Pipeline</p>
-              <h2 className="text-lg font-semibold text-slate-900">Where your apps stand</h2>
+              <h2 className="text-lg font-semibold text-white">Where your apps stand</h2>
             </div>
           </div>
           <div className="mt-6">
             {isLoading ? (
               <div className="flex items-center justify-center h-40">
-                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                <Loader2 className="h-6 w-6 animate-spin text-[#00f0ff]" />
               </div>
             ) : (
               <DonutChart stats={donutStats} />
             )}
           </div>
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-400">
             Updates automatically as new roles are queued.
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Profile</p>
-              <h2 className="text-lg font-semibold text-slate-900">{displayName}</h2>
+              <h2 className="text-lg font-semibold text-white">{displayName}</h2>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="gap-2 border-slate-200 text-xs text-slate-600 hover:border-indigo-200 hover:bg-indigo-50"
+              className="gap-2 border-white/20 text-xs text-white hover:border-[#00f0ff]/40 hover:bg-[#00f0ff]/10"
               onClick={onEditProfile}
             >
               <PenSquare className="h-3.5 w-3.5" />
               Edit via chat agent
             </Button>
           </div>
-          <div className="mt-4 space-y-3 text-sm text-slate-600">
+          <div className="mt-4 space-y-3 text-sm text-slate-200">
             {profileSummary.map((item) => (
               <div
                 key={item.label}
-                className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-2"
+                className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2"
               >
                 {item.label === 'Visa' ? (
-                  <Briefcase className="h-4 w-4 text-indigo-500" />
+                  <Briefcase className="h-4 w-4 text-[#00f0ff]" />
                 ) : (
-                  <MapPin className="h-4 w-4 text-indigo-500" />
+                  <MapPin className="h-4 w-4 text-[#00f0ff]" />
                 )}
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">{item.label}</p>
-                  <p className="font-medium text-slate-700">{item.value}</p>
+                  <p className="font-medium text-white">{item.value}</p>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-400">
             All edits flow through the onboarding chat agent so everything stays in sync with your
             vault.
           </p>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b2a3a] via-[#142447] to-[#1c1036] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-400">Live matches</p>
-            <h2 className="text-lg font-semibold text-slate-900">Live job match status</h2>
+            <h2 className="text-lg font-semibold text-white">Live job match status</h2>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
             <Loader2
-              className={`h-3 w-3 ${isLoading ? 'animate-spin text-indigo-500' : 'text-slate-400'}`}
+              className={`h-3 w-3 ${isLoading ? 'animate-spin text-[#00f0ff]' : 'text-slate-400'}`}
             />
             {isLoading ? 'Loading…' : 'Auto-applying'}
           </span>
         </div>
         {error && (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div className="mt-4 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
             <div className="flex items-center justify-between gap-3">
               <p>{error}</p>
-              <Button size="sm" variant="outline" className="text-xs" onClick={refresh}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs border-white/30 text-white"
+                onClick={refresh}
+              >
                 Retry
               </Button>
             </div>
@@ -317,17 +330,17 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
               <tr>
-                <th className="pb-3">Company / Organization</th>
-                <th className="pb-3">Location</th>
-                <th className="pb-3">Status</th>
-                <th className="pb-3">Reason</th>
-                <th className="pb-3">Date applied</th>
+                <th className="pb-3 text-slate-300">Company / Organization</th>
+                <th className="pb-3 text-slate-300">Location</th>
+                <th className="pb-3 text-slate-300">Status</th>
+                <th className="pb-3 text-slate-300">Reason</th>
+                <th className="pb-3 text-slate-300">Date applied</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-white/5">
               {isLoading && tableJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-slate-500">
+                  <td colSpan={4} className="py-6 text-center text-slate-400">
                     <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" />
                     Loading applications...
                   </td>
@@ -336,12 +349,12 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                 tableJobs.map((job) => {
                   const reason = formatReason(job.status, job.errorMessage);
                   return (
-                    <tr key={job.id}>
+                    <tr key={job.id} className="text-slate-100">
                       <td className="py-3">
-                        <p className="font-semibold text-slate-900">{job.company}</p>
-                        <p className="text-xs text-slate-500">{job.title}</p>
+                        <p className="font-semibold text-white">{job.company}</p>
+                        <p className="text-xs text-slate-400">{job.title}</p>
                       </td>
-                      <td className="py-3 text-slate-600">{job.location ?? '—'}</td>
+                      <td className="py-3 text-slate-300">{job.location ?? '—'}</td>
                       <td className="py-3">
                         <JobStatusBadge status={job.status} />
                       </td>
@@ -349,15 +362,15 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                         {reason ? (
                           <span
                             title={job.errorMessage || undefined}
-                            className="text-xs font-mono text-slate-600"
+                            className="text-xs font-mono text-slate-300"
                           >
                             {reason}
                           </span>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-slate-500">—</span>
                         )}
                       </td>
-                      <td className="py-3 text-slate-500">
+                      <td className="py-3 text-slate-400">
                         {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
                       </td>
                     </tr>
@@ -365,7 +378,7 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate-500">
+                  <td colSpan={5} className="py-6 text-center text-slate-400">
                     No applications yet. Start the agent to begin applying to jobs.
                   </td>
                 </tr>
