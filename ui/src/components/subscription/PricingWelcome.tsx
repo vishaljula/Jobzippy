@@ -88,16 +88,16 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
               <Button
                 onClick={onStartTrial}
                 disabled={loading}
-                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-white font-bold hover:scale-105 hover:shadow-[0_0_30px_rgba(0,240,255,0.5)] transition-all duration-300 text-sm flex items-center justify-center"
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-white font-bold hover:scale-105 hover:shadow-[0_0_30px_rgba(0,240,255,0.5)] transition-all duration-300 text-sm flex items-center justify-center gap-1.5"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 mr-1" />
+                    <Sparkles className="w-3.5 h-3.5" />
                     <span>Start Free Trial</span>
                   </>
                 )}
