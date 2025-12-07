@@ -460,8 +460,14 @@ function App() {
         }
       } catch (error) {
         console.error('[Subscription] Error checking status:', error);
-        setShowPricing(true);
+
+        // If error checking subscription (e.g., stale token, permissions),
+        // still mark as checked and show dashboard - let user try from there
+        // Don't send them back to pricing page!
         setSubscriptionChecked(true);
+        setShowPricing(false);
+
+        toast.error('Could not verify subscription status. Please try again from dashboard.');
       }
     };
 
