@@ -126,7 +126,8 @@ function App() {
     stripeSubscriptionId?: string;
   } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
+  const [showPricing, setShowPricing] = useState(!isAuthenticated); // Start with pricing if not authenticated
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -396,7 +397,11 @@ function App() {
   // After sign-in: Check subscription and open Stripe if needed
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      setShowPricing(true); // Show pricing if not authenticated
+      // Only show pricing if we're sure they're not authenticated
+      // Don't show pricing during the brief moment when isAuthenticated is true but user isn't loaded yet
+      if (!isAuthenticated) {
+        setShowPricing(true);
+      }
       return;
     }
 
@@ -413,6 +418,7 @@ function App() {
         console.log('[Subscription] Checked status for user:', user.sub);
         console.log('[Subscription] Subscription object:', sub);
         setSubscriptionStatus(sub);
+        setSubscriptionChecked(true);
 
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
           // No subscription - open Stripe checkout
@@ -455,6 +461,7 @@ function App() {
       } catch (error) {
         console.error('[Subscription] Error checking status:', error);
         setShowPricing(true);
+        setSubscriptionChecked(true);
       }
     };
 
@@ -735,6 +742,18 @@ function App() {
         <div className="text-center">
           <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
           <p className="text-gray-600 font-medium">Loading Jobzippy...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Wait for subscription check to complete for authenticated users
+  if (isAuthenticated && !subscriptionChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
+          <p className="text-gray-600 font-medium">Checking subscription...</p>
         </div>
       </div>
     );
