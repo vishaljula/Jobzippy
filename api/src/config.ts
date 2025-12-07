@@ -32,13 +32,13 @@ const envSchema = z.object({
     .pipe(z.number().int().positive()),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  // Firebase Admin
-  FIREBASE_PROJECT_ID: z.string().min(1, 'FIREBASE_PROJECT_ID is required'),
+  // Firebase Admin (optional - only needed for some routes)
+  FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
-  // Stripe
-  STRIPE_SECRET_KEY: z.string().min(1, 'STRIPE_SECRET_KEY is required'),
-  STRIPE_PRICE_ID: z.string().min(1, 'STRIPE_PRICE_ID is required'),
+  // Stripe (optional - checkout moved to Firebase Functions)
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PRICE_ID: z.string().optional(),
 });
 
 const parsed = envSchema.parse({
@@ -52,11 +52,11 @@ const parsed = envSchema.parse({
   PORT: process.env.PORT ?? process.env.API_PORT ?? '8787',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID ?? (isTestEnvironment ? 'test-project' : undefined),
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
   FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
   FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? (isTestEnvironment ? 'test-stripe-key' : undefined),
-  STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID ?? (isTestEnvironment ? 'test-price-id' : undefined),
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID,
 });
 
 const allowedOrigins = parsed.ALLOWED_ORIGINS
