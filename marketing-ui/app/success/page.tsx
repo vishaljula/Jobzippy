@@ -10,23 +10,28 @@ function SuccessContent() {
   const [extensionNotified, setExtensionNotified] = useState(false);
 
   useEffect(() => {
-    // Send message to extension
+    // Send message to extension (only runs in browser)
     const notifyExtension = async () => {
       try {
-        // Try to send message to extension
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-          // Get extension ID from manifest (you'll need to update this)
-          const EXTENSION_ID = 'bjebcoccbgjddngioofnolbekednppia'; // Update with actual extension ID
+        // Check if chrome API is available (only in browser, not during SSR)
+        if (typeof window === 'undefined') return;
+        
+        // @ts-ignore - chrome API not available during build
+        if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage) {
+          const EXTENSION_ID = 'bjebcoccbgjddngioofnolbekednppia';
           
+          // @ts-ignore
           chrome.runtime.sendMessage(
             EXTENSION_ID,
             {
               type: 'SUBSCRIPTION_ACTIVE',
               sessionId: sessionId
             },
-            (response) => {
+            (response: any) => {
+              // @ts-ignore
               if (chrome.runtime.lastError) {
-                console.log('Extension not found or not responding:', chrome.runtime.lastError.message);
+                // @ts-ignore
+                console.log('Extension not found:', chrome.runtime.lastError.message);
               } else {
                 console.log('Extension notified successfully:', response);
                 setExtensionNotified(true);
