@@ -93,7 +93,6 @@ function App() {
     isReady,
     needsOnboarding,
     user,
-    login,
     logout: handleLogout,
   } = useAuth();
 
@@ -128,6 +127,7 @@ function App() {
   } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -394,7 +394,7 @@ function App() {
     };
   }, [engineState]);
 
-  // Check subscription status
+  // After sign-in: Check subscription and open Stripe if needed
   useEffect(() => {
     if (!isAuthenticated || !user) {
       setShowPricing(true); // Show pricing if not authenticated
@@ -412,22 +412,53 @@ function App() {
         const sub = userDoc.data()?.subscription;
 
         console.log('[Subscription] Checked status for user:', user.sub);
-        console.log('[Subscription] Document exists:', userDoc.exists());
-        console.log('[Subscription] Full user data:', userDoc.data());
         console.log('[Subscription] Subscription object:', sub);
         setSubscriptionStatus(sub);
 
-        // Show pricing if no active subscription
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
-          console.log('[Subscription] No active subscription, showing pricing');
-          setShowPricing(true);
-        } else {
-          console.log('[Subscription] Active subscription found, hiding pricing');
+          // No subscription - open Stripe checkout
+          console.log('[Subscription] No subscription, opening Stripe...');
+          setShowSignIn(false);
           setShowPricing(false);
+          setCheckoutLoading(true);
+
+          try {
+            const { getFirebaseApp } = await import('@/lib/firebase/client');
+            const { getFunctions, httpsCallable } = await import('firebase/functions');
+
+            const firebaseApp = getFirebaseApp();
+            const functions = getFunctions(firebaseApp);
+            const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+            toast.info('Opening payment page...');
+
+            const result = await createCheckout({
+              successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+              cancelUrl: 'https://jobzippy.ai/welcome',
+            });
+
+            const { url } = result.data as { url: string; sessionId: string };
+            console.log('[Subscription] Opening Stripe checkout:', url);
+
+            chrome.tabs.create({ url });
+            toast.info('Complete payment in the opened tab');
+          } catch (error) {
+            console.error('[Subscription] Failed to create checkout:', error);
+            toast.error('Failed to open payment page');
+            setShowPricing(true); // Go back to pricing on error
+          } finally {
+            setCheckoutLoading(false);
+          }
+        } else {
+          // Has subscription - show dashboard
+          console.log('[Subscription] Active subscription, showing dashboard');
+          setShowPricing(false);
+          setShowSignIn(false);
         }
       } catch (error) {
         console.error('[Subscription] Error checking status:', error);
-        setShowPricing(true); // Default to showing pricing on error
+        setShowPricing(true);
+        setShowSignIn(false);
       }
     };
 
@@ -514,82 +545,10 @@ function App() {
     });
   }, []);
 
-  const handleStartTrial = useCallback(async () => {
-    setCheckoutLoading(true);
-
-    try {
-      // Get Firebase app instance first
-      const { getFirebaseApp } = await import('@/lib/firebase/client');
-      const { getAuth: getAuthInstance } = await import('firebase/auth');
-
-      const firebaseApp = getFirebaseApp();
-
-      // Step 1: ALWAYS sign in with Google (even if already signed in, refresh token)
-      console.log('[Subscription] Signing in with Google...');
-      toast.info('Sign in with Google to continue');
-
-      await login(true); // includeGmailScope = true for sheets access
-      console.log('[Subscription] Sign-in completed, verifying...');
-
-      // Wait for auth state to propagate
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Step 2: Verify sign-in and get user
-      const currentAuth = getAuthInstance(firebaseApp);
-      if (!currentAuth.currentUser) {
-        throw new Error('Sign-in did not complete');
-      }
-
-      console.log('[Subscription] User signed in:', currentAuth.currentUser.email);
-
-      // Step 3: Check if user already has subscription
-      const { getFirestoreDb } = await import('@/lib/firebase/client');
-      const { doc, getDoc } = await import('firebase/firestore');
-
-      const firestore = getFirestoreDb();
-      const userDocRef = doc(firestore, `users/${currentAuth.currentUser.uid}`);
-      const userDoc = await getDoc(userDocRef);
-      const existingSub = userDoc.data()?.subscription;
-
-      console.log('[Subscription] Existing subscription status:', existingSub?.status);
-
-      if (existingSub && (existingSub.status === 'active' || existingSub.status === 'trialing')) {
-        // Already has subscription!
-        console.log('[Subscription] User already subscribed!');
-        toast.success('Welcome back! Your subscription is active.');
-        setShowPricing(false);
-        return;
-      }
-
-      // Step 4: No subscription - create checkout
-      console.log('[Subscription] No subscription, opening Stripe checkout...');
-      toast.info('Opening payment page...');
-
-      // Step 5: Call Firebase Function to create checkout (auto-authenticated)
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-
-      const functions = getFunctions(firebaseApp);
-      const createCheckout = httpsCallable(functions, 'createCheckoutSession');
-
-      const result = await createCheckout({
-        successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
-        cancelUrl: 'https://jobzippy.ai/welcome',
-      });
-
-      const { url } = result.data as { url: string; sessionId: string };
-      console.log('[Subscription] Opening Stripe checkout:', url);
-
-      // Step 4: Open Stripe in new tab
-      chrome.tabs.create({ url });
-
-      toast.info('Complete payment in the opened tab');
-    } catch (error) {
-      console.error('[Subscription] Checkout failed:', error);
-      toast.error('Failed to start checkout. Please try again.');
-    } finally {
-      setCheckoutLoading(false);
-    }
-  }, [login]);
+  const handleStartTrial = useCallback(() => {
+    console.log('[Subscription] Navigating to sign-in page...');
+    setShowSignIn(true);
+  }, []);
 
   const startAgent = useCallback(async () => {
     // Preflight auth check: probe existing tabs, then open search URLs directly
@@ -792,6 +751,46 @@ function App() {
         <Toaster position="top-right" />
         <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
       </>
+    );
+  }
+
+  // Show sign-in page after clicking "Start Free Trial"
+  if (showSignIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
+        <Toaster position="top-right" />
+        <div className="w-full max-w-md">
+          <div className="space-y-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 p-8 shadow-2xl">
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="relative mx-auto h-16 w-16 mb-4">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
+                  <Rocket className="h-8 w-8 text-black" strokeWidth={2.5} />
+                </div>
+              </div>
+              <h2 className="text-3xl font-bold text-white">Welcome to JobZippy!</h2>
+              <p className="text-slate-300">Sign in to start your 3-day free trial</p>
+            </div>
+
+            {/* Sign In Button */}
+            <div className="space-y-4">
+              <SignInWithGoogle includeGmailScope={true} />
+              <p className="text-center text-xs text-slate-400">
+                By signing in, you agree to our Terms of Service
+              </p>
+            </div>
+
+            {/* Back to pricing */}
+            <button
+              onClick={() => setShowSignIn(false)}
+              className="w-full text-center text-sm text-slate-400 hover:text-[#00f0ff] transition-colors"
+            >
+              ← Back to pricing
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
