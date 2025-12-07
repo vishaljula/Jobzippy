@@ -120,7 +120,12 @@ function App() {
   const tabToastIdRef = useRef<string | number | null>(null);
 
   // Subscription state
-  const [, setSubscriptionStatus] = useState<any>(null);
+  const [, setSubscriptionStatus] = useState<{
+    status: string;
+    tier: string;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+  } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
 
@@ -431,7 +436,7 @@ function App() {
 
   // Listen for subscription updates from success page
   useEffect(() => {
-    const handler = async (message: any) => {
+    const handler = async (message: { type: string; sessionId?: string }) => {
       if (message.type === 'SUBSCRIPTION_ACTIVE') {
         console.log('[Subscription] Received activation message from success page');
         // Refresh subscription status with retry (webhook might be slow)
@@ -518,49 +523,49 @@ function App() {
       const { getAuth: getAuthInstance } = await import('firebase/auth');
 
       const firebaseApp = getFirebaseApp();
-      const auth = getAuthInstance(firebaseApp);
 
-      // Step 1: Ensure user is signed in
-      if (!auth.currentUser) {
-        console.log('[Subscription] User not signed in, triggering Google OAuth...');
-        toast.info('Please sign in with Google to continue', { duration: 3000 });
+      // Step 1: ALWAYS sign in with Google (even if already signed in, refresh token)
+      console.log('[Subscription] Signing in with Google...');
+      toast.info('Sign in with Google to continue');
 
-        try {
-          await login(true); // includeGmailScope = true for sheets access
-          console.log('[Subscription] Sign-in initiated, waiting for completion...');
+      await login(true); // includeGmailScope = true for sheets access
+      console.log('[Subscription] Sign-in completed, verifying...');
 
-          // Wait a moment for auth state to propagate
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wait for auth state to propagate
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-          // Re-check auth status
-          const updatedAuth = getAuthInstance(firebaseApp);
-          if (!updatedAuth.currentUser) {
-            throw new Error('Sign-in did not complete successfully');
-          }
-
-          console.log('[Subscription] Sign-in verified, user:', updatedAuth.currentUser.email);
-        } catch (loginError) {
-          console.error('[Subscription] Sign-in failed:', loginError);
-          toast.error('Sign-in was cancelled or failed. Please try again.');
-          return;
-        }
+      // Step 2: Verify sign-in and get user
+      const currentAuth = getAuthInstance(firebaseApp);
+      if (!currentAuth.currentUser) {
+        throw new Error('Sign-in did not complete');
       }
 
-      // Step 2: Get Firebase ID token (re-get auth to ensure latest state)
-      const currentAuth = getAuthInstance(firebaseApp);
-      const token = await currentAuth.currentUser?.getIdToken();
+      console.log('[Subscription] User signed in:', currentAuth.currentUser.email);
 
-      if (!token) {
-        console.error('[Subscription] No ID token after sign-in');
-        toast.error('Authentication failed. Please try again.');
+      // Step 3: Check if user already has subscription
+      const { getFirestoreDb } = await import('@/lib/firebase/client');
+      const { doc, getDoc } = await import('firebase/firestore');
+
+      const firestore = getFirestoreDb();
+      const userDocRef = doc(firestore, `users/${currentAuth.currentUser.uid}`);
+      const userDoc = await getDoc(userDocRef);
+      const existingSub = userDoc.data()?.subscription;
+
+      console.log('[Subscription] Existing subscription status:', existingSub?.status);
+
+      if (existingSub && (existingSub.status === 'active' || existingSub.status === 'trialing')) {
+        // Already has subscription!
+        console.log('[Subscription] User already subscribed!');
+        toast.success('Welcome back! Your subscription is active.');
+        setShowPricing(false);
         return;
       }
 
-      console.log('[Subscription] Got ID token for user:', currentAuth.currentUser?.email);
+      // Step 4: No subscription - create checkout
+      console.log('[Subscription] No subscription, opening Stripe checkout...');
+      toast.info('Opening payment page...');
 
-      console.log('[Subscription] Creating checkout session...');
-
-      // Step 3: Call Firebase Function to create checkout
+      // Step 5: Call Firebase Function to create checkout (auto-authenticated)
       const { getFunctions, httpsCallable } = await import('firebase/functions');
 
       const functions = getFunctions(firebaseApp);
@@ -769,24 +774,6 @@ function App() {
     }
   }, []);
 
-  // Refresh auth handler - clears stale tokens and re-authenticates
-  const handleRefreshAuth = useCallback(async () => {
-    try {
-      toast.info('Refreshing authentication...');
-
-      // Clear stale tokens
-      await chrome.storage.local.remove(['oauth_tokens', 'firebase_custom_token']);
-
-      // Trigger fresh login
-      await login(true);
-
-      toast.success('Authentication refreshed!');
-    } catch (error) {
-      console.error('[Subscription] Refresh auth failed:', error);
-      toast.error('Failed to refresh. Please try again.');
-    }
-  }, [login]);
-
   if (appLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
@@ -798,16 +785,12 @@ function App() {
     );
   }
 
-  // Show pricing page if no subscription
-  if (isAuthenticated && showPricing) {
+  // Show pricing page if NOT authenticated OR no subscription
+  if (!isAuthenticated || showPricing) {
     return (
       <>
         <Toaster position="top-right" />
-        <PricingWelcome
-          onStartTrial={handleStartTrial}
-          loading={checkoutLoading}
-          onRefreshAuth={handleRefreshAuth}
-        />
+        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
       </>
     );
   }
