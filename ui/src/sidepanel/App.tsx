@@ -127,7 +127,6 @@ function App() {
   } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
-  const [showSignIn, setShowSignIn] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -418,7 +417,6 @@ function App() {
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
           // No subscription - open Stripe checkout
           console.log('[Subscription] No subscription, opening Stripe...');
-          setShowSignIn(false);
           setShowPricing(false);
           setCheckoutLoading(true);
 
@@ -453,12 +451,10 @@ function App() {
           // Has subscription - show dashboard
           console.log('[Subscription] Active subscription, showing dashboard');
           setShowPricing(false);
-          setShowSignIn(false);
         }
       } catch (error) {
         console.error('[Subscription] Error checking status:', error);
         setShowPricing(true);
-        setShowSignIn(false);
       }
     };
 
@@ -546,8 +542,8 @@ function App() {
   }, []);
 
   const handleStartTrial = useCallback(() => {
-    console.log('[Subscription] Navigating to sign-in page...');
-    setShowSignIn(true);
+    console.log('[Subscription] Closing pricing, showing main app with sign-in...');
+    setShowPricing(false);
   }, []);
 
   const startAgent = useCallback(async () => {
@@ -744,41 +740,8 @@ function App() {
     );
   }
 
-  // Show pricing page if NOT authenticated OR no subscription
-  if (!isAuthenticated || showPricing) {
-    // But if they clicked "Start Free Trial", show sign-in instead
-    if (showSignIn) {
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
-          <Toaster position="top-right" />
-          <div className="w-full max-w-md space-y-4">
-            {/* Reuse existing heroCard - defined below */}
-            <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
-              <div className="relative mx-auto h-20 w-20">
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 opacity-20 blur-xl" />
-                <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-secondary-500">
-                  <Rocket className="h-10 w-10 text-white" strokeWidth={2.5} />
-                </div>
-              </div>
-              <h2 className="text-center text-2xl font-bold text-gray-900">Welcome to Jobzippy!</h2>
-              <p className="text-center text-gray-600">Sign in to start your 3-day free trial</p>
-              <div className="space-y-3">
-                <SignInWithGoogle includeGmailScope={true} />
-              </div>
-            </div>
-
-            {/* Back to pricing link */}
-            <button
-              onClick={() => setShowSignIn(false)}
-              className="w-full text-center text-sm text-slate-600 hover:text-primary-600 transition-colors"
-            >
-              ← Back to pricing
-            </button>
-          </div>
-        </div>
-      );
-    }
-
+  // Show pricing page if user needs to subscribe
+  if (showPricing) {
     return (
       <>
         <Toaster position="top-right" />
