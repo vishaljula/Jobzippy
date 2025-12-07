@@ -26,9 +26,9 @@ function DonutChart({ stats }: DonutChartProps) {
   // Only show final states in donut chart - "where your apps stand" means final outcomes
   // Intermediate states (queued, applying, ats_filling) are transient and shown in table only
   const donutData = [
-    { label: 'Applied', value: stats.completed, color: '#4f46e5' }, // Indigo
-    { label: 'Failed', value: stats.failed, color: '#ef4444' }, // Red
-    { label: 'Skipped', value: stats.skipped, color: '#94a3b8' }, // Grey
+    { label: 'Applied', value: stats.completed, color: '#00f0ff' }, // Cyan (Neon)
+    { label: 'Failed', value: stats.failed, color: '#ff0055' }, // Neon Pink/Red
+    { label: 'Skipped', value: stats.skipped, color: '#64748b' }, // Slate
   ].filter((item) => item.value > 0);
 
   // Total for donut = only final states (completed, failed, skipped)
@@ -57,32 +57,41 @@ function DonutChart({ stats }: DonutChartProps) {
     .join(', ');
 
   return (
-    <div className="flex items-center gap-6">
-      <div
-        className="relative h-40 w-40 rounded-full shadow-inner"
-        style={{ background: `conic-gradient(${gradientStops})` }}
-      >
-        <div className="absolute inset-5 rounded-full bg-white shadow-inner flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold text-slate-900">{total}</span>
-          <span className="text-xs uppercase tracking-wide text-slate-400">Total apps</span>
-          {(activeJobs > 0 || pendingJobs > 0) && (
-            <span className="text-[10px] text-slate-500 mt-0.5">
-              {activeJobs + pendingJobs} in progress
+    <div className="flex items-center gap-8">
+      <div className="relative h-40 w-40">
+        {/* Glow effect behind chart */}
+        <div className="absolute inset-0 rounded-full bg-[#00f0ff]/10 blur-xl" />
+
+        <div
+          className="relative h-full w-full rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)]"
+          style={{ background: `conic-gradient(${gradientStops})` }}
+        >
+          <div className="absolute inset-[15%] rounded-full bg-[#0f172a] flex flex-col items-center justify-center shadow-inner border border-white/5">
+            <span className="text-4xl font-bold text-white tracking-tight">{total}</span>
+            <span className="text-[10px] uppercase tracking-wider font-medium text-slate-400 mt-1">
+              Total apps
             </span>
-          )}
+            {(activeJobs > 0 || pendingJobs > 0) && (
+              <span className="text-[10px] text-[#00f0ff] mt-1 font-medium">
+                {activeJobs + pendingJobs} active
+              </span>
+            )}
+          </div>
         </div>
       </div>
-      <ul className="space-y-3 text-sm">
+      <ul className="space-y-4 text-sm flex-1">
         {donutData.map((segment) => (
-          <li key={segment.label} className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+          <li key={segment.label} className="flex items-center justify-between gap-4 group">
+            <div className="flex items-center gap-3">
               <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: segment.color }}
+                className="h-3 w-3 rounded-full shadow-[0_0_8px_currentColor]"
+                style={{ backgroundColor: segment.color, color: segment.color }}
               />
-              <span className="text-slate-600">{segment.label}</span>
+              <span className="text-slate-300 font-medium group-hover:text-white transition-colors">
+                {segment.label}
+              </span>
             </div>
-            <span className="font-semibold text-slate-900">{segment.value}</span>
+            <span className="font-bold text-white font-mono">{segment.value}</span>
           </li>
         ))}
       </ul>
@@ -93,48 +102,48 @@ function DonutChart({ stats }: DonutChartProps) {
 function JobStatusBadge({ status }: { status: JobRecord['status'] }) {
   if (status === 'applying') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/20 px-3 py-1 text-xs font-medium text-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
         <Loader2 className="h-3 w-3 animate-spin" /> Applying
       </span>
     );
   }
   if (status === 'ats_filling') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#7000ff]/10 border border-[#7000ff]/20 px-3 py-1 text-xs font-medium text-[#a78bfa] shadow-[0_0_10px_rgba(112,0,255,0.1)]">
         <Loader2 className="h-3 w-3 animate-spin" /> Filling form
       </span>
     );
   }
   if (status === 'completed') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00ff9d]/10 border border-[#00ff9d]/20 px-3 py-1 text-xs font-medium text-[#00ff9d] shadow-[0_0_10px_rgba(0,255,157,0.1)]">
         Applied
       </span>
     );
   }
   if (status === 'failed') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ff0055]/10 border border-[#ff0055]/20 px-3 py-1 text-xs font-medium text-[#ff0055]">
         Failed
       </span>
     );
   }
   if (status === 'queued') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-400">
         In queue
       </span>
     );
   }
   if (status === 'skipped') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-500">
         Skipped
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-500">
       {status}
     </span>
   );
@@ -235,90 +244,119 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Pipeline</p>
-              <h2 className="text-lg font-semibold text-white">Where your apps stand</h2>
-            </div>
-          </div>
-          <div className="mt-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-40">
-                <Loader2 className="h-6 w-6 animate-spin text-[#00f0ff]" />
+        {/* Pipeline Card */}
+        <div className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/60 p-8 shadow-2xl backdrop-blur-xl transition-all hover:border-[#00f0ff]/30 hover:shadow-[0_0_30px_rgba(0,240,255,0.1)]">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#00f0ff]/5 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+          <div className="relative">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#00f0ff] mb-1">
+                  Pipeline
+                </p>
+                <h2 className="text-xl font-bold text-white tracking-tight">
+                  Where your apps stand
+                </h2>
               </div>
-            ) : (
-              <DonutChart stats={donutStats} />
-            )}
-          </div>
-          <p className="mt-4 text-xs text-slate-400">
-            Updates automatically as new roles are queued.
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Profile</p>
-              <h2 className="text-lg font-semibold text-white">{displayName}</h2>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 border-white/20 text-xs text-white hover:border-[#00f0ff]/40 hover:bg-[#00f0ff]/10"
-              onClick={onEditProfile}
-            >
-              <PenSquare className="h-3.5 w-3.5" />
-              Edit via chat agent
-            </Button>
-          </div>
-          <div className="mt-4 space-y-3 text-sm text-slate-200">
-            {profileSummary.map((item) => (
-              <div
-                key={item.label}
-                className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2"
-              >
-                {item.label === 'Visa' ? (
-                  <Briefcase className="h-4 w-4 text-[#00f0ff]" />
-                ) : (
-                  <MapPin className="h-4 w-4 text-[#00f0ff]" />
-                )}
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-400">{item.label}</p>
-                  <p className="font-medium text-white">{item.value}</p>
+
+            <div className="flex justify-center py-2">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#00f0ff]" />
                 </div>
-              </div>
-            ))}
+              ) : (
+                <DonutChart stats={donutStats} />
+              )}
+            </div>
+
+            <p className="mt-8 text-xs text-slate-400 text-center font-medium">
+              Updates automatically as new roles are queued.
+            </p>
           </div>
-          <p className="mt-4 text-xs text-slate-400">
-            All edits flow through the onboarding chat agent so everything stays in sync with your
-            vault.
-          </p>
+        </div>
+
+        {/* Profile Card */}
+        <div className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/60 p-8 shadow-2xl backdrop-blur-xl transition-all hover:border-[#7000ff]/30 hover:shadow-[0_0_30px_rgba(112,0,255,0.1)]">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#7000ff]/5 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+          <div className="relative h-full flex flex-col">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#7000ff] mb-1">
+                  Profile
+                </p>
+                <h2 className="text-xl font-bold text-white tracking-tight">{displayName}</h2>
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2 text-xs bg-[#7000ff] hover:bg-[#6000e0] text-white shadow-[0_0_15px_rgba(112,0,255,0.4)] border-0 px-4 h-8 rounded-full font-medium transition-all hover:scale-105"
+                onClick={onEditProfile}
+              >
+                <PenSquare className="h-3.5 w-3.5" />
+                Edit via chat agent
+              </Button>
+            </div>
+
+            <div className="flex-1 space-y-4">
+              {profileSummary.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4 transition-colors hover:bg-white/[0.05] hover:border-white/10"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f172a] border border-white/10 shadow-inner">
+                    {item.label === 'Visa' ? (
+                      <Briefcase className="h-5 w-5 text-[#00f0ff]" />
+                    ) : (
+                      <MapPin className="h-5 w-5 text-[#00f0ff]" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                      {item.label}
+                    </p>
+                    <p className="font-medium text-white text-sm">{item.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-8 text-xs text-slate-500 leading-relaxed">
+              All edits flow through the onboarding chat agent so everything stays in sync with your
+              vault.
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/15 bg-gradient-to-r from-[#0c3b4f] via-[#1d2f60] to-[#2b1454] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)] backdrop-blur">
-        <div className="flex items-center justify-between">
+      {/* Live Matches Card */}
+      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#0f172a]/60 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Live matches</p>
-            <h2 className="text-lg font-semibold text-white">Live job match status</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#00ff9d] mb-1">
+              Live matches
+            </p>
+            <h2 className="text-xl font-bold text-white tracking-tight">Live job match status</h2>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white text-slate-900 px-4 py-1.5 text-xs font-bold shadow-[0_0_15px_rgba(255,255,255,0.2)]">
             <Loader2
-              className={`h-3 w-3 ${isLoading ? 'animate-spin text-[#00f0ff]' : 'text-slate-400'}`}
+              className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-[#7000ff]' : 'text-slate-400'}`}
             />
             {isLoading ? 'Loading…' : 'Auto-applying'}
           </span>
         </div>
+
         {error && (
-          <div className="mt-4 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div className="mb-6 rounded-2xl border border-[#ff0055]/30 bg-[#ff0055]/10 px-4 py-3 text-sm text-[#ff0055]">
             <div className="flex items-center justify-between gap-3">
-              <p>{error}</p>
+              <p className="font-medium">{error}</p>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs border-white/30 text-white"
+                className="text-xs border-[#ff0055]/30 text-[#ff0055] hover:bg-[#ff0055]/10 h-7"
                 onClick={refresh}
               >
                 Retry
@@ -326,22 +364,23 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
             </div>
           </div>
         )}
-        <div className="mt-4 overflow-x-auto">
+
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+            <thead className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="pb-3 text-slate-300">Company / Organization</th>
-                <th className="pb-3 text-slate-300">Location</th>
-                <th className="pb-3 text-slate-300">Status</th>
-                <th className="pb-3 text-slate-300">Reason</th>
-                <th className="pb-3 text-slate-300">Date applied</th>
+                <th className="pb-4 pl-4">Company / Organization</th>
+                <th className="pb-4">Location</th>
+                <th className="pb-4">Status</th>
+                <th className="pb-4">Reason</th>
+                <th className="pb-4 pr-4 text-right">Date applied</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {isLoading && tableJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-slate-400">
-                    <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" />
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    <Loader2 className="h-5 w-5 animate-spin inline-block mr-2 text-[#00f0ff]" />
                     Loading applications...
                   </td>
                 </tr>
@@ -349,28 +388,30 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                 tableJobs.map((job) => {
                   const reason = formatReason(job.status, job.errorMessage);
                   return (
-                    <tr key={job.id} className="text-slate-100">
-                      <td className="py-3">
-                        <p className="font-semibold text-white">{job.company}</p>
-                        <p className="text-xs text-slate-400">{job.title}</p>
+                    <tr key={job.id} className="group transition-colors hover:bg-white/[0.02]">
+                      <td className="py-4 pl-4">
+                        <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">
+                          {job.company}
+                        </p>
+                        <p className="text-xs font-medium text-slate-400 mt-0.5">{job.title}</p>
                       </td>
-                      <td className="py-3 text-slate-300">{job.location ?? '—'}</td>
-                      <td className="py-3">
+                      <td className="py-4 text-slate-300 font-medium">{job.location ?? '—'}</td>
+                      <td className="py-4">
                         <JobStatusBadge status={job.status} />
                       </td>
-                      <td className="py-3">
+                      <td className="py-4">
                         {reason ? (
                           <span
                             title={job.errorMessage || undefined}
-                            className="text-xs font-mono text-slate-300"
+                            className="inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-white/5 border border-white/5"
                           >
                             {reason}
                           </span>
                         ) : (
-                          <span className="text-slate-500">—</span>
+                          <span className="text-slate-600">—</span>
                         )}
                       </td>
-                      <td className="py-3 text-slate-400">
+                      <td className="py-4 pr-4 text-right font-mono text-xs text-slate-400">
                         {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
                       </td>
                     </tr>
@@ -378,8 +419,16 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-slate-400">
-                    No applications yet. Start the agent to begin applying to jobs.
+                  <td colSpan={5} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center">
+                        <Briefcase className="h-6 w-6 text-slate-500" />
+                      </div>
+                      <p className="text-slate-400 font-medium">No applications yet</p>
+                      <p className="text-xs text-slate-500">
+                        Start the agent to begin applying to jobs
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}

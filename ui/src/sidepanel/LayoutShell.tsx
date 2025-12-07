@@ -45,8 +45,8 @@ export function LayoutShell({
 }: LayoutShellProps) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] text-slate-50">
-      <div className="flex flex-1 flex-col overflow-hidden rounded-r-[32px] border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-xl">
-        <header className="flex h-16 items-center justify-between border-b border-white/10 px-6 backdrop-blur">
+      <div className="flex flex-1 flex-col overflow-hidden rounded-r-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+        <header className="flex h-16 items-center justify-between px-6 backdrop-blur">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00f0ff] via-[#7000ff] to-[#00ff9d] text-[#020617] shadow-[0_10px_30px_rgba(0,240,255,0.3)]">
               <Sparkles className="h-5 w-5" strokeWidth={2.5} />
@@ -71,18 +71,18 @@ export function LayoutShell({
             </div>
           </div>
           {composer ? (
-            <div className="border-t border-white/10 px-8 py-4 backdrop-blur">
+            <div className="px-8 pb-4">
               <div className="mx-auto w-full max-w-4xl">{composer}</div>
             </div>
           ) : null}
-          <footer className="flex h-12 items-center justify-between border-t border-white/10 px-6 text-xs text-slate-400 backdrop-blur">
+          <footer className="flex h-12 items-center justify-between px-6 text-xs text-slate-400 backdrop-blur">
             <span>v0.1.0</span>
             <span>{footerNote ?? 'Built with ❤️ for job seekers'}</span>
           </footer>
         </div>
       </div>
 
-      <aside className="hidden w-20 flex-col items-center justify-between border-l border-white/10 py-6 text-slate-200 backdrop-blur-xl md:flex">
+      <aside className="hidden w-20 flex-col items-center justify-between py-6 text-slate-200 backdrop-blur-xl md:flex">
         <div className="flex flex-col items-center gap-6">
           {avatar ? (
             <img
