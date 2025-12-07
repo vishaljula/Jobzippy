@@ -95,6 +95,7 @@ function App() {
     isReady,
     needsOnboarding,
     user,
+    login,
     logout: handleLogout,
   } = useAuth();
 
@@ -460,18 +461,34 @@ function App() {
     setCheckoutLoading(true);
 
     try {
-      // Get Firebase ID token
+      // Step 1: Ensure user is signed in
       const auth = getAuth();
+
+      if (!auth.currentUser) {
+        console.log('[Subscription] User not signed in, triggering Google OAuth...');
+        toast.info('Please sign in with Google to continue');
+
+        try {
+          await login(true); // includeGmailScope = true for sheets access
+          console.log('[Subscription] Sign-in successful');
+        } catch (loginError) {
+          console.error('[Subscription] Sign-in failed:', loginError);
+          toast.error('Sign-in was cancelled or failed. Please try again.');
+          return;
+        }
+      }
+
+      // Step 2: Get Firebase ID token
       const token = await auth.currentUser?.getIdToken();
 
       if (!token) {
-        toast.error('Please sign in first');
+        toast.error('Failed to get authentication token');
         return;
       }
 
       console.log('[Subscription] Creating checkout session...');
 
-      // Call API to create checkout
+      // Step 3: Call API to create checkout
       const response = await fetch('http://localhost:8787/checkout/create-checkout', {
         method: 'POST',
         headers: {
@@ -492,7 +509,7 @@ function App() {
       const { url } = await response.json();
       console.log('[Subscription] Opening Stripe checkout:', url);
 
-      // Open Stripe in new tab
+      // Step 4: Open Stripe in new tab
       chrome.tabs.create({ url });
 
       toast.info('Complete payment in the opened tab');
@@ -502,7 +519,7 @@ function App() {
     } finally {
       setCheckoutLoading(false);
     }
-  }, []);
+  }, [login]);
 
   const startAgent = useCallback(async () => {
     // Preflight auth check: probe existing tabs, then open search URLs directly
