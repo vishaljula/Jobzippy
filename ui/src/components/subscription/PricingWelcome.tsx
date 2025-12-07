@@ -71,7 +71,6 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
                 {[
                   'LinkedIn auto-apply',
                   '300 apps per month',
-                  'AI cover letters',
                   'Sheets tracking',
                   'App analytics',
                   'Email alerts',
@@ -143,14 +142,10 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
 
               {/* Features */}
               <ul className="space-y-2 mb-4 flex-grow">
-                <li className="text-slate-400 text-[10px] font-medium mb-1">
-                  Everything in Basic, plus:
-                </li>
                 {[
-                  'Indeed auto-apply',
-                  'Glassdoor auto-apply',
-                  'Dice auto-apply',
-                  'ZipRecruiter apply',
+                  'Everything in Basic, plus:',
+                  'AI cover letters',
+                  'Indeed, Glassdoor, Dice & ZipRecruiter',
                   'Unlimited apps',
                   'Priority support',
                 ].map((feature, i) => (
