@@ -7,12 +7,8 @@ import {
   Shield,
   Bell,
   ClipboardCheck,
-  AlertTriangle,
-  CheckCircle2,
   Upload,
 } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -115,8 +111,8 @@ function App() {
   // Engine state/status
   const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
   const [engineStatus, setEngineStatus] = useState<string>('Idle');
-  const [authNeeded, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
-  const [preflightPending, setPreflightPending] = useState(false);
+  const [, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
+  const [, setPreflightPending] = useState(false);
   const tabToastIdRef = useRef<string | number | null>(null);
 
   // Subscription state
@@ -152,7 +148,7 @@ function App() {
             data: envInfo,
           },
         })
-        .catch(() => {});
+        .catch(() => { });
     } catch {
       // ignore if messaging is not available yet
     }
@@ -625,7 +621,7 @@ function App() {
             },
           },
         })
-        .catch(() => {});
+        .catch(() => { });
 
       if (isDev) {
         console.log('[Jobzippy] Dev mode timeout: Forcing auth success');
@@ -685,7 +681,7 @@ function App() {
           if (!allMissing) {
             chrome.runtime.sendMessage(
               { type: 'START_AGENT', data: { maxApplications: 15 } },
-              () => {}
+              () => { }
             );
           }
         }
@@ -694,10 +690,10 @@ function App() {
     chrome.runtime.onMessage.addListener(handler);
 
     // Probe existing tabs first (in case user already has tabs open)
-    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => { });
   }, [user]);
   const stopAgent = useCallback(() => {
-    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => { });
   }, []);
 
   // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
@@ -789,32 +785,6 @@ function App() {
     );
   }
 
-  // In development mode with mock pages, treat both platforms as signed-in for UI purposes.
-  // This prevents confusing "Not signed in" indicators when running against localhost mocks.
-  const isDevEnv = import.meta.env.DEV || import.meta.env.MODE === 'development';
-  const effectiveAuthNeeded: { linkedin?: boolean; indeed?: boolean } = isDevEnv
-    ? { linkedin: false, indeed: false }
-    : authNeeded;
-
-  const statusLabel = isAuthenticated ? (
-    <span className="flex items-center gap-2 text-slate-600">
-      <span
-        className={`h-2 w-2 rounded-full ${
-          engineState === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-300'
-        }`}
-      />
-      <span className="font-medium">
-        Agent: {engineState === 'RUNNING' ? 'Running' : 'Stopped'}
-      </span>
-      {engineStatus ? <span className="text-slate-400">({engineStatus})</span> : null}
-    </span>
-  ) : (
-    <span className="flex items-center gap-2 text-slate-500">
-      <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-      Not signed in
-    </span>
-  );
-
   const historyContent = (
     <div className="space-y-6">
       {snapshot.status === 'skipped' && <ResumeOnboardingCard onResume={handleResumeOnboarding} />}
@@ -822,7 +792,14 @@ function App() {
       {/* Subscription Status - Shows trial/active status */}
       <SubscriptionStatus />
 
-      <DashboardOverview user={user} onEditProfile={handleResumeOnboarding} />
+      <DashboardOverview
+        user={user}
+        onEditProfile={handleResumeOnboarding}
+        engineState={engineState}
+        engineStatus={engineStatus}
+        onStartAgent={startAgent}
+        onStopAgent={stopAgent}
+      />
     </div>
   );
 
@@ -934,104 +911,13 @@ function App() {
     );
   }
 
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      {isAuthenticated && (effectiveAuthNeeded.linkedin || effectiveAuthNeeded.indeed) && (
-        <div className="mr-2 hidden items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 md:flex">
-          <span>Sign in:</span>
-          {effectiveAuthNeeded.linkedin && (
-            <a
-              href="https://www.linkedin.com/jobs/"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              LinkedIn
-            </a>
-          )}
-          {effectiveAuthNeeded.linkedin && effectiveAuthNeeded.indeed && <span>·</span>}
-          {effectiveAuthNeeded.indeed && (
-            <a
-              href="https://www.indeed.com/"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Indeed
-            </a>
-          )}
-        </div>
-      )}
-      {isAuthenticated && (
-        <>
-          {(() => {
-            const missing = [
-              effectiveAuthNeeded.linkedin ? 'LinkedIn' : null,
-              effectiveAuthNeeded.indeed ? 'Indeed' : null,
-            ].filter(Boolean) as string[];
-            const totalNeeded = 2;
-            const okCount = totalNeeded - missing.length;
-            const variant = okCount === 0 ? 'red' : okCount === totalNeeded ? 'green' : 'amber';
-            const borderClass =
-              variant === 'green'
-                ? 'border-emerald-300 hover:border-emerald-400'
-                : variant === 'amber'
-                  ? 'border-amber-300 hover:border-amber-400'
-                  : 'border-rose-300 hover:border-rose-400';
-            const icon =
-              variant === 'green' ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              ) : (
-                <AlertTriangle
-                  className={`h-3.5 w-3.5 ${variant === 'amber' ? 'text-amber-600' : 'text-rose-600'}`}
-                />
-              );
-            const title =
-              missing.length === 0
-                ? 'All platforms signed in'
-                : `Not signed in: ${missing.join(', ')}`;
-            return (
-              <div className="flex items-center gap-1.5">
-                <span title={title}>{icon}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`text-xs ${borderClass}`}
-                  onClick={startAgent}
-                  disabled={engineState === 'RUNNING' || preflightPending}
-                >
-                  {preflightPending ? 'Checking…' : 'Start Agent'}
-                </Button>
-              </div>
-            );
-          })()}
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            onClick={stopAgent}
-            disabled={engineState === 'IDLE'}
-          >
-            Stop Agent
-          </Button>
-        </>
-      )}
-      {isAuthenticated && (
-        <Button variant="ghost" size="sm" className="text-xs md:hidden" onClick={handleLogout}>
-          Logout
-        </Button>
-      )}
-    </div>
-  );
-
   return (
     <>
       <Toaster position="top-right" />
       <LayoutShell
         title="Jobzippy"
         subtitle="Your agentic AI for job search"
-        statusLabel={statusLabel}
-        headerActions={headerActions}
+        statusLabel={null}
         history={historyContent}
         composer={composerContent}
         navItems={NAV_ITEMS}
@@ -1039,9 +925,9 @@ function App() {
         avatar={
           user
             ? {
-                src: user.picture,
-                alt: user.name,
-              }
+              src: user.picture,
+              alt: user.name,
+            }
             : null
         }
         railFooter={
@@ -1066,7 +952,7 @@ function App() {
         autoCloseOnComplete={!manualWizardOpen}
       />
       <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
-      <TutorialCarousel open={false} onClose={() => {}} />
+      <TutorialCarousel open={false} onClose={() => { }} />
       <TutorialCarousel
         open={showTutorial && !isWizardOpen}
         onClose={handleDismissTutorial}

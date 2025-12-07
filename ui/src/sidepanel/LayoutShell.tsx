@@ -88,7 +88,7 @@ export function LayoutShell({
             <img
               src={avatar.src}
               alt={avatar.alt}
-              className="h-11 w-11 rounded-2xl border-2 border-[#00f0ff]/40 shadow-[0_10px_25px_rgba(0,240,255,0.25)]"
+              className="h-11 w-11 rounded-2xl border-2 border-[#00ff9d]/40 shadow-[0_10px_25px_rgba(0,255,157,0.25)]"
             />
           ) : (
             <div className="h-11 w-11 rounded-2xl border border-white/10 shadow-sm" />
@@ -99,19 +99,17 @@ export function LayoutShell({
                 key={key}
                 type="button"
                 onClick={onClick}
-                className={`flex flex-col items-center gap-1 focus:outline-none ${
-                  highlight ? 'text-[#00f0ff]' : 'text-slate-400 hover:text-[#00f0ff]'
-                }`}
+                className={`flex flex-col items-center gap-1 focus:outline-none ${highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
+                  }`}
               >
                 <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00f0ff]/40 ${
-                    active ? 'border-[#00f0ff]/40 text-[#00f0ff]' : 'border-white/10'
-                  }`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${active ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'border-white/10'
+                    }`}
                   style={
                     highlight
                       ? {
-                          boxShadow: '0 0 16px rgba(0,240,255,0.35)',
-                        }
+                        boxShadow: '0 0 16px rgba(0,255,157,0.35)',
+                      }
                       : undefined
                   }
                 >
@@ -128,19 +126,17 @@ export function LayoutShell({
                   key={key}
                   type="button"
                   onClick={onClick}
-                  className={`flex flex-col items-center gap-1 focus:outline-none ${
-                    highlight ? 'text-[#00f0ff]' : 'text-slate-400 hover:text-[#00f0ff]'
-                  }`}
+                  className={`flex flex-col items-center gap-1 focus:outline-none ${highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
+                    }`}
                 >
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00f0ff]/40 ${
-                      active ? 'border-[#00f0ff]/40 text-[#00f0ff]' : 'border-white/10'
-                    }`}
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${active ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'border-white/10'
+                      }`}
                     style={
                       highlight
                         ? {
-                            boxShadow: '0 0 16px rgba(0,240,255,0.35)',
-                          }
+                          boxShadow: '0 0 16px rgba(0,255,157,0.35)',
+                        }
                         : undefined
                     }
                   >
