@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
+import { SignInWithGoogle } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
 import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
@@ -802,44 +802,18 @@ function App() {
     </span>
   );
 
-  const heroCard = (
-    <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
-      <div className="relative mx-auto h-20 w-20">
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 opacity-20 blur-xl" />
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-secondary-500">
-          <Rocket className="h-10 w-10 text-white" strokeWidth={2.5} />
-        </div>
-      </div>
-      <h2 className="text-center text-2xl font-bold text-gray-900">Welcome to Jobzippy!</h2>
-      <p className="text-center text-gray-600">
-        Your personal agentic AI assistant who manages your job applications
-      </p>
-      <div className="space-y-3">
-        <SignInWithGoogle />
-        <GmailConsentMessage />
-      </div>
-    </div>
-  );
-
   const historyContent = (
     <div className="space-y-6">
-      {!isAuthenticated && heroCard}
-      {isAuthenticated && (
-        <>
-          {snapshot.status === 'skipped' && (
-            <ResumeOnboardingCard onResume={handleResumeOnboarding} />
-          )}
+      {snapshot.status === 'skipped' && <ResumeOnboardingCard onResume={handleResumeOnboarding} />}
 
-          {/* Subscription Status - Shows trial/active status */}
-          <SubscriptionStatus />
+      {/* Subscription Status - Shows trial/active status */}
+      <SubscriptionStatus />
 
-          {/* TODO: Show SubscriptionCard only if no active subscription */}
-          {/* For now, always showing for testing */}
-          <SubscriptionCard />
+      {/* TODO: Show SubscriptionCard only if no active subscription */}
+      {/* For now, always showing for testing */}
+      <SubscriptionCard />
 
-          <DashboardOverview user={user} onEditProfile={handleResumeOnboarding} />
-        </>
-      )}
+      <DashboardOverview user={user} onEditProfile={handleResumeOnboarding} />
     </div>
   );
 
@@ -849,6 +823,80 @@ function App() {
       Onboarding button in the rail to update your profile via the chat agent at any time.
     </div>
   );
+
+  // Show sign-in page without side menu if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
+        <Toaster position="top-right" />
+        <div className="w-full max-w-lg">
+          {/* Sign-in card matching pricing page style */}
+          <div className="space-y-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 p-8 shadow-2xl">
+            {/* Logo with neon glow */}
+            <div className="relative mx-auto h-24 w-24 mb-4">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
+                <Rocket className="h-12 w-12 text-black" strokeWidth={2.5} />
+              </div>
+            </div>
+
+            {/* Header */}
+            <div className="text-center space-y-3">
+              <h1 className="text-4xl font-bold text-white bg-gradient-to-r from-[#00f0ff] to-[#00ff9d] bg-clip-text text-transparent">
+                Welcome to Jobzippy!
+              </h1>
+              <p className="text-lg text-slate-300">
+                Your personal agentic AI assistant who manages your job applications
+              </p>
+            </div>
+
+            {/* Sign-in button */}
+            <div className="space-y-4 pt-4">
+              <SignInWithGoogle includeGmailScope={true} />
+            </div>
+
+            {/* Gmail consent message with neon styling */}
+            <div className="mt-6 p-4 bg-[#00f0ff]/10 border border-[#00f0ff]/20 rounded-xl">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                <strong className="text-[#00f0ff]">Email Sync (Optional):</strong> Jobzippy can read{' '}
+                <strong className="text-white">metadata only</strong> (From/Subject/Date) from a{' '}
+                <strong className="text-white">Gmail label you choose</strong> (e.g.,
+                Jobzippy/Recruiters) to update your application status when recruiters reply.
+                Jobzippy <strong className="text-white">does not</strong> read or store email bodies
+                or your other labels.
+              </p>
+            </div>
+
+            {/* Trust signals */}
+            <div className="mt-6 text-center border-t border-white/10 pt-6">
+              <p className="text-slate-400 text-xs mb-3">Trusted by job seekers worldwide</p>
+              <div className="flex justify-center gap-6 text-slate-400 text-[10px]">
+                <div>
+                  <div className="text-lg font-bold text-[#00f0ff] mb-0.5">10K+</div>
+                  <div>Applications sent</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-[#00ff9d] mb-0.5">500+</div>
+                  <div>Users hired</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-[#7000ff] mb-0.5">4.8/5</div>
+                  <div>User rating</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-500">
+              Jobzippy automatically searches and applies once your onboarding answers are synced
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
