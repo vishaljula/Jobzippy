@@ -11,76 +11,76 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617]">
       <div className="max-w-5xl w-full">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-[#00f0ff] to-[#7000ff] bg-clip-text text-transparent">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold mb-3 bg-gradient-to-r from-white via-[#00f0ff] to-[#7000ff] bg-clip-text text-transparent">
             Welcome to JobZippy
           </h1>
-          <p className="text-xl text-slate-300 mb-6">
+          <p className="text-base text-slate-300 mb-4">
             Your personal AI assistant that applies to jobs while you sleep.
             <br />
             Start your <span className="text-[#00ff9d] font-semibold">3-day free trial</span> to get
             started.
           </p>
 
-          <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-400">
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-[#00ff9d]" />
+          <div className="flex flex-wrap justify-center gap-3 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-[#00ff9d]" />
               <span>Card required</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-[#00ff9d]" />
+            <div className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-[#00ff9d]" />
               <span>Cancel anytime</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-[#00ff9d]" />
-              <span>300 applications/month</span>
+            <div className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-[#00ff9d]" />
+              <span>300 apps/month</span>
             </div>
           </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-4">
           {/* Basic Plan */}
           <div className="relative group">
             {/* Glow Effect */}
             <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-25 group-hover:opacity-50 transition duration-500" />
 
-            <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-3xl h-full flex flex-col border-2 border-[#00f0ff]/30">
+            <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-4 rounded-2xl h-full flex flex-col border-2 border-[#00f0ff]/30">
               {/* Header */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-5 h-5 text-[#00f0ff]" />
-                  <h3 className="text-2xl font-bold text-white">Basic</h3>
+              <div className="mb-4">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="w-4 h-4 text-[#00f0ff]" />
+                  <h3 className="text-lg font-bold text-white">Basic</h3>
                 </div>
-                <p className="text-slate-400 text-sm">Perfect for getting started</p>
+                <p className="text-slate-400 text-xs">Perfect for getting started</p>
               </div>
 
               {/* Price */}
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-white">$9.99</span>
-                  <span className="text-slate-400">/month</span>
+              <div className="mb-4">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-3xl font-bold text-white">$9.99</span>
+                  <span className="text-slate-400 text-xs">/mo</span>
                 </div>
-                <p className="text-[#00ff9d] text-sm mt-2 font-medium">
-                  3-day free trial • Then $9.99/month
+                <p className="text-[#00ff9d] text-xs mt-1.5 font-medium">
+                  3-day trial • Then $9.99/mo
                 </p>
               </div>
 
               {/* Features */}
-              <ul className="space-y-3 mb-8 flex-grow">
+              <ul className="space-y-2 mb-4 flex-grow">
                 {[
                   'LinkedIn auto-apply',
-                  '300 applications per month',
-                  'AI-powered cover letters',
-                  'Google Sheets tracking',
-                  'Application analytics',
-                  'Email notifications',
+                  '300 apps per month',
+                  'AI cover letters',
+                  'Sheets tracking',
+                  'App analytics',
+                  'Email alerts',
                 ].map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-slate-300">
-                    <div className="w-5 h-5 rounded-full bg-[#00f0ff]/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="w-3 h-3 text-[#00f0ff]" />
+                  <li key={i} className="flex items-start gap-2 text-slate-300">
+                    <div className="w-4 h-4 rounded-full bg-[#00f0ff]/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="w-2.5 h-2.5 text-[#00f0ff]" />
                     </div>
-                    <span className="text-sm">{feature}</span>
+                    <span className="text-xs">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -89,22 +89,22 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
               <Button
                 onClick={onStartTrial}
                 disabled={loading}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-white font-bold hover:scale-105 hover:shadow-[0_0_30px_rgba(0,240,255,0.5)] transition-all duration-300"
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-white font-bold hover:scale-105 hover:shadow-[0_0_30px_rgba(0,240,255,0.5)] transition-all duration-300 text-sm"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                     Processing...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 mr-2" />
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                     Start Free Trial
                   </>
                 )}
               </Button>
 
-              <p className="text-center text-xs text-slate-500 mt-4">
+              <p className="text-center text-[10px] text-slate-500 mt-2">
                 Card required • Cancel anytime
               </p>
             </div>
@@ -115,51 +115,50 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
             {/* Glow Effect */}
             <div className="absolute -inset-1 bg-gradient-to-r from-[#7000ff] to-[#00ff9d] rounded-3xl blur opacity-10 transition duration-500" />
 
-            <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-3xl h-full flex flex-col">
+            <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-4 rounded-2xl h-full flex flex-col">
               {/* Coming Soon Badge */}
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <div className="px-4 py-1 rounded-full bg-gradient-to-r from-[#7000ff] to-[#00ff9d] text-xs font-bold text-black">
+              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                <div className="px-3 py-0.5 rounded-full bg-gradient-to-r from-[#7000ff] to-[#00ff9d] text-[10px] font-bold text-black">
                   COMING SOON
                 </div>
               </div>
 
               {/* Header */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-5 h-5 text-[#7000ff]" />
-                  <h3 className="text-2xl font-bold text-white">Premium</h3>
+              <div className="mb-4">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Sparkles className="w-4 h-4 text-[#7000ff]" />
+                  <h3 className="text-lg font-bold text-white">Premium</h3>
                 </div>
-                <p className="text-slate-400 text-sm">For serious job seekers</p>
+                <p className="text-slate-400 text-xs">For serious job seekers</p>
               </div>
 
               {/* Price */}
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-white">$TBD</span>
-                  <span className="text-slate-400">/month</span>
+              <div className="mb-4">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-3xl font-bold text-white">$TBD</span>
+                  <span className="text-slate-400 text-xs">/mo</span>
                 </div>
-                <p className="text-slate-500 text-sm mt-2 font-medium">Pricing to be announced</p>
+                <p className="text-slate-500 text-xs mt-1.5 font-medium">Pricing TBA</p>
               </div>
 
               {/* Features */}
-              <ul className="space-y-3 mb-8 flex-grow">
-                <li className="text-slate-400 text-sm font-medium mb-2">
+              <ul className="space-y-2 mb-4 flex-grow">
+                <li className="text-slate-400 text-[10px] font-medium mb-1">
                   Everything in Basic, plus:
                 </li>
                 {[
                   'Indeed auto-apply',
                   'Glassdoor auto-apply',
                   'Dice auto-apply',
-                  'ZipRecruiter auto-apply',
-                  'Unlimited applications',
+                  'ZipRecruiter apply',
+                  'Unlimited apps',
                   'Priority support',
-                  'Advanced analytics',
                 ].map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-slate-400">
-                    <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="w-3 h-3 text-slate-500" />
+                  <li key={i} className="flex items-start gap-2 text-slate-400">
+                    <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="w-2.5 h-2.5 text-slate-500" />
                     </div>
-                    <span className="text-sm">{feature}</span>
+                    <span className="text-xs">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -167,33 +166,33 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
               {/* Disabled Button */}
               <button
                 disabled
-                className="w-full py-4 rounded-xl bg-white/5 text-slate-500 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+                className="w-full py-2.5 rounded-lg bg-white/5 text-slate-500 font-bold flex items-center justify-center gap-1.5 cursor-not-allowed text-sm"
               >
-                <Lock className="w-4 h-4" />
+                <Lock className="w-3.5 h-3.5" />
                 Coming Soon
               </button>
 
-              <p className="text-center text-xs text-slate-600 mt-4">
-                Join waitlist to be notified
+              <p className="text-center text-[10px] text-slate-600 mt-2">
+                Join waitlist for updates
               </p>
             </div>
           </div>
         </div>
 
         {/* Trust signals */}
-        <div className="mt-12 text-center">
-          <p className="text-slate-500 text-sm mb-4">Trusted by job seekers worldwide</p>
-          <div className="flex justify-center gap-8 text-slate-600 text-xs">
+        <div className="mt-6 text-center">
+          <p className="text-slate-500 text-xs mb-3">Trusted by job seekers worldwide</p>
+          <div className="flex justify-center gap-6 text-slate-600 text-[10px]">
             <div>
-              <div className="text-2xl font-bold text-[#00f0ff] mb-1">10K+</div>
+              <div className="text-lg font-bold text-[#00f0ff] mb-0.5">10K+</div>
               <div>Applications sent</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-[#00ff9d] mb-1">500+</div>
+              <div className="text-lg font-bold text-[#00ff9d] mb-0.5">500+</div>
               <div>Users hired</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-[#7000ff] mb-1">4.8/5</div>
+              <div className="text-lg font-bold text-[#7000ff] mb-0.5">4.8/5</div>
               <div>User rating</div>
             </div>
           </div>
