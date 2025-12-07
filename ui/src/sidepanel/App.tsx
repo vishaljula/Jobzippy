@@ -746,10 +746,10 @@ function App() {
 
   if (appLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
-          <p className="text-gray-600 font-medium">Loading Jobzippy...</p>
+          <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#00f0ff]/20 border-t-[#00ff9d]"></div>
+          <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">Loading Jobzippy...</p>
         </div>
       </div>
     );
@@ -758,10 +758,12 @@ function App() {
   // Wait for subscription check to complete for authenticated users
   if (isAuthenticated && !subscriptionChecked) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
-          <p className="text-gray-600 font-medium">Checking subscription...</p>
+          <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#00f0ff]/20 border-t-[#00ff9d]"></div>
+          <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">
+            Checking subscription...
+          </p>
         </div>
       </div>
     );
