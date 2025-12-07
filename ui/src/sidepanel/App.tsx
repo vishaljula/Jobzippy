@@ -748,7 +748,12 @@ function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
         <div className="text-center">
-          <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#00f0ff]/20 border-t-[#00ff9d]"></div>
+          <div className="relative mx-auto mb-6 h-16 w-16">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
+            <div className="animate-spin rounded-full h-16 w-16 bg-gradient-to-r from-[#00f0ff]/60 via-[#7000ff]/60 to-[#00ff9d]/60 p-[3px] shadow-[0_0_25px_rgba(0,240,255,0.25)]">
+              <div className="h-full w-full rounded-full bg-[#020617]" />
+            </div>
+          </div>
           <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">Loading Jobzippy...</p>
         </div>
       </div>
@@ -760,7 +765,12 @@ function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
         <div className="text-center">
-          <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#00f0ff]/20 border-t-[#00ff9d]"></div>
+          <div className="relative mx-auto mb-6 h-16 w-16">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
+            <div className="animate-spin rounded-full h-16 w-16 bg-gradient-to-r from-[#00f0ff]/60 via-[#7000ff]/60 to-[#00ff9d]/60 p-[3px] shadow-[0_0_25px_rgba(0,240,255,0.25)]">
+              <div className="h-full w-full rounded-full bg-[#020617]" />
+            </div>
+          </div>
           <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">
             Checking subscription...
           </p>
