@@ -21,7 +21,7 @@ import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
-import { SubscriptionCard, SubscriptionStatus, PricingWelcome } from '@/components/subscription';
+import { SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
 import { logger } from '@/lib/logger';
 
@@ -821,10 +821,6 @@ function App() {
 
       {/* Subscription Status - Shows trial/active status */}
       <SubscriptionStatus />
-
-      {/* TODO: Show SubscriptionCard only if no active subscription */}
-      {/* For now, always showing for testing */}
-      <SubscriptionCard />
 
       <DashboardOverview user={user} onEditProfile={handleResumeOnboarding} />
     </div>
