@@ -1,0 +1,37 @@
+<svg width="400" height="260" viewBox="0 0 400 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="neon" x1="0" y1="0" x2="400" y2="0">
+      <stop offset="0%" stop-color="#34FFD9"/>
+      <stop offset="100%" stop-color="#C44BFF"/>
+    </linearGradient>
+    <style>
+      .n { stroke: url(#neon); stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .wheel { stroke: url(#neon); stroke-width: 4; fill: #02030A; }
+    </style>
+  </defs>
+
+  <rect width="400" height="260" fill="#02030A"/>
+
+  <!-- Suitcase body -->
+  <rect x="40" y="50" width="320" height="150" rx="28" class="n"/>
+
+  <!-- Front pocket -->
+  <rect x="70" y="95" width="260" height="80" rx="18" class="n"/>
+
+  <!-- Handle top bar -->
+  <rect x="140" y="40" width="120" height="30" rx="10" class="n"/>
+
+  <!-- Handle curve -->
+  <path d="M155 40 C155 15 245 15 245 40" class="n"/>
+
+  Minimal straps
+  <rect x="95" y="50" width="20" height="60" rx="6" class="n"/>
+  <rect x="285" y="50" width="20" height="60" rx="6" class="n"/>
+
+  <!-- Inner handle slot -->
+  <rect x="155" y="135" width="90" height="35" rx="10" class="n"/>
+
+  <!-- Wheels -->
+  <circle cx="120" cy="210" r="14" class="wheel"/>
+  <circle cx="280" cy="210" r="14" class="wheel"/>
+</svg>

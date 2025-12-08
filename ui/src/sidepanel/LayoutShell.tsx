@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Logo } from '@/components/Logo';
 
 interface NavItem {
   key: string;
@@ -20,9 +20,7 @@ interface LayoutShellProps {
   title: string;
   subtitle: string;
   statusLabel: ReactNode;
-  headerActions?: ReactNode;
   history: ReactNode;
-  composer: ReactNode;
   navItems: readonly NavItem[];
   secondaryNavItems?: readonly NavItem[];
   avatar?: AvatarProps | null;
@@ -34,9 +32,7 @@ export function LayoutShell({
   title,
   subtitle,
   statusLabel,
-  headerActions,
   history,
-  composer,
   navItems,
   secondaryNavItems,
   avatar,
@@ -48,18 +44,13 @@ export function LayoutShell({
       <div className="flex flex-1 flex-col overflow-hidden rounded-r-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         <header className="flex h-16 items-center justify-between px-6 backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00f0ff] via-[#7000ff] to-[#00ff9d] text-[#020617] shadow-[0_10px_30px_rgba(0,240,255,0.3)]">
-              <Sparkles className="h-5 w-5" strokeWidth={2.5} />
-            </div>
+            <Logo />
             <div>
               <h1 className="text-base font-semibold text-white">{title}</h1>
               <p className="text-xs text-slate-400">{subtitle}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-xs text-slate-300">
-            <span>{statusLabel}</span>
-            {headerActions}
-          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-300">{statusLabel}</div>
         </header>
 
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -70,11 +61,6 @@ export function LayoutShell({
               </div>
             </div>
           </div>
-          {composer ? (
-            <div className="px-8 pb-4">
-              <div className="mx-auto w-full max-w-4xl">{composer}</div>
-            </div>
-          ) : null}
           <footer className="flex h-12 items-center justify-between px-6 text-xs text-slate-400 backdrop-blur">
             <span>v0.1.0</span>
             <span>{footerNote ?? 'Built with ❤️ for job seekers'}</span>
@@ -99,17 +85,21 @@ export function LayoutShell({
                 key={key}
                 type="button"
                 onClick={onClick}
-                className={`flex flex-col items-center gap-1 focus:outline-none ${highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
-                  }`}
+                className={`flex flex-col items-center gap-1 focus:outline-none ${
+                  highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
+                }`}
               >
                 <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${active ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'border-white/10'
-                    }`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${
+                    active
+                      ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]'
+                      : 'border-white/10'
+                  }`}
                   style={
                     highlight
                       ? {
-                        boxShadow: '0 0 16px rgba(0,255,157,0.35)',
-                      }
+                          boxShadow: '0 0 16px rgba(0,255,157,0.35)',
+                        }
                       : undefined
                   }
                 >
@@ -126,17 +116,21 @@ export function LayoutShell({
                   key={key}
                   type="button"
                   onClick={onClick}
-                  className={`flex flex-col items-center gap-1 focus:outline-none ${highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
-                    }`}
+                  className={`flex flex-col items-center gap-1 focus:outline-none ${
+                    highlight ? 'text-[#00ff9d]' : 'text-slate-400 hover:text-[#00ff9d]'
+                  }`}
                 >
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${active ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'border-white/10'
-                      }`}
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm transition hover:scale-105 hover:border-[#00ff9d]/40 hover:shadow-[0_0_15px_rgba(0,255,157,0.3)] ${
+                      active
+                        ? 'border-[#00ff9d]/40 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)]'
+                        : 'border-white/10'
+                    }`}
                     style={
                       highlight
                         ? {
-                          boxShadow: '0 0 16px rgba(0,255,157,0.35)',
-                        }
+                            boxShadow: '0 0 16px rgba(0,255,157,0.35)',
+                          }
                         : undefined
                     }
                   >

@@ -26,8 +26,8 @@ export function ChatMessage({
   const isAssistant = message.role !== 'user';
   const alignment = isAssistant ? 'items-start' : 'items-end';
   const bubbleClass = isAssistant
-    ? 'bg-white/80 text-slate-700 border border-indigo-100 rounded-3xl rounded-tl-md'
-    : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-3xl rounded-tr-md';
+    ? 'bg-white/10 text-slate-200 border border-white/5 rounded-3xl rounded-tl-md'
+    : 'bg-[#00f0ff]/10 text-slate-200 border border-[#00f0ff]/20 rounded-3xl rounded-tr-md';
 
   if (message.kind === 'status') {
     return (
@@ -67,7 +67,7 @@ export function ChatMessage({
 
 function Timestamp({ iso }: { iso: string }) {
   return (
-    <span className="text-[10px] uppercase tracking-wide text-slate-300">
+    <span className="text-[10px] uppercase tracking-wide text-slate-500">
       {formatTimestamp(iso)}
     </span>
   );
@@ -76,10 +76,10 @@ function Timestamp({ iso }: { iso: string }) {
 function StatusMessage({ message }: { message: IntakeMessage }) {
   const steps = message.statusSteps ?? [];
   return (
-    <div className="rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex items-center space-x-2">
-        <Sparkles className="h-4 w-4 text-indigo-500" />
-        <p className="text-sm font-semibold text-indigo-600">{message.content}</p>
+        <Sparkles className="h-4 w-4 text-[#00f0ff]" />
+        <p className="text-sm font-semibold text-white">{message.content}</p>
       </div>
       <div className="space-y-4">
         {steps.map((step) => (
@@ -105,19 +105,19 @@ function StatusStep({ step }: { step: IntakeStatusStep }) {
       <div
         className={clsx(
           'mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border',
-          step.state === 'completed' && 'border-emerald-200 bg-emerald-50 text-emerald-600',
+          step.state === 'completed' && 'border-[#00ff9d]/20 bg-[#00ff9d]/10 text-[#00ff9d]',
           step.state === 'in_progress' &&
-            'border-indigo-200 bg-indigo-50 text-indigo-600 animate-pulse',
-          step.state === 'error' && 'border-rose-200 bg-rose-50 text-rose-500',
-          step.state === 'pending' && 'border-slate-200 bg-white text-slate-300'
+            'border-[#00f0ff]/20 bg-[#00f0ff]/10 text-[#00f0ff] animate-pulse',
+          step.state === 'error' && 'border-[#ff0055]/20 bg-[#ff0055]/10 text-[#ff0055]',
+          step.state === 'pending' && 'border-white/10 bg-white/5 text-slate-500'
         )}
       >
         <Icon className={clsx('h-4 w-4', step.state === 'in_progress' && 'animate-spin')} />
       </div>
       <div>
-        <p className="text-sm font-medium text-slate-700">{step.label}</p>
-        {step.description && <p className="text-xs text-slate-500">{step.description}</p>}
-        {step.error && <p className="text-xs text-rose-500">{step.error}</p>}
+        <p className="text-sm font-medium text-slate-200">{step.label}</p>
+        {step.description && <p className="text-xs text-slate-400">{step.description}</p>}
+        {step.error && <p className="text-xs text-[#ff0055]">{step.error}</p>}
       </div>
     </div>
   );
@@ -179,19 +179,19 @@ function PreviewMessage({
   const displaySections = isEditing ? editedSections : sections;
 
   return (
-    <div className="w-full space-y-4 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="w-full space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold text-indigo-600">Resume parsed successfully</p>
+          <p className="text-sm font-semibold text-[#00f0ff]">Resume parsed successfully</p>
           <p className="text-xs text-slate-400">
             Confidence {Math.round(((metadata.confidence as number) ?? 0) * 100)}%
           </p>
         </div>
-        <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-600">
+        <span className="rounded-full bg-[#00f0ff]/10 px-3 py-1 text-[11px] font-medium text-[#00f0ff]">
           {(metadata.resumeMetadata as { fileName?: string })?.fileName ?? 'Resume'}
         </span>
       </div>
-      <p className="text-sm text-slate-700">{message.content}</p>
+      <p className="text-sm text-slate-300">{message.content}</p>
       <div className="grid gap-3 md:grid-cols-2">
         {displaySections.map((section) => (
           <PreviewSection
@@ -209,14 +209,14 @@ function PreviewMessage({
               <Button
                 variant="outline"
                 size="sm"
-                className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+                className="border-white/10 bg-transparent text-xs text-slate-400 hover:bg-white/5 hover:text-white"
                 onClick={handleCancelClick}
               >
                 Cancel
               </Button>
               <Button
                 size="sm"
-                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
+                className="rounded-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-xs font-semibold text-white shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:opacity-90 border-0"
                 onClick={handleSaveClick}
               >
                 Save changes
@@ -227,7 +227,7 @@ function PreviewMessage({
               <Button
                 variant="outline"
                 size="sm"
-                className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+                className="border-white/10 bg-transparent text-xs text-slate-400 hover:bg-white/5 hover:text-white"
                 onClick={handleEditClick}
                 disabled={!onEdit}
               >
@@ -235,7 +235,7 @@ function PreviewMessage({
               </Button>
               <Button
                 size="sm"
-                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
+                className="rounded-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-xs font-semibold text-white shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:opacity-90 border-0"
                 onClick={onApply}
                 disabled={!onApply || isApplying}
               >
@@ -262,33 +262,33 @@ function PreviewSection({
   const confidencePercent = Math.round(normalizedConfidence * 100);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-semibold text-slate-700">{section.title}</h4>
+          <h4 className="text-sm font-semibold text-slate-200">{section.title}</h4>
           <p className="text-xs text-slate-400">Confidence {confidencePercent}%</p>
         </div>
       </div>
       <div className="mt-3 space-y-2">
         {section.fields.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No data extracted for this section</p>
+          <p className="text-xs text-slate-500 italic">No data extracted for this section</p>
         ) : (
           section.fields.map((field) => (
-            <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
+            <div key={field.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
               {isEditing ? (
                 <input
                   type="text"
                   value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
                   onChange={(e) => onFieldChange?.(field.id, e.target.value)}
-                  className="mt-1 block w-full min-w-0 rounded border border-indigo-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="mt-1 block w-full min-w-0 rounded border border-[#00f0ff]/30 bg-[#0f172a] px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none focus:ring-2 focus:ring-[#00f0ff]/20"
                 />
               ) : Array.isArray(field.value) ? (
-                <p className="mt-1 text-sm text-slate-700">
+                <p className="mt-1 text-sm text-slate-300">
                   {field.value.length > 0 ? field.value.join(', ') : '(empty)'}
                 </p>
               ) : (
-                <p className="mt-1 text-sm text-slate-700">{field.value || '(empty)'}</p>
+                <p className="mt-1 text-sm text-slate-300">{field.value || '(empty)'}</p>
               )}
             </div>
           ))
@@ -305,7 +305,7 @@ function AttachmentChips({ attachments }: { attachments: IntakeAttachment[] }) {
       {attachments.map((attachment) => (
         <span
           key={attachment.id}
-          className="inline-flex items-center space-x-2 rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur"
+          className="inline-flex items-center space-x-2 rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300 shadow-sm ring-1 ring-white/10 backdrop-blur"
         >
           <Paperclip className="h-3 w-3" />
           <span className="font-medium">{attachment.name}</span>

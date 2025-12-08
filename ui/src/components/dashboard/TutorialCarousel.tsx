@@ -78,7 +78,7 @@ export function TutorialCarousel({ open, onClose, onStart }: TutorialCarouselPro
   return (
     <Dialog open={open} onOpenChange={(isOpen) => (!isOpen ? onClose() : null)}>
       <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
-        <div className="relative bg-gradient-to-br from-primary-500 to-secondary-500 px-6 py-5 text-white">
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 px-6 py-5 text-white">
           <DialogHeader className="space-y-1">
             <DialogTitle className="text-white">
               🎉 Onboarding Complete! Ready to start?
@@ -95,7 +95,7 @@ export function TutorialCarousel({ open, onClose, onStart }: TutorialCarouselPro
             const Icon = current.icon!;
             return (
               <div className="mb-4 flex items-start gap-3">
-                <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#00f0ff]/10 text-[#00f0ff]">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
@@ -112,7 +112,7 @@ export function TutorialCarousel({ open, onClose, onStart }: TutorialCarouselPro
                   key={i}
                   aria-label={`Step ${i + 1}`}
                   className={`h-1.5 rounded-full transition-all ${
-                    i === step ? 'w-6 bg-indigo-600' : 'w-3 bg-slate-200'
+                    i === step ? 'w-6 bg-[#00f0ff]' : 'w-3 bg-slate-200'
                   }`}
                 />
               ))}

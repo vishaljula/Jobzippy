@@ -36,11 +36,11 @@ export function ChatComposer({
   const isSendDisabled = disabled || isProcessing || (value.trim().length === 0 && !attachment);
 
   return (
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur">
+    <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-md backdrop-blur">
       <div className="flex items-start gap-3">
         <button
           type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-400 shadow-sm transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           onClick={onAttachClick}
           disabled={disabled}
           aria-label="Attach resume"
@@ -48,7 +48,7 @@ export function ChatComposer({
           <Paperclip className="h-4 w-4" />
         </button>
         <textarea
-          className="min-h-[72px] flex-1 resize-none border-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed"
+          className="min-h-[72px] flex-1 resize-none border-none bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-0 disabled:cursor-not-allowed"
           placeholder={placeholder}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -64,14 +64,14 @@ export function ChatComposer({
         />
       </div>
       {attachment && (
-        <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2 text-xs text-indigo-500">
+        <div className="flex items-center justify-between rounded-2xl border border-[#00f0ff]/20 bg-[#00f0ff]/10 px-4 py-2 text-xs text-[#00f0ff]">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-indigo-500">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00f0ff]/20 text-[#00f0ff]">
               <Paperclip className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-semibold">{attachment.name}</p>
-              <p className="text-[11px] text-indigo-400">
+              <p className="font-semibold text-white">{attachment.name}</p>
+              <p className="text-[11px] text-[#00f0ff]/70">
                 {formatAttachmentSize(attachment.size)} · {attachment.mimeType}
               </p>
             </div>
@@ -79,7 +79,7 @@ export function ChatComposer({
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-indigo-500 hover:bg-indigo-100"
+            className="text-xs text-[#00f0ff] hover:bg-[#00f0ff]/10 hover:text-white"
             onClick={onRemoveAttachment}
             disabled={disabled}
           >
@@ -88,10 +88,10 @@ export function ChatComposer({
         </div>
       )}
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-slate-400">{hint}</span>
+        <span className="text-[11px] uppercase tracking-wide text-slate-500">{hint}</span>
         <Button
           size="sm"
-          className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-5 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600 disabled:opacity-60"
+          className="rounded-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] px-5 text-xs font-semibold text-white shadow-[0_0_15px_rgba(0,240,255,0.4)] transition hover:opacity-90 disabled:opacity-60 border-0"
           onClick={onSubmit}
           disabled={isSendDisabled}
         >

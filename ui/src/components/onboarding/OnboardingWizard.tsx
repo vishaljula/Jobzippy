@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ChatComposer, ChatMessage } from '@/components/chat';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/Logo';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useOnboardingChat } from '@/lib/onboarding';
 
@@ -172,35 +173,33 @@ export function OnboardingWizard({
   return (
     <div
       className={`fixed inset-0 z-40 flex items-center justify-center px-4 py-6 transition-all duration-300 ${
-        isVisible ? 'bg-black/30 backdrop-blur-sm opacity-100' : 'bg-black/0 opacity-0'
+        isVisible ? 'bg-[#020617]/80 backdrop-blur-sm opacity-100' : 'bg-black/0 opacity-0'
       }`}
     >
       <div
-        className={`relative flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 ${
+        className={`relative flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] shadow-2xl transition-all duration-300 ${
           isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
         }`}
       >
-        <header className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-indigo-50 via-white to-purple-50 px-6 py-4">
+        <header className="flex items-center justify-between border-b border-white/5 bg-[#0f172a]/95 px-6 py-4 backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow">
-              <Sparkles className="h-5 w-5" />
-            </div>
+            <Logo className="h-10 w-auto drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]" />
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Finish setting up Jobzippy</h2>
-              <p className="text-xs text-slate-500">{statusLabel}</p>
+              <h2 className="text-base font-semibold text-white">Finish setting up Jobzippy</h2>
+              <p className="text-xs text-slate-400">{statusLabel}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <p className="text-xs font-medium text-slate-500">Progress</p>
-              <p className="text-sm font-semibold text-slate-700">{progress.percentage}%</p>
+              <p className="text-sm font-semibold text-white">{progress.percentage}%</p>
             </div>
-            <div className="h-10 w-px bg-slate-200" />
+            <div className="h-10 w-px bg-white/10" />
             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-slate-400"
+              className="text-slate-400 hover:text-white hover:bg-white/5"
               aria-label="Close onboarding wizard"
             >
               <X className="h-4 w-4" />
@@ -208,41 +207,41 @@ export function OnboardingWizard({
           </div>
         </header>
 
-        <div className="grid h-[520px] grid-rows-[1fr_auto] gap-0 bg-white">
+        <div className="grid h-[520px] grid-rows-[1fr_auto] gap-0 bg-[#0f172a]">
           <div className="relative overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-100 to-transparent" />
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#00f0ff]/20 to-transparent" />
             <div className="h-full overflow-y-auto px-6 py-5 space-y-4">
               {isLoading ? (
                 <div className="flex h-48 flex-col items-center justify-center text-slate-400">
-                  <Loader2 className="mb-3 h-5 w-5 animate-spin" />
+                  <Loader2 className="mb-3 h-5 w-5 animate-spin text-[#00f0ff]" />
                   <p className="text-xs">Booting up your onboarding agent…</p>
                 </div>
               ) : (
                 <>
                   {!hasResume && (
-                    <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-600">
+                    <div className="rounded-2xl border border-dashed border-[#00f0ff]/30 bg-[#00f0ff]/5 px-4 py-3 text-sm text-[#00f0ff]">
                       Drop your resume or paste it in below—I’ll parse it and only ask about the
                       gaps.
                     </div>
                   )}
 
                   {pendingPrompt && !showCompletionCard && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      <span className="font-medium text-amber-900">Up next:</span> {pendingPrompt}
+                    <div className="rounded-xl border border-[#7000ff]/30 bg-[#7000ff]/10 px-3 py-2 text-xs text-[#a78bfa]">
+                      <span className="font-medium text-[#d8b4fe]">Up next:</span> {pendingPrompt}
                     </div>
                   )}
 
                   {showCompletionCard && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-700 shadow-sm">
-                      <h3 className="text-base font-semibold text-emerald-800">All set!</h3>
-                      <p className="mt-1 text-emerald-700">
+                    <div className="rounded-2xl border border-[#00ff9d]/20 bg-[#00ff9d]/10 p-4 text-sm text-[#00ff9d] shadow-[0_0_20px_rgba(0,255,157,0.1)]">
+                      <h3 className="text-base font-semibold text-white">All set!</h3>
+                      <p className="mt-1 text-[#00ff9d]/80">
                         Your answers are synced. Head to the dashboard to see your stats, or keep
                         chatting if you want to refine anything.
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button
                           size="sm"
-                          className="rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600"
+                          className="rounded-full bg-gradient-to-r from-[#00ff9d] to-[#00f0ff] text-[#020617] font-semibold hover:opacity-90 shadow-[0_0_15px_rgba(0,255,157,0.4)] border-0"
                           onClick={handleFinish}
                         >
                           View dashboard
@@ -250,7 +249,7 @@ export function OnboardingWizard({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          className="border-[#00ff9d]/30 text-[#00ff9d] hover:bg-[#00ff9d]/10 bg-transparent"
                           onClick={() => {
                             setCompletionVisible(false);
                             completionTriggeredRef.current = false;
@@ -266,7 +265,7 @@ export function OnboardingWizard({
                   {/* ... existing code ... */}
 
                   {sortedMessages.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-5 text-sm text-slate-400">
                       Say hello or upload your resume to get started. I’ll keep track of everything
                       we collect together.
                     </div>
@@ -284,7 +283,7 @@ export function OnboardingWizard({
                       ))}
                       {isThinking && (
                         <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin text-[#00f0ff]" />
                           Thinking through your last answer…
                         </div>
                       )}
@@ -296,8 +295,8 @@ export function OnboardingWizard({
             </div>
           </div>
 
-          <div className="border-t border-slate-200 bg-white px-5 py-4">
-            <div className="flex items-center justify-between pb-3 text-[11px] uppercase tracking-wide text-slate-400">
+          <div className="border-t border-white/5 bg-[#0f172a] px-5 py-4">
+            <div className="flex items-center justify-between pb-3 text-[11px] uppercase tracking-wide text-slate-500">
               <span>
                 Fields complete: {progress.completed}/{progress.total}
               </span>
@@ -308,13 +307,13 @@ export function OnboardingWizard({
                     onSkip();
                     onClose();
                   }}
-                  className="text-slate-400 transition hover:text-slate-600"
+                  className="text-slate-500 transition hover:text-white"
                 >
                   Skip for now
                 </button>
-                <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
+                <span className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
                   <span
-                    className="block h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+                    className="block h-full bg-gradient-to-r from-[#00f0ff] to-[#00ff9d] transition-all shadow-[0_0_10px_rgba(0,240,255,0.5)]"
                     style={{ width: `${progress.percentage}%` }}
                   />
                 </span>
@@ -323,7 +322,7 @@ export function OnboardingWizard({
                   onClick={() => {
                     startOver();
                   }}
-                  className="text-slate-400 transition hover:text-slate-600"
+                  className="text-slate-500 transition hover:text-white"
                 >
                   Start over
                 </button>

@@ -1,4 +1,13 @@
-import { Loader2, PenSquare, Briefcase, MapPin, Play, Square, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  Loader2,
+  PenSquare,
+  Briefcase,
+  MapPin,
+  Play,
+  Square,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { UserInfo } from '@/lib/types';
@@ -9,6 +18,7 @@ interface DashboardOverviewProps {
   user: UserInfo | null;
   onEditProfile: () => void;
   engineState: 'IDLE' | 'RUNNING' | 'PAUSED';
+  engineStatus?: string;
   onStartAgent: () => void;
   onStopAgent: () => void;
 }
@@ -115,8 +125,12 @@ function DonutChart({ stats }: DonutChartProps) {
         </svg>
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold text-white tracking-tight drop-shadow-lg">{total}</span>
-          <span className="text-[10px] uppercase tracking-wider font-medium text-slate-400 mt-1">Total apps</span>
+          <span className="text-4xl font-bold text-white tracking-tight drop-shadow-lg">
+            {total}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider font-medium text-slate-400 mt-1">
+            Total apps
+          </span>
           {(activeJobs > 0 || pendingJobs > 0) && (
             <span className="text-[10px] text-[#00f0ff] mt-1 font-medium drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]">
               {activeJobs + pendingJobs} active
@@ -132,12 +146,17 @@ function DonutChart({ stats }: DonutChartProps) {
               <span
                 className="h-3 w-3 rounded-full shadow-[0_0_8px_currentColor]"
                 style={{
-                  background: segment.label === 'Applied' ? 'linear-gradient(135deg, #00f0ff, #00ff9d)' :
-                    segment.label === 'Failed' ? 'linear-gradient(135deg, #7000ff, #ff0055)' :
-                      '#64748b'
+                  background:
+                    segment.label === 'Applied'
+                      ? 'linear-gradient(135deg, #00f0ff, #00ff9d)'
+                      : segment.label === 'Failed'
+                        ? 'linear-gradient(135deg, #7000ff, #ff0055)'
+                        : '#64748b',
                 }}
               />
-              <span className="text-slate-300 font-medium group-hover:text-white transition-colors">{segment.label}</span>
+              <span className="text-slate-300 font-medium group-hover:text-white transition-colors">
+                {segment.label}
+              </span>
             </div>
             <span className="font-bold text-white font-mono">{segment.value}</span>
           </li>
@@ -258,10 +277,12 @@ function formatAppliedDate(timestamp: number | undefined): string {
 
 function ControlCard({
   engineState,
+  engineStatus,
   onStart,
-  onStop
+  onStop,
 }: {
   engineState: 'IDLE' | 'RUNNING' | 'PAUSED';
+  engineStatus?: string;
   onStart: () => void;
   onStop: () => void;
 }) {
@@ -271,22 +292,25 @@ function ControlCard({
   return (
     <div className="relative group w-full">
       {/* Glow Effect */}
-      <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-25 group-hover:opacity-40 transition duration-500" />
+      <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
 
       <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-6 rounded-2xl flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className={`h-12 w-12 rounded-full flex items-center justify-center ${isRunning ? 'bg-[#00ff9d]/20 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.3)]' : 'bg-slate-800 text-slate-400'}`}>
+          <div
+            className={`h-12 w-12 rounded-full flex items-center justify-center ${isRunning ? 'bg-[#00ff9d]/20 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.3)]' : 'bg-slate-800 text-slate-400'}`}
+          >
             {isRunning ? <CheckCircle2 className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
           </div>
           <div>
             <h3 className="text-lg font-bold text-white tracking-tight">
-              Agent Status: <span className={isRunning ? 'text-[#00ff9d]' : 'text-slate-400'}>
+              Agent Status:{' '}
+              <span className={isRunning ? 'text-[#00ff9d]' : 'text-slate-400'}>
                 {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Stopped'}
               </span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               {isRunning
-                ? 'Jobzippy is actively searching and applying to jobs.'
+                ? engineStatus || 'Jobzippy is actively searching and applying to jobs.'
                 : 'Start the agent to begin your job search automation.'}
             </p>
           </div>
@@ -321,7 +345,14 @@ function ControlCard({
   );
 }
 
-export function DashboardOverview({ user, onEditProfile, engineState, onStartAgent, onStopAgent }: DashboardOverviewProps) {
+export function DashboardOverview({
+  user,
+  onEditProfile,
+  engineState,
+  engineStatus,
+  onStartAgent,
+  onStopAgent,
+}: DashboardOverviewProps) {
   const { inProgress, history, stats, isLoading, error, refresh } = useApplicationsData();
   const displayName = user?.given_name ?? user?.name?.split(' ')[0] ?? 'Job seeker';
   const profileSummary = [
@@ -361,6 +392,7 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
       {/* Control Center */}
       <ControlCard
         engineState={engineState}
+        engineStatus={engineStatus}
         onStart={onStartAgent}
         onStop={onStopAgent}
       />
@@ -368,12 +400,16 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
       <div className="grid gap-6 md:grid-cols-2">
         {/* Pipeline Card */}
         <div className="group relative">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-[32px] blur opacity-25 group-hover:opacity-50 transition duration-500" />
+          <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
           <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px] h-full">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#00f0ff] mb-1">Pipeline</p>
-                <h2 className="text-xl font-bold text-white tracking-tight">Where your apps stand</h2>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#00f0ff] mb-1">
+                  Pipeline
+                </p>
+                <h2 className="text-xl font-bold text-white tracking-tight">
+                  Where your apps stand
+                </h2>
               </div>
             </div>
 
@@ -395,11 +431,13 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
 
         {/* Profile Card */}
         <div className="group relative">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#7000ff] to-[#00ff9d] rounded-[32px] blur opacity-25 group-hover:opacity-50 transition duration-500" />
+          <div className="absolute -inset-1 bg-gradient-to-r from-[#7000ff] to-[#00ff9d] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
           <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px] h-full flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#7000ff] mb-1">Profile</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#7000ff] mb-1">
+                  Profile
+                </p>
                 <h2 className="text-xl font-bold text-white tracking-tight">{displayName}</h2>
               </div>
               <Button
@@ -427,7 +465,9 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
                     )}
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">{item.label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                      {item.label}
+                    </p>
                     <p className="font-medium text-white text-sm">{item.value}</p>
                   </div>
                 </div>
@@ -435,7 +475,8 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
             </div>
 
             <p className="mt-8 text-xs text-slate-500 leading-relaxed">
-              All edits flow through the onboarding chat agent so everything stays in sync with your vault.
+              All edits flow through the onboarding chat agent so everything stays in sync with your
+              vault.
             </p>
           </div>
         </div>
@@ -443,11 +484,13 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
 
       {/* Live Matches Card */}
       <div className="group relative">
-        <div className="absolute -inset-1 bg-gradient-to-r from-[#00ff9d] to-[#00f0ff] rounded-[32px] blur opacity-25 group-hover:opacity-50 transition duration-500" />
+        <div className="absolute -inset-1 bg-gradient-to-r from-[#00ff9d] to-[#00f0ff] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
         <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px]">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#00ff9d] mb-1">Live matches</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#00ff9d] mb-1">
+                Live matches
+              </p>
               <h2 className="text-xl font-bold text-white tracking-tight">Live job match status</h2>
             </div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white text-slate-900 px-4 py-1.5 text-xs font-bold shadow-[0_0_15px_rgba(255,255,255,0.2)]">
@@ -499,7 +542,9 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
                     return (
                       <tr key={job.id} className="group transition-colors hover:bg-white/[0.02]">
                         <td className="py-4 pl-4">
-                          <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">{job.company}</p>
+                          <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">
+                            {job.company}
+                          </p>
                           <p className="text-xs font-medium text-slate-400 mt-0.5">{job.title}</p>
                         </td>
                         <td className="py-4 text-slate-300 font-medium">{job.location ?? '—'}</td>
@@ -532,7 +577,9 @@ export function DashboardOverview({ user, onEditProfile, engineState, onStartAge
                           <Briefcase className="h-6 w-6 text-slate-500" />
                         </div>
                         <p className="text-slate-400 font-medium">No applications yet</p>
-                        <p className="text-xs text-slate-500">Start the agent to begin applying to jobs</p>
+                        <p className="text-xs text-slate-500">
+                          Start the agent to begin applying to jobs
+                        </p>
                       </div>
                     </td>
                   </tr>
