@@ -8,6 +8,7 @@ import {
   Bell,
   ClipboardCheck,
   Upload,
+  CreditCard,
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -20,6 +21,14 @@ import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
 import { SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
 import { logger } from '@/lib/logger';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
@@ -116,16 +125,21 @@ function App() {
   const tabToastIdRef = useRef<string | number | null>(null);
 
   // Subscription state
-  const [, setSubscriptionStatus] = useState<{
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{
     status: string;
     tier: string;
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
+    cancelAtPeriodEnd?: boolean;
+    currentPeriodEnd?: { toDate: () => Date };
   } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(!isAuthenticated); // Start with pricing if not authenticated
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
   const [signInLoading, setSignInLoading] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
@@ -148,7 +162,7 @@ function App() {
             data: envInfo,
           },
         })
-        .catch(() => { });
+        .catch(() => {});
     } catch {
       // ignore if messaging is not available yet
     }
@@ -254,6 +268,19 @@ function App() {
       },
     ];
   }, [handleResumeOnboarding, isAuthenticated, isWizardOpen, navHighlight]);
+
+  const navItems = useMemo(
+    () => [
+      ...NAV_ITEMS,
+      {
+        key: 'subscription',
+        icon: CreditCard,
+        label: 'Subscription',
+        onClick: () => setManageOpen(true),
+      },
+    ],
+    []
+  );
 
   const {
     jobs: _jobs,
@@ -419,9 +446,9 @@ function App() {
         setSubscriptionChecked(true);
 
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
-          // No subscription - open Stripe checkout
+          // No subscription - keep pricing visible and open Stripe checkout
           logger.log('[Subscription] No subscription, opening Stripe...');
-          setShowPricing(false);
+          setShowPricing(true);
           setCheckoutLoading(true);
 
           try {
@@ -447,7 +474,7 @@ function App() {
           } catch (error) {
             logger.error('[Subscription] Failed to create checkout:', error);
             toast.error('Failed to open payment page');
-            setShowPricing(true); // Go back to pricing on error
+            setShowPricing(true); // Stay on pricing on error
           } finally {
             setCheckoutLoading(false);
           }
@@ -463,7 +490,7 @@ function App() {
         // still mark as checked and show dashboard - let user try from there
         // Don't send them back to pricing page!
         setSubscriptionChecked(true);
-        setShowPricing(false);
+        setShowPricing(true);
 
         toast.error('Could not verify subscription status. Please try again from dashboard.');
       }
@@ -621,7 +648,7 @@ function App() {
             },
           },
         })
-        .catch(() => { });
+        .catch(() => {});
 
       if (isDev) {
         console.log('[Jobzippy] Dev mode timeout: Forcing auth success');
@@ -681,7 +708,7 @@ function App() {
           if (!allMissing) {
             chrome.runtime.sendMessage(
               { type: 'START_AGENT', data: { maxApplications: 15 } },
-              () => { }
+              () => {}
             );
           }
         }
@@ -690,11 +717,68 @@ function App() {
     chrome.runtime.onMessage.addListener(handler);
 
     // Probe existing tabs first (in case user already has tabs open)
-    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => { });
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
   }, [user]);
   const stopAgent = useCallback(() => {
-    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => { });
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
   }, []);
+
+  const handleOpenPortal = useCallback(async () => {
+    setPortalLoading(true);
+    try {
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const app = getFirebaseApp();
+      const functions = getFunctions(app);
+      const createPortal = httpsCallable(functions, 'createPortalSession');
+      const result = await createPortal({
+        returnUrl: 'https://jobzippy.ai/welcome',
+      });
+      const { url } = result.data as { url?: string };
+      if (url) {
+        chrome.tabs.create({ url });
+      } else {
+        toast.error('No portal URL returned');
+      }
+    } catch (error) {
+      logger.error('[Subscription] Failed to open billing portal:', error);
+      toast.error('Failed to open billing portal');
+    } finally {
+      setPortalLoading(false);
+    }
+  }, []);
+
+  const handleCancelSubscription = useCallback(async () => {
+    if (!subscriptionStatus?.stripeSubscriptionId) {
+      toast.error('No active subscription to cancel');
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const app = getFirebaseApp();
+      const functions = getFunctions(app);
+      const cancel = httpsCallable(functions, 'cancelSubscription');
+      await cancel({});
+      toast.success('Subscription cancellation requested');
+      setSubscriptionStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              cancelAtPeriodEnd: true,
+              status: 'canceled',
+            }
+          : prev
+      );
+      setShowPricing(true);
+    } catch (error) {
+      logger.error('[Subscription] Failed to cancel subscription:', error);
+      toast.error('Failed to cancel subscription');
+    } finally {
+      setCancelLoading(false);
+    }
+  }, [subscriptionStatus]);
 
   // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
   useEffect(() => {
@@ -920,14 +1004,14 @@ function App() {
         statusLabel={null}
         history={historyContent}
         composer={composerContent}
-        navItems={NAV_ITEMS}
+        navItems={navItems}
         secondaryNavItems={onboardingNavItems}
         avatar={
           user
             ? {
-              src: user.picture,
-              alt: user.name,
-            }
+                src: user.picture,
+                alt: user.name,
+              }
             : null
         }
         railFooter={
@@ -941,6 +1025,49 @@ function App() {
           </button>
         }
       />
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="bg-[#0f172a] border border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage subscription</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              View your current plan or cancel your subscription.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-300">Status</span>
+              <span className="font-semibold">
+                {subscriptionStatus?.status ?? 'No subscription'}
+                {subscriptionStatus?.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}
+              </span>
+            </div>
+            {subscriptionStatus?.currentPeriodEnd && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">Current period ends</span>
+                <span className="font-semibold">
+                  {subscriptionStatus.currentPeriodEnd.toDate().toLocaleDateString()}
+                </span>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <button
+              onClick={handleOpenPortal}
+              disabled={portalLoading}
+              className="w-full rounded-lg bg-gradient-to-r from-[#00f0ff] to-[#7000ff] px-4 py-2.5 text-sm font-semibold shadow-[0_10px_25px_rgba(0,240,255,0.25)] hover:opacity-90 transition disabled:opacity-50"
+            >
+              {portalLoading ? 'Opening portal...' : 'Open billing portal'}
+            </button>
+            <button
+              onClick={handleCancelSubscription}
+              disabled={cancelLoading || !subscriptionStatus?.stripeSubscriptionId}
+              className="w-full rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white border border-white/20 hover:bg-white/15 transition disabled:opacity-50"
+            >
+              {cancelLoading ? 'Cancelling...' : 'Cancel subscription'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <OnboardingWizard
         open={isWizardOpen}
         onClose={() => {
@@ -952,7 +1079,7 @@ function App() {
         autoCloseOnComplete={!manualWizardOpen}
       />
       <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
-      <TutorialCarousel open={false} onClose={() => { }} />
+      <TutorialCarousel open={false} onClose={() => {}} />
       <TutorialCarousel
         open={showTutorial && !isWizardOpen}
         onClose={handleDismissTutorial}

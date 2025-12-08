@@ -251,3 +251,80 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
   }
 });
 
+/**
+ * Create a Stripe Billing Portal session for the user
+ */
+export const createPortalSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const userId = context.auth.uid;
+  const returnUrl = data.returnUrl || 'https://jobzippy.ai/welcome';
+
+  const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+  const sub = userDoc.data()?.subscription;
+  const customerId = sub?.stripeCustomerId;
+
+  if (!customerId) {
+    throw new functions.https.HttpsError('failed-precondition', 'No Stripe customer found');
+  }
+
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId as string,
+      return_url: returnUrl,
+    });
+    return { url: session.url };
+  } catch (error) {
+    functions.logger.error('Error creating billing portal session:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to create billing portal session');
+  }
+});
+
+/**
+ * Cancel the user's subscription at period end
+ */
+export const cancelSubscription = functions.https.onCall(async (_data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const userId = context.auth.uid;
+  const userDoc = await admin.firestore().doc(`users/${userId}`).get();
+  const sub = userDoc.data()?.subscription;
+  const subscriptionId = sub?.stripeSubscriptionId;
+
+  if (!subscriptionId) {
+    throw new functions.https.HttpsError('failed-precondition', 'No active subscription to cancel');
+  }
+
+  try {
+    const updated = await stripe.subscriptions.update(subscriptionId as string, {
+      cancel_at_period_end: true,
+    });
+
+    await admin
+      .firestore()
+      .doc(`users/${userId}`)
+      .set(
+        {
+          subscription: {
+            status: updated.status,
+            cancelAtPeriodEnd: updated.cancel_at_period_end,
+            currentPeriodEnd: admin.firestore.Timestamp.fromDate(
+              new Date(updated.current_period_end * 1000)
+            ),
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    return { status: updated.status, cancelAtPeriodEnd: updated.cancel_at_period_end };
+  } catch (error) {
+    functions.logger.error('Error canceling subscription:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to cancel subscription');
+  }
+});
+
