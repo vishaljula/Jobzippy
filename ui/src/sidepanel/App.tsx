@@ -144,6 +144,24 @@ function App() {
   const countdownIntervalRef = useRef<number | null>(null);
   const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
 
+  const renderNeonToast = useCallback(
+    (message: string, tone: 'info' | 'error' | 'success' = 'info') => (
+      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0f172a] px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
+        <div
+          className={`h-2.5 w-2.5 rounded-full ${
+            tone === 'error'
+              ? 'bg-[#ff4d6d] shadow-[0_0_12px_rgba(255,77,109,0.6)]'
+              : tone === 'success'
+                ? 'bg-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.6)]'
+                : 'bg-[#00f0ff] shadow-[0_0_12px_rgba(0,240,255,0.6)]'
+          }`}
+        />
+        <span className="text-sm font-semibold text-slate-50">{message}</span>
+      </div>
+    ),
+    []
+  );
+
   // Log environment mode once so we can verify dev vs production behavior
   useEffect(() => {
     const envInfo = {
@@ -328,7 +346,7 @@ function App() {
     return () => {
       chrome.runtime.onMessage.removeListener(handler);
     };
-  }, [engineState]);
+  }, [engineState, renderNeonToast]);
 
   // Unified toast management - handles all toast states in one place
   useEffect(() => {
@@ -421,153 +439,216 @@ function App() {
 
   // After sign-in: Check subscription and open Stripe if needed
   useEffect(() => {
+    logger.log(
+      '[Subscription] 🔄 Subscription check effect triggered - isAuthenticated:',
+      isAuthenticated,
+      'user:',
+      !!user
+    );
+
     if (!isAuthenticated || !user) {
-      // Only show pricing if we're sure they're not authenticated
-      // Don't show pricing during the brief moment when isAuthenticated is true but user isn't loaded yet
       if (!isAuthenticated) {
+        logger.log('[Subscription] Not authenticated, showing pricing page');
         setShowPricing(true);
+      } else {
+        logger.log('[Subscription] Authenticated but no user object yet, waiting...');
       }
       return;
     }
 
     const checkSubscription = async () => {
+      logger.log('[Subscription] 🔍 Starting subscription check for user:', user.email);
+
       try {
-        const { getFirestoreDb } = await import('@/lib/firebase/client');
+        const { getFirestoreDb, getFirebaseApp } = await import('@/lib/firebase/client');
+        const { getAuth } = await import('firebase/auth');
         const { doc, getDoc } = await import('firebase/firestore');
 
-        const firestore = getFirestoreDb();
-        const userDocRef = doc(firestore, `users/${user.sub}`);
-        const userDoc = await getDoc(userDocRef);
-        const sub = userDoc.data()?.subscription;
+        const firebaseApp = getFirebaseApp();
+        const auth = getAuth(firebaseApp);
+        const firebaseUid = auth.currentUser?.uid;
 
-        logger.log('[Subscription] Checked status for user:', user.sub);
-        logger.log('[Subscription] Subscription object:', sub);
+        logger.log(
+          '[Subscription] Firebase currentUser:',
+          auth.currentUser?.email,
+          'UID:',
+          firebaseUid
+        );
+
+        if (!firebaseUid) {
+          logger.error(
+            '[Subscription] ❌ No Firebase UID - user is authenticated with Google but not synced to Firebase'
+          );
+          setSubscriptionChecked(true);
+          setShowPricing(true);
+          toast.error('Could not verify subscription. Please sign out and sign back in.');
+          return;
+        }
+
+        const firestore = getFirestoreDb();
+        const userDocPath = `users/${firebaseUid}`;
+        logger.log('[Subscription] 📖 Reading Firestore doc:', userDocPath);
+
+        const userDocRef = doc(firestore, userDocPath);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+          logger.log('[Subscription] ⚠️ User doc does not exist in Firestore');
+        }
+
+        const userData = userDoc.data();
+        const sub = userData?.subscription;
+
+        logger.log(
+          '[Subscription] 📋 Full user data from Firestore:',
+          JSON.stringify(userData, null, 2)
+        );
+        logger.log('[Subscription] 📋 Subscription object:', JSON.stringify(sub, null, 2));
+
         setSubscriptionStatus(sub);
         setSubscriptionChecked(true);
 
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
-          // No subscription - keep pricing visible and open Stripe checkout
-          logger.log('[Subscription] No subscription, opening Stripe...');
+          logger.log('[Subscription] ❌ No active subscription found, showing pricing page');
+          logger.log('[Subscription] Sub status was:', sub?.status || 'NONE');
           setShowPricing(true);
-          setCheckoutLoading(true);
-
-          try {
-            const { getFirebaseApp } = await import('@/lib/firebase/client');
-            const { getFunctions, httpsCallable } = await import('firebase/functions');
-
-            const firebaseApp = getFirebaseApp();
-            const functions = getFunctions(firebaseApp);
-            const createCheckout = httpsCallable(functions, 'createCheckoutSession');
-
-            toast.info('Opening payment page...');
-
-            const result = await createCheckout({
-              successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
-              cancelUrl: 'https://jobzippy.ai/welcome',
-            });
-
-            const { url } = result.data as { url: string; sessionId: string };
-            logger.log('[Subscription] Opening Stripe checkout:', url);
-
-            chrome.tabs.create({ url });
-            toast.info('Complete payment in the opened tab');
-          } catch (error) {
-            logger.error('[Subscription] Failed to create checkout:', error);
-            toast.error('Failed to open payment page');
-            setShowPricing(true); // Stay on pricing on error
-          } finally {
-            setCheckoutLoading(false);
-          }
         } else {
-          // Has subscription - show dashboard
-          logger.log('[Subscription] Active subscription, showing dashboard');
+          logger.log(
+            '[Subscription] ✅ Active subscription found! Status:',
+            sub.status,
+            '- Showing dashboard'
+          );
           setShowPricing(false);
         }
       } catch (error) {
-        logger.error('[Subscription] Error checking status:', error);
-
-        // If error checking subscription (e.g., stale token, permissions),
-        // still mark as checked and show dashboard - let user try from there
-        // Don't send them back to pricing page!
+        logger.error('[Subscription] ❌ Error checking subscription status:', error);
         setSubscriptionChecked(true);
         setShowPricing(true);
 
-        toast.error('Could not verify subscription status. Please try again from dashboard.');
+        toast.custom(
+          () => renderNeonToast('Could not verify subscription status. Please try again.', 'error'),
+          {
+            id: 'sub-check-error',
+            duration: 5000,
+          }
+        );
       }
     };
 
     checkSubscription();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, renderNeonToast, user]);
 
-  // Listen for subscription updates from success page
+  // Listen for subscription updates from success page (via background script)
   useEffect(() => {
-    const handler = async (message: { type: string; sessionId?: string }) => {
-      if (message.type === 'SUBSCRIPTION_ACTIVE') {
-        logger.log('[Subscription] Received activation message from success page');
-        // Refresh subscription status with retry (webhook might be slow)
-        if (user) {
-          const maxRetries = 5;
-          let retryCount = 0;
+    logger.log('[Subscription] 🎧 Setting up message listener for SUBSCRIPTION_ACTIVE');
 
-          const checkWithRetry = async () => {
-            try {
-              const { getFirestoreDb } = await import('@/lib/firebase/client');
-              const { doc, getDoc } = await import('firebase/firestore');
+    // Activation handler function - FAST PATH: call finalize immediately, no retries
+    const handleSubscriptionActivation = async (sessionId?: string) => {
+      logger.log('[Subscription] 🚀 Processing subscription activation, sessionId:', sessionId);
 
-              const firestore = getFirestoreDb();
-              const userDocRef = doc(firestore, `users/${user.sub}`);
-              const userDoc = await getDoc(userDocRef);
-              const sub = userDoc.data()?.subscription;
+      // Show loading state immediately - hide pricing page
+      setShowPricing(false);
+      setSubscriptionChecked(false); // This will show the "Checking subscription..." loader
 
-              logger.log('[Subscription] Retry', retryCount + 1, '- Sub status:', sub?.status);
+      if (!user) {
+        logger.error('[Subscription] ❌ No user context when processing activation');
+        setShowPricing(true);
+        return;
+      }
 
-              setSubscriptionStatus(sub);
-              if (sub?.status === 'active' || sub?.status === 'trialing') {
-                setShowPricing(false);
-                toast.success('Trial started! Welcome to JobZippy 🎉');
-                return true; // Success
-              }
+      if (!sessionId) {
+        logger.error('[Subscription] ❌ No sessionId provided');
+        setShowPricing(true);
+        return;
+      }
 
-              return false; // Not ready yet
-            } catch (error) {
-              logger.error('[Subscription] Error refreshing status:', error);
-              return false;
-            }
-          };
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getAuth } = await import('firebase/auth');
+      const firebaseApp = getFirebaseApp();
+      const auth = getAuth(firebaseApp);
+      const firebaseUid = auth.currentUser?.uid;
 
-          // Try immediately
-          const success = await checkWithRetry();
+      if (!firebaseUid) {
+        logger.error('[Subscription] ❌ No Firebase UID during activation');
+        setShowPricing(true);
+        return;
+      }
 
-          // If not successful, retry every 2 seconds up to 5 times
-          if (!success) {
-            const interval = setInterval(async () => {
-              retryCount++;
-              console.log(
-                '[Subscription] Webhook may be slow, retrying...',
-                retryCount,
-                '/',
-                maxRetries
-              );
+      logger.log('[Subscription] Firebase UID:', firebaseUid);
 
-              const success = await checkWithRetry();
-              if (success || retryCount >= maxRetries) {
-                clearInterval(interval);
-                if (!success) {
-                  console.warn(
-                    '[Subscription] Max retries reached, subscription may not be active yet'
-                  );
-                  toast.info("Please refresh if your subscription doesn't activate");
-                }
-              }
-            }, 2000);
-          }
+      try {
+        // Call finalize IMMEDIATELY - don't wait for webhook
+        logger.log('[Subscription] 📞 Calling finalizeSubscriptionFromSession immediately...');
+        const { getFunctions, httpsCallable } = await import('firebase/functions');
+        const functions = getFunctions(firebaseApp);
+        const finalize = httpsCallable(functions, 'finalizeSubscriptionFromSession');
+        const result = await finalize({ sessionId });
+        logger.log('[Subscription] ✅ Finalize result:', result);
+
+        // Read the subscription we just wrote
+        const { getFirestoreDb } = await import('@/lib/firebase/client');
+        const { doc, getDoc } = await import('firebase/firestore');
+        const firestore = getFirestoreDb();
+        const userDocRef = doc(firestore, `users/${firebaseUid}`);
+        const userDoc = await getDoc(userDocRef);
+        const sub = userDoc.data()?.subscription;
+
+        logger.log('[Subscription] Subscription status:', sub?.status);
+        setSubscriptionStatus(sub);
+
+        if (sub?.status === 'active' || sub?.status === 'trialing') {
+          logger.log('[Subscription] 🎉 Subscription activated! Showing dashboard.');
+          setSubscriptionChecked(true);
+          toast.custom(() => renderNeonToast('Trial started! Welcome to JobZippy 🎉', 'success'), {
+            id: 'sub-activated',
+            duration: 4000,
+          });
+        } else {
+          logger.error('[Subscription] ❌ Unexpected subscription status:', sub?.status);
+          setShowPricing(true);
+          setSubscriptionChecked(true);
         }
+      } catch (err) {
+        logger.error('[Subscription] ❌ Finalize failed:', err);
+        toast.custom(
+          () => renderNeonToast('Failed to activate subscription. Please try again.', 'error'),
+          { id: 'sub-error', duration: 5000 }
+        );
+        setShowPricing(true);
+        setSubscriptionChecked(true);
       }
     };
 
-    chrome.runtime.onMessageExternal.addListener(handler);
-    return () => chrome.runtime.onMessageExternal.removeListener(handler);
-  }, [user]);
+    // Check for pending activation in chrome.storage (in case sidepanel was closed during payment)
+    chrome.storage.local.get('pendingSubscriptionActivation').then((result) => {
+      const pending = result.pendingSubscriptionActivation;
+      if (pending && pending.timestamp > Date.now() - 5 * 60 * 1000) {
+        logger.log('[Subscription] 🔔 Found pending activation in storage:', pending);
+        handleSubscriptionActivation(pending.sessionId);
+        chrome.storage.local.remove('pendingSubscriptionActivation');
+      }
+    });
+
+    // Listen for forwarded message from background script
+    const handler = (message: { type: string; sessionId?: string; source?: string }) => {
+      logger.log('[Subscription] 📨 Received message:', message.type);
+      if (message.type === 'SUBSCRIPTION_ACTIVE_FROM_WEBSITE') {
+        logger.log(
+          '[Subscription] ✅ SUBSCRIPTION_ACTIVE received from website! sessionId:',
+          message.sessionId
+        );
+        handleSubscriptionActivation(message.sessionId);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handler);
+    logger.log('[Subscription] ✅ Internal message listener registered');
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handler);
+      logger.log('[Subscription] 🔇 Message listener removed');
+    };
+  }, [renderNeonToast, user]);
 
   // Poll engine status on mount
   useEffect(() => {
@@ -579,10 +660,74 @@ function App() {
     });
   }, []);
 
-  const handleStartTrial = useCallback(() => {
-    logger.log('[Subscription] Closing pricing, showing main app with sign-in...');
-    setShowPricing(false);
-  }, []);
+  const handleStartTrial = useCallback(async () => {
+    logger.log('[Subscription] 🚀 Start trial button clicked');
+    logger.log(
+      '[Subscription] Current state - isAuthenticated:',
+      isAuthenticated,
+      'user:',
+      user?.email
+    );
+
+    if (!isAuthenticated) {
+      logger.log('[Subscription] User not authenticated, closing pricing to show sign-in page');
+      setShowPricing(false);
+      return;
+    }
+
+    logger.log('[Subscription] User is authenticated, proceeding to create checkout session...');
+    setCheckoutLoading(true);
+
+    try {
+      logger.log('[Subscription] 📞 Calling createCheckoutSession Cloud Function...');
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const { getAuth } = await import('firebase/auth');
+
+      const firebaseApp = getFirebaseApp();
+      const auth = getAuth(firebaseApp);
+      const functions = getFunctions(firebaseApp);
+
+      logger.log('[Subscription] Firebase UID for checkout:', auth.currentUser?.uid);
+      logger.log('[Subscription] Firebase user email:', auth.currentUser?.email);
+
+      const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+      const toastId = 'checkout';
+      toast.custom(() => renderNeonToast('Opening payment page...'), {
+        id: toastId,
+        duration: Infinity,
+      });
+
+      const result = await createCheckout({
+        successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+        cancelUrl: 'https://jobzippy.ai/welcome',
+      });
+
+      logger.log('[Subscription] ✅ Checkout session created successfully');
+      const { url, sessionId } = result.data as { url: string; sessionId: string };
+      logger.log('[Subscription] Session ID:', sessionId);
+      logger.log('[Subscription] 🌐 Opening Stripe checkout URL:', url);
+
+      chrome.tabs.create({ url });
+      toast.custom(() => renderNeonToast('Complete payment in the opened tab'), {
+        id: toastId,
+        duration: 6000,
+      });
+    } catch (error) {
+      logger.error('[Subscription] ❌ Failed to create checkout session:', error);
+      if (error instanceof Error) {
+        logger.error('[Subscription] Error details:', error.message, error.stack);
+      }
+      toast.custom(() => renderNeonToast('Failed to open payment page', 'error'), {
+        id: 'checkout',
+        duration: 6000,
+      });
+      setShowPricing(true);
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }, [isAuthenticated, renderNeonToast, user]);
 
   const startAgent = useCallback(async () => {
     // Preflight auth check: probe existing tabs, then open search URLs directly
@@ -824,9 +969,32 @@ function App() {
     }
   }, []);
 
+  const neonToaster = (
+    <Toaster
+      position="top-right"
+      theme="dark"
+      richColors
+      visibleToasts={1}
+      toastOptions={{
+        classNames: {
+          toast:
+            'bg-[#0f172a] text-slate-50 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)] font-semibold rounded-2xl',
+          title: 'text-slate-50 text-sm',
+          description: 'text-slate-400 text-xs',
+          actionButton:
+            'bg-[#00f0ff] text-slate-900 font-semibold rounded-lg px-3 py-1 shadow-[0_10px_25px_rgba(0,240,255,0.35)]',
+          cancelButton: 'text-slate-300',
+          closeButton:
+            'text-slate-300 hover:text-white rounded-full border border-white/10 bg-white/5',
+        },
+      }}
+    />
+  );
+
   if (appLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
+        {neonToaster}
         <div className="text-center">
           <div className="relative mx-auto mb-6 h-16 w-16">
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
@@ -844,6 +1012,7 @@ function App() {
   if (isAuthenticated && !subscriptionChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
+        {neonToaster}
         <div className="text-center">
           <div className="relative mx-auto mb-6 h-16 w-16">
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
@@ -863,7 +1032,7 @@ function App() {
   if (showPricing) {
     return (
       <>
-        <Toaster position="top-right" />
+        {neonToaster}
         <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
       </>
     );
@@ -887,20 +1056,11 @@ function App() {
     </div>
   );
 
-  // Pricing mock removed; focusing on main dashboard only
-
-  const composerContent = (
-    <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 text-sm text-slate-500 shadow-sm">
-      Jobzippy automatically searches and applies once your onboarding answers are synced. Use the
-      Onboarding button in the rail to update your profile via the chat agent at any time.
-    </div>
-  );
-
   // Show sign-in page without side menu if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
-        <Toaster position="top-right" />
+        {neonToaster}
         <div className="w-full max-w-md text-center space-y-8">
           {/* Logo with neon glow */}
           <div className="relative mx-auto h-20 w-20">
@@ -997,13 +1157,12 @@ function App() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      {neonToaster}
       <LayoutShell
         title="Jobzippy"
         subtitle="Your agentic AI for job search"
         statusLabel={null}
         history={historyContent}
-        composer={composerContent}
         navItems={navItems}
         secondaryNavItems={onboardingNavItems}
         avatar={

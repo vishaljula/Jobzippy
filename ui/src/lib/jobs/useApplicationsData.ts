@@ -1,6 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { JobRecord, JobStats } from './store-types';
 import { getDashboardJobs, getJobStats } from './store';
+import { getFirebaseApp, getFirestoreDb } from '../firebase/client';
+import { getAuth } from 'firebase/auth';
+import { doc, updateDoc, increment } from 'firebase/firestore';
+
+/**
+ * Increment the monthly applications counter in Firestore
+ */
+async function incrementUsageCounter(): Promise<void> {
+  try {
+    const app = getFirebaseApp();
+    const auth = getAuth(app);
+    const uid = auth.currentUser?.uid;
+
+    if (!uid) {
+      console.warn('[useApplicationsData] No Firebase UID, cannot increment usage counter');
+      return;
+    }
+
+    const db = getFirestoreDb();
+    const userDocRef = doc(db, `users/${uid}`);
+
+    await updateDoc(userDocRef, {
+      'usage.applications_this_month': increment(1),
+      'usage.last_application_at': Date.now(),
+    });
+
+    console.log('[useApplicationsData] ✅ Incremented applications_this_month counter');
+  } catch (error) {
+    console.error('[useApplicationsData] Failed to increment usage counter:', error);
+  }
+}
 
 interface UseApplicationsDataResult {
   inProgress: JobRecord[];
@@ -24,10 +55,7 @@ export function useApplicationsData(): UseApplicationsDataResult {
       setError(null);
       console.log('[useApplicationsData] Loading data from IndexedDB...');
 
-      const [dashboardData, jobStats] = await Promise.all([
-        getDashboardJobs(),
-        getJobStats(),
-      ]);
+      const [dashboardData, jobStats] = await Promise.all([getDashboardJobs(), getJobStats()]);
 
       console.log('[useApplicationsData] Loaded data:', {
         inProgress: dashboardData.inProgress.length,
@@ -90,7 +118,22 @@ export function useApplicationsData(): UseApplicationsDataResult {
         message.data
       ) {
         const updatedJob = message.data as JobRecord;
-        console.log('[useApplicationsData] Processing job update:', updatedJob.id, updatedJob.status);
+        console.log(
+          '[useApplicationsData] Processing job update:',
+          updatedJob.id,
+          updatedJob.status
+        );
+
+        // Check if this is a NEW completion (job just became 'completed')
+        // Only increment counter if it wasn't already completed
+        const wasInProgress = inProgress.find((j) => j.id === updatedJob.id);
+        const wasInHistory = history.find((j) => j.id === updatedJob.id);
+        const previousStatus = wasInProgress?.status || wasInHistory?.status;
+
+        if (updatedJob.status === 'completed' && previousStatus !== 'completed') {
+          console.log('[useApplicationsData] ✅ Job completed! Incrementing usage counter.');
+          incrementUsageCounter();
+        }
 
         // Update in-memory state - ensure no duplicates by using Set or Map
         setInProgress((prev) => {
@@ -154,4 +197,3 @@ export function useApplicationsData(): UseApplicationsDataResult {
     refresh: loadData,
   };
 }
-

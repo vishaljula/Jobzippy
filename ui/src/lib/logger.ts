@@ -75,42 +75,69 @@ class FileLogger {
     }
   }
 
-  log(component: string, message: string, data?: any): void {
+  log(message: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${component}] ${message}`;
+    const logEntry = `[${timestamp}] ${message}`;
 
     // Log to console
-    console.log(logEntry, data || '');
+    if (args.length > 0) {
+      console.log(logEntry, ...args);
+    } else {
+      console.log(logEntry);
+    }
 
     // Send to file via WebSocket
-    const fullLog = data ? `${logEntry} ${JSON.stringify(data)}` : logEntry;
-    this.send(fullLog);
+    const argsStr =
+      args.length > 0
+        ? ' ' + args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')
+        : '';
+    this.send(logEntry + argsStr);
   }
 
-  error(component: string, message: string, error?: any): void {
+  error(message: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${component}] ERROR: ${message}`;
+    const logEntry = `[${timestamp}] ERROR: ${message}`;
 
     // Log to console
-    console.error(logEntry, error || '');
+    if (args.length > 0) {
+      console.error(logEntry, ...args);
+    } else {
+      console.error(logEntry);
+    }
 
     // Send to file via WebSocket
-    const fullLog = error
-      ? `${logEntry} ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`
-      : logEntry;
-    this.send(fullLog);
+    const argsStr =
+      args.length > 0
+        ? ' ' +
+          args
+            .map((a) => {
+              if (a instanceof Error) {
+                return JSON.stringify({ message: a.message, stack: a.stack });
+              }
+              return typeof a === 'object' ? JSON.stringify(a) : String(a);
+            })
+            .join(' ')
+        : '';
+    this.send(logEntry + argsStr);
   }
 
-  warn(component: string, message: string, data?: any): void {
+  warn(message: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${component}] WARN: ${message}`;
+    const logEntry = `[${timestamp}] WARN: ${message}`;
 
     // Log to console
-    console.warn(logEntry, data || '');
+    if (args.length > 0) {
+      console.warn(logEntry, ...args);
+    } else {
+      console.warn(logEntry);
+    }
 
     // Send to file via WebSocket
-    const fullLog = data ? `${logEntry} ${JSON.stringify(data)}` : logEntry;
-    this.send(fullLog);
+    const argsStr =
+      args.length > 0
+        ? ' ' + args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')
+        : '';
+    this.send(logEntry + argsStr);
   }
 
   disconnect(): void {

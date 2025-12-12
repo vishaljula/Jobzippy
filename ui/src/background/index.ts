@@ -2009,5 +2009,58 @@ chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error('[Jobzippy] Error setting panel behavior:', error));
 
+// ============================================================================
+// EXTERNAL MESSAGES FROM WEBSITES (jobzippy.ai)
+// ============================================================================
+
+// Listen for messages from external websites (jobzippy.ai success page)
+// This listener runs in the background and is always active
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  console.log('[Jobzippy] 📨 External message received:', message.type, 'from:', sender.url);
+
+  if (message.type === 'SUBSCRIPTION_ACTIVE') {
+    console.log(
+      '[Jobzippy] ✅ SUBSCRIPTION_ACTIVE received from website! Session:',
+      message.sessionId
+    );
+
+    // Forward to sidepanel (if open) via internal message
+    chrome.runtime
+      .sendMessage({
+        type: 'SUBSCRIPTION_ACTIVE_FROM_WEBSITE',
+        sessionId: message.sessionId,
+        source: sender.url,
+      })
+      .then(() => {
+        console.log('[Jobzippy] ✓ Forwarded SUBSCRIPTION_ACTIVE to sidepanel');
+      })
+      .catch((err) => {
+        // Sidepanel might not be open - that's okay
+        console.log('[Jobzippy] Could not forward to sidepanel (might be closed):', err.message);
+      });
+
+    // Store in chrome.storage so sidepanel can pick it up on next open
+    chrome.storage.local
+      .set({
+        pendingSubscriptionActivation: {
+          sessionId: message.sessionId,
+          timestamp: Date.now(),
+          source: sender.url,
+        },
+      })
+      .then(() => {
+        console.log('[Jobzippy] ✓ Stored pending activation in chrome.storage');
+      });
+
+    sendResponse({ success: true, message: 'Received by extension' });
+  } else {
+    sendResponse({ success: false, message: 'Unknown message type' });
+  }
+
+  return true;
+});
+
+console.log('[Jobzippy] ✅ External message listener registered in background script');
+
 // Export for testing (if needed)
 export {};

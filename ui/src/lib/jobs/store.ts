@@ -202,3 +202,44 @@ export async function getDashboardJobs(): Promise<{
 
   return { inProgress, history };
 }
+
+/**
+ * Cleanup stuck jobs on startup.
+ * Jobs stuck in "applying" or "ats_filling" for more than TIMEOUT_MINUTES
+ * are marked as "failed" since the in-memory JobSession was lost on reload.
+ */
+const STUCK_JOB_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+export async function cleanupStuckJobs(): Promise<number> {
+  try {
+    const stuckStatuses: JobRecord['status'][] = ['applying', 'ats_filling'];
+    const stuckJobs = await db.getJobsByStatuses(stuckStatuses);
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const job of stuckJobs) {
+      const stuckDuration = now - job.updatedAt;
+      if (stuckDuration > STUCK_JOB_TIMEOUT_MS) {
+        logger.log(
+          'JobStore',
+          `Cleaning up stuck job: ${job.id} (stuck for ${Math.round(stuckDuration / 1000)}s)`
+        );
+        await updateJobStatus(
+          job.id,
+          'failed',
+          'Application timed out - extension was reloaded during application'
+        );
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      logger.log('JobStore', `Cleaned up ${cleanedCount} stuck jobs`);
+    }
+
+    return cleanedCount;
+  } catch (error) {
+    logger.error('JobStore', 'Error cleaning up stuck jobs', error);
+    return 0; // Return 0 on error - non-fatal
+  }
+}

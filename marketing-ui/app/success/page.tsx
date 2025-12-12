@@ -1,53 +1,87 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Check, Sparkles } from 'lucide-react';
+
+// Extension ID - inlined at build time
+const EXTENSION_ID = process.env.NEXT_PUBLIC_EXTENSION_ID || '';
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [extensionNotified, setExtensionNotified] = useState(false);
+  const hasAttempted = useRef(false); // Use ref instead of state to avoid re-render
 
   useEffect(() => {
-    // Send message to extension (only runs in browser)
-    const notifyExtension = async () => {
+    // Only run once - use ref to avoid triggering cleanup
+    if (hasAttempted.current) return;
+    hasAttempted.current = true;
+
+    console.log('[Success Page] Mounted. Extension ID:', EXTENSION_ID);
+    console.log('[Success Page] Session ID:', sessionId);
+
+    const notifyExtension = () => {
+      console.log('[Success Page] notifyExtension() called after 500ms');
+      console.log('[Success Page] typeof chrome:', typeof chrome);
+      console.log('[Success Page] chrome.runtime exists:', typeof chrome !== 'undefined' && !!chrome?.runtime);
+      console.log('[Success Page] sendMessage exists:', typeof chrome !== 'undefined' && !!chrome?.runtime?.sendMessage);
+      
       try {
-        // Check if chrome API is available (only in browser, not during SSR)
-        if (typeof window === 'undefined') return;
-        
-        // @ts-ignore - chrome API not available during build
-        if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage) {
-          const EXTENSION_ID = 'bjebcoccbgjddngioofnolbekednppia';
-          
-          // @ts-ignore
-          chrome.runtime.sendMessage(
-            EXTENSION_ID,
-            {
-              type: 'SUBSCRIPTION_ACTIVE',
-              sessionId: sessionId
-            },
-            (response: any) => {
-              // @ts-ignore
-              if (chrome.runtime.lastError) {
-                // @ts-ignore
-                console.log('Extension not found:', chrome.runtime.lastError.message);
-              } else {
-                console.log('Extension notified successfully:', response);
-                setExtensionNotified(true);
-              }
-            }
-          );
+        if (!EXTENSION_ID) {
+          console.error('[Success Page] ❌ EXTENSION_ID not set; cannot notify extension');
+          return;
         }
+
+        // Check if chrome API is available
+        if (typeof chrome === 'undefined') {
+          console.error('[Success Page] ❌ chrome is undefined - not running in Chrome browser');
+          return;
+        }
+        
+        if (!chrome?.runtime) {
+          console.error('[Success Page] ❌ chrome.runtime is undefined');
+          return;
+        }
+        
+        if (!chrome?.runtime?.sendMessage) {
+          console.error('[Success Page] ❌ chrome.runtime.sendMessage is undefined');
+          return;
+        }
+
+        console.log('[Success Page] ✅ All checks passed, sending message to extension:', EXTENSION_ID);
+        
+        console.log('[Success Page] 📤 Calling chrome.runtime.sendMessage now...');
+        
+        // @ts-ignore - chrome API types
+        chrome.runtime.sendMessage(
+          EXTENSION_ID,
+          {
+            type: 'SUBSCRIPTION_ACTIVE',
+            sessionId: sessionId
+          },
+          (response: unknown) => {
+            console.log('[Success Page] 📥 sendMessage callback fired');
+            // @ts-ignore
+            if (chrome.runtime.lastError) {
+              // @ts-ignore
+              console.error('[Success Page] ❌ Extension error:', chrome.runtime.lastError.message);
+            } else {
+              console.log('[Success Page] ✅ Extension notified successfully! Response:', response);
+              setExtensionNotified(true);
+            }
+          }
+        );
+        console.log('[Success Page] sendMessage called (waiting for callback...)');
       } catch (error) {
-        console.error('Error notifying extension:', error);
+        console.error('[Success Page] ❌ Exception in notifyExtension:', error);
       }
     };
 
-    if (sessionId) {
-      notifyExtension();
-    }
-  }, [sessionId]);
+    // Small delay to ensure page is fully loaded
+    const timer = setTimeout(notifyExtension, 500);
+    return () => clearTimeout(timer);
+  }, [sessionId]); // Only depend on sessionId, not on the ref
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">

@@ -252,6 +252,73 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
 });
 
 /**
+ * Manual fallback: finalize subscription from a Checkout Session ID.
+ * Useful when webhook delivery is delayed or blocked.
+ */
+export const finalizeSubscriptionFromSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const sessionId: string | undefined = data?.sessionId;
+  if (!sessionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Session ID is required');
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session.subscription) {
+      throw new functions.https.HttpsError('failed-precondition', 'No subscription on this session');
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+    const userId = subscription.metadata.userId;
+
+    if (!userId) {
+      throw new functions.https.HttpsError('failed-precondition', 'No userId on subscription metadata');
+    }
+
+    // Enforce caller ownership
+    if (context.auth.uid !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your subscription');
+    }
+
+    await admin
+      .firestore()
+      .doc(`users/${userId}`)
+      .set(
+        {
+          subscription: {
+            status: subscription.status,
+            tier: 'pro',
+            stripeCustomerId: subscription.customer,
+            stripeSubscriptionId: subscription.id,
+            currentPeriodEnd: admin.firestore.Timestamp.fromDate(
+              new Date(subscription.current_period_end * 1000)
+            ),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            trialEndsAt: subscription.trial_end
+              ? admin.firestore.Timestamp.fromDate(new Date(subscription.trial_end * 1000))
+              : null,
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    functions.logger.info(`Finalize-from-session succeeded for user ${userId}, session ${sessionId}`);
+    return { status: subscription.status };
+  } catch (error) {
+    functions.logger.error('Error finalizing subscription from session:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to finalize subscription',
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+});
+
+/**
  * Create a Stripe Billing Portal session for the user
  */
 export const createPortalSession = functions.https.onCall(async (data, context) => {

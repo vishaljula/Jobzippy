@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { getFirestoreDb } from '@/lib/firebase/client';
+import { getFirebaseApp, getFirestoreDb } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
 
 interface SubscriptionData {
   status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'paused';
@@ -27,9 +28,14 @@ export function SubscriptionStatus() {
   useEffect(() => {
     if (!user) return;
 
+    const app = getFirebaseApp();
+    const auth = getAuth(app);
+    const firebaseUid = auth.currentUser?.uid;
+    if (!firebaseUid) return;
+
     const db = getFirestoreDb();
     const unsubscribe = onSnapshot(
-      doc(db, 'users', user.sub),
+      doc(db, 'users', firebaseUid),
       (snapshot) => {
         const data = snapshot.data();
         if (data) {
