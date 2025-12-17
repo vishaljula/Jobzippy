@@ -216,51 +216,6 @@ function JobStatusBadge({ status }: { status: JobRecord['status'] }) {
   );
 }
 
-/**
- * Format error message as short enum-like code
- */
-function formatReason(status: JobRecord['status'], errorMessage?: string): string | null {
-  // Successfully applied jobs
-  if (status === 'completed') {
-    return 'SUBMITTED';
-  }
-
-  // No error message means no reason to show
-  if (!errorMessage) {
-    return null;
-  }
-
-  const errorLower = errorMessage.toLowerCase();
-
-  // Map error messages to enum-like codes
-  if (errorLower.includes('captcha') || errorLower.includes('verification required')) {
-    return 'CAPTCHA_REQUIRED';
-  }
-  if (
-    errorLower.includes('create account') ||
-    errorLower.includes('account required') ||
-    errorLower.includes('sign up')
-  ) {
-    return 'ACCOUNT_REQUIRED';
-  }
-  if (
-    errorLower.includes('manual_input_required') ||
-    errorLower.includes('required fields missing') ||
-    errorLower.includes('invalid')
-  ) {
-    return 'MANUAL_INPUT_REQUIRED';
-  }
-  if (errorLower.includes('duplicate') || errorLower.includes('already')) {
-    return 'DUPLICATE';
-  }
-  if (errorLower.includes('timeout')) {
-    return 'TIMEOUT';
-  }
-
-  // Generic error fallback
-  return 'ERROR';
-}
-
 function formatAppliedDate(timestamp: number | undefined): string {
   if (!timestamp) {
     return '—';
@@ -493,12 +448,6 @@ export function DashboardOverview({
               </p>
               <h2 className="text-xl font-bold text-white tracking-tight">Live job match status</h2>
             </div>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white text-slate-900 px-4 py-1.5 text-xs font-bold shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-              <Loader2
-                className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-[#7000ff]' : 'text-slate-400'}`}
-              />
-              {isLoading ? 'Loading…' : 'Auto-applying'}
-            </span>
           </div>
 
           {error && (
@@ -524,21 +473,20 @@ export function DashboardOverview({
                   <th className="pb-4 pl-4">Company / Organization</th>
                   <th className="pb-4">Location</th>
                   <th className="pb-4">Status</th>
-                  <th className="pb-4">Reason</th>
+
                   <th className="pb-4 pr-4 text-right">Date applied</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {isLoading && tableJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
+                    <td colSpan={4} className="py-8 text-center text-slate-400">
                       <Loader2 className="h-5 w-5 animate-spin inline-block mr-2 text-[#00f0ff]" />
                       Loading applications...
                     </td>
                   </tr>
                 ) : tableJobs.length > 0 ? (
                   tableJobs.map((job) => {
-                    const reason = formatReason(job.status, job.errorMessage);
                     return (
                       <tr key={job.id} className="group transition-colors hover:bg-white/[0.02]">
                         <td className="py-4 pl-4">
@@ -551,18 +499,7 @@ export function DashboardOverview({
                         <td className="py-4">
                           <JobStatusBadge status={job.status} />
                         </td>
-                        <td className="py-4">
-                          {reason ? (
-                            <span
-                              title={job.errorMessage || undefined}
-                              className="inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-white/5 border border-white/5"
-                            >
-                              {reason}
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">—</span>
-                          )}
-                        </td>
+
                         <td className="py-4 pr-4 text-right font-mono text-xs text-slate-400">
                           {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
                         </td>
@@ -571,7 +508,7 @@ export function DashboardOverview({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center">
+                    <td colSpan={4} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center">
                           <Briefcase className="h-6 w-6 text-slate-500" />
