@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getStorage, setStorage } from '@/lib/storage';
 import type { OnboardingSnapshot, OnboardingStatus } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 const DEFAULT_SNAPSHOT: OnboardingSnapshot = {
   status: 'not_started',
@@ -16,12 +17,15 @@ async function loadSnapshot(): Promise<OnboardingSnapshot> {
   try {
     const stored = await getStorage('onboardingStatus');
     if (stored && typeof stored === 'object' && 'status' in stored) {
+      logger.log(
+        'useOnboarding',
+        `✓ Loaded onboarding status: ${(stored as OnboardingSnapshot).status}`
+      );
       return stored as OnboardingSnapshot;
     }
+    logger.log('useOnboarding', '→ No onboarding status found, using default (not_started)');
   } catch (error) {
-    if (import.meta.env.DEV) {
-      console.warn('[Onboarding] Failed to load onboarding status', error);
-    }
+    logger.error('useOnboarding', 'Failed to load onboarding status', error);
   }
   return DEFAULT_SNAPSHOT;
 }

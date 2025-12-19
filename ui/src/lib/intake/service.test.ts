@@ -38,6 +38,7 @@ describe('processResumeWithAgent', () => {
         remote: true,
         locations: [],
         salary_min: 0,
+        salary_currency: 'USD',
         start_date: '',
       },
     },

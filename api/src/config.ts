@@ -32,6 +32,13 @@ const envSchema = z.object({
     .pipe(z.number().int().positive()),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Firebase Admin (optional - only needed for some routes)
+  FIREBASE_PROJECT_ID: z.string().optional(),
+  FIREBASE_PRIVATE_KEY: z.string().optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().optional(),
+  // Stripe (optional - checkout moved to Firebase Functions)
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PRICE_ID: z.string().optional(),
 });
 
 const parsed = envSchema.parse({
@@ -45,6 +52,11 @@ const parsed = envSchema.parse({
   PORT: process.env.PORT ?? process.env.API_PORT ?? '8787',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID,
 });
 
 const allowedOrigins = parsed.ALLOWED_ORIGINS
@@ -68,6 +80,15 @@ export const config = {
   },
   anthropic: {
     apiKey: parsed.ANTHROPIC_API_KEY,
+  },
+  firebase: {
+    projectId: parsed.FIREBASE_PROJECT_ID,
+    privateKey: parsed.FIREBASE_PRIVATE_KEY,
+    clientEmail: parsed.FIREBASE_CLIENT_EMAIL,
+  },
+  stripe: {
+    secretKey: parsed.STRIPE_SECRET_KEY,
+    priceId: parsed.STRIPE_PRICE_ID,
   },
 } as const;
 

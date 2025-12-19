@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply - Senior Front End Engineer - Anduril Industries</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .company-logo {
+            width: 60px;
+            height: 60px;
+            background: #0372E2;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #121462;
+        }
+
+        .job-meta {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-title {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #121462;
+        }
+
+        .form-subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #0372E2;
+        }
+
+        .phone-group {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 10px;
+        }
+
+        .file-upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .upload-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #f8f9fa;
+            border-color: #0372E2;
+        }
+
+        .btn-primary {
+            background: #00298C;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: #0037BD;
+        }
+
+        .file-types {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+
+        .submit-button {
+            width: 100%;
+            padding: 14px;
+            background: #00298C;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 30px;
+        }
+
+        .submit-button:hover {
+            background: #0037BD;
+        }
+
+        .submit-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 30px 0;
+        }
+
+        .question-description {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .file-name {
+            margin-top: 10px;
+            color: #0372E2;
+            font-weight: 500;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body data-ats-type="greenhouse">
+    <div class="container">
+        <div class="header">
+            <div class="company-logo">A</div>
+            <h1>Senior Front End Engineer, Imaging Interfaces</h1>
+            <div class="job-meta">
+                Anduril Industries • Lexington, MA (Hybrid) • Full-time
+            </div>
+        </div>
+
+        <div class="form-container">
+            <h2 class="form-title">Apply for this job</h2>
+            <p class="form-subtitle"><span class="required">*</span> indicates a required field</p>
+
+            <form id="application-form">
+                <!-- Basic Information -->
+                <div class="form-group">
+                    <label for="first_name">First Name <span class="required">*</span></label>
+                    <input type="text" id="first_name" name="first_name" required autocomplete="given-name">
+                </div>
+
+                <div class="form-group">
+                    <label for="last_name">Last Name <span class="required">*</span></label>
+                    <input type="text" id="last_name" name="last_name" required autocomplete="family-name">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email <span class="required">*</span></label>
+                    <input type="email" id="email" name="email" required autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label>Phone <span class="required">*</span></label>
+                    <div class="phone-group">
+                        <select id="country" name="country" required>
+                            <option value="">Select country</option>
+                            <option value="us">United States (+1)</option>
+                            <option value="ca">Canada (+1)</option>
+                            <option value="uk">United Kingdom (+44)</option>
+                            <option value="in">India (+91)</option>
+                        </select>
+                        <input type="tel" id="phone" name="phone" required autocomplete="tel">
+                    </div>
+                </div>
+
+                <!-- Resume Upload -->
+                <div class="form-group">
+                    <label for="resume">Resume/CV <span class="required">*</span></label>
+                    <div class="file-upload-section">
+                        <div class="upload-buttons">
+                            <button type="button" class="btn"
+                                onclick="document.getElementById('resume').click()">Attach</button>
+                            <button type="button" class="btn">Dropbox</button>
+                            <button type="button" class="btn">Google Drive</button>
+                            <button type="button" class="btn">Enter manually</button>
+                        </div>
+                        <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx,.txt,.rtf" required>
+                        <p class="file-types">Accepted file types: pdf, doc, docx, txt, rtf</p>
+                        <div class="file-name" id="resume-file-name"></div>
+                    </div>
+                    </div>
+                </div>
+
+                <!-- Cover Letter -->
+                <div class="form-group">
+                    <label for="cover_letter">Cover Letter</label>
+                    <div class="file-upload-section">
+                        <div class="upload-buttons">
+                            <button type="button" class="btn"
+                                onclick="document.getElementById('cover_letter').click()">Attach</button>
+                            <button type="button" class="btn">Dropbox</button>
+                            <button type="button" class="btn">Google Drive</button>
+                            <button type="button" class="btn">Enter manually</button>
+                        </div>
+                        <input type="file" id="cover_letter" name="cover_letter" accept=".pdf,.doc,.docx,.txt,.rtf">
+                        <p class="file-types">Accepted file types: pdf, doc, docx, txt, rtf</p>
+                        <div class="file-name" id="cover-letter-file-name"></div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Additional Questions -->
+                <div class="form-group">
+                    <label for="question_10691999007">LinkedIn Profile</label>
+                    <input type="text" id="question_10691999007" name="linkedin"
+                        placeholder="https://linkedin.com/in/yourprofile">
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692000007">Website</label>
+                    <input type="text" id="question_10692000007" name="website" placeholder="https://yourwebsite.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692001007">CLEARANCE ELIGIBILITY <span class="required">*</span></label>
+                    <select id="question_10692001007" name="clearance_eligibility" required>
+                        <option value="">Select...</option>
+                        <option value="yes_active">Yes, I currently hold an active U.S. security clearance</option>
+                        <option value="yes_eligible">Yes, I am eligible to obtain a U.S. security clearance</option>
+                        <option value="no">No</option>
+                    </select>
+                    <p class="question-description">Do you presently hold an active U.S. security clearance, or are you
+                        eligible to obtain and maintain a U.S. security clearance?</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692002007">Previous Clearance Level <span class="required">*</span></label>
+                    <select id="question_10692002007" name="previous_clearance" required>
+                        <option value="">Select...</option>
+                        <option value="none">I have never held a U.S. security clearance</option>
+                        <option value="confidential">Confidential</option>
+                        <option value="secret">Secret</option>
+                        <option value="top_secret">Top Secret</option>
+                        <option value="ts_sci">Top Secret/SCI</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692003007">EXPORT CONTROLS <span class="required">*</span></label>
+                    <select id="question_10692003007" name="export_controls" required>
+                        <option value="">Select...</option>
+                        <option value="us_citizen">U.S. Citizen</option>
+                        <option value="lawful_permanent_resident">Lawful Permanent Resident</option>
+                        <option value="asylee">Asylee or Refugee</option>
+                        <option value="none">None of the above</option>
+                    </select>
+                    <p class="question-description">Are you any of the following "protected individual(s)" as defined in
+                        the Immigration and Naturalization Act?</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692004007">U.S. WORK AUTHORIZATION <span class="required">*</span></label>
+                    <select id="question_10692004007" name="work_authorization" required>
+                        <option value="">Select...</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                    <p class="question-description">Are you authorized to work in the United States?</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692005007">Will you require sponsorship from Anduril for employment now or in
+                        the future (e.g, H1B visa)? <span class="required">*</span></label>
+                    <select id="question_10692005007" name="visa_sponsorship" required>
+                        <option value="">Select...</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692006007">HISTORY WITH ANDURIL <span class="required">*</span></label>
+                    <select id="question_10692006007" name="previous_application" required>
+                        <option value="">Select...</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                    <p class="question-description">Have you previously applied to a position at Anduril?</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692007007">Have you ever been employed by Anduril or any company that Anduril
+                        has acquired? <span class="required">*</span></label>
+                    <select id="question_10692007007" name="previous_employment" required>
+                        <option value="">Select...</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="question_10692008007">CONFLICT OF INTEREST <span class="required">*</span></label>
+                    <select id="question_10692008007" name="conflict_of_interest" required>
+                        <option value="">Select...</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                    <p class="question-description">Do you have any potential conflicts of interest with Anduril
+                        Industries?</p>
+                </div>
+
+                <button type="submit" class="submit-button">Submit Application</button>
+
+                <div class="success-message" id="success-message">
+                    ✓ Application submitted successfully! You can close this tab.
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[Greenhouse Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[Greenhouse Mock] Failed to log submission', err);
+            }
+        }
+
+        // File upload handling
+        document.getElementById('resume').addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name;
+            const fileNameDisplay = document.getElementById('resume-file-name');
+            if (fileName) {
+                fileNameDisplay.textContent = `Selected: ${fileName}`;
+            }
+        });
+
+        document.getElementById('cover_letter').addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name;
+            const fileNameDisplay = document.getElementById('cover-letter-file-name');
+            if (fileName) {
+                fileNameDisplay.textContent = `Selected: ${fileName}`;
+            }
+        });
+
+        // Form submission
+        document.getElementById('application-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const submitButton = document.querySelector('.submit-button');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Submitting...';
+
+            // Capture current answers
+            const form = document.getElementById('application-form');
+            const formData = new FormData(form);
+            const answers = Object.fromEntries(formData.entries());
+
+            const resumeFile = formData.get('resume');
+            if (resumeFile && typeof resumeFile === 'object') {
+                answers.resume = resumeFile.name || 'uploaded-file';
+            }
+            const coverFile = formData.get('cover_letter');
+            if (coverFile && typeof coverFile === 'object') {
+                answers.cover_letter = coverFile.name || 'uploaded-file';
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobId = urlParams.get('job') || null;
+
+            logMockSubmission({
+                atsType: 'greenhouse',
+                jobId,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
+
+            // Simulate submission
+            setTimeout(() => {
+                document.getElementById('success-message').style.display = 'block';
+                submitButton.textContent = 'Application Submitted';
+
+                // Notify extension that application is complete
+                window.postMessage({ type: 'ATS_APPLICATION_COMPLETE' }, '*');
+            }, 1500);
+        });
+    </script>
+</body>
+
+</html>

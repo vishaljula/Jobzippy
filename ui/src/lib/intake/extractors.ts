@@ -31,10 +31,25 @@ async function extractPdf(file: File): Promise<ResumeExtractionResult> {
   for (let i = 1; i <= pdf.numPages; i += 1) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .filter(Boolean)
-      .join(' ');
+    let lastY: number | null = null;
+    let pageText = '';
+
+    for (const item of content.items) {
+      if (!('str' in item)) continue;
+
+      // transform[5] is the y-coordinate (from bottom-left in PDF usually)
+      const currentY = item.transform[5];
+
+      if (lastY !== null && Math.abs(currentY - lastY) > 5) {
+        pageText += '\n';
+      } else if (pageText.length > 0 && !pageText.endsWith('\n')) {
+        pageText += ' ';
+      }
+
+      pageText += item.str;
+      lastY = currentY;
+    }
+
     text += `${pageText}\n\n`;
   }
 

@@ -17,6 +17,7 @@ const preferencesSchema = z.object({
   remote: z.boolean().optional(),
   locations: z.array(z.string()).optional(),
   salary_min: z.number().optional(),
+  salary_currency: z.string().optional(),
   start_date: z.string().optional(),
 });
 

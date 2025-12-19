@@ -8,9 +8,10 @@
   ],
   "scripts": {
     "prepare": "npx husky install",
-    "dev": "npm-run-all --parallel dev:ui dev:api",
+    "dev": "npm-run-all --parallel dev:ui dev:api dev:mock",
     "dev:ui": "npm run dev --workspace=ui",
     "dev:api": "npm run dev --workspace=api",
+    "dev:mock": "npm run dev:mock --workspace=ui",
     "format": "npm run format --workspace=ui",
     "lint": "npm-run-all lint:ui lint:api",
     "lint:ui": "npm run lint --workspace=ui",

@@ -20,6 +20,7 @@ const preferencesSchema = z.object({
   remote: z.boolean(),
   locations: z.array(z.string()),
   salary_min: z.number(),
+  salary_currency: z.string().optional().default('USD'),
   start_date: z.string(),
 });
 

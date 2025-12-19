@@ -27,6 +27,7 @@ export interface UserDocument {
   referral_code: string | null;
   referred_by: string | null;
   sheet_id: string | null;
+  backup_sheet_id: string | null;
   cloud_run_enabled: boolean;
   gmail_label: string | null;
   payout_method: PayoutMethod;
@@ -79,6 +80,7 @@ function createDefaultUserDocument(
     referral_code: null,
     referred_by: payload.referredBy ?? null,
     sheet_id: null,
+    backup_sheet_id: null,
     cloud_run_enabled: false,
     gmail_label: DEFAULT_GMAIL_LABEL,
     payout_method: { type: null, identifier: null },
@@ -164,5 +166,42 @@ export class FirestoreRepository {
     };
 
     await setDoc(referralRef, payload);
+  }
+
+  async updateSheetId(userId: string, sheetId: string): Promise<void> {
+    if (!userId) {
+      throw new Error('Cannot update sheet id without a userId.');
+    }
+    const userRef = doc(this.#db, 'users', userId);
+    await updateDoc(userRef, {
+      sheet_id: sheetId,
+      updated_at: Date.now(),
+    });
+  }
+
+  async updateBackupSheetId(userId: string, backupSheetId: string): Promise<void> {
+    if (!userId) {
+      throw new Error('Cannot update backup sheet id without a userId.');
+    }
+    const userRef = doc(this.#db, 'users', userId);
+    await updateDoc(userRef, {
+      backup_sheet_id: backupSheetId,
+      updated_at: Date.now(),
+    });
+  }
+
+  async getBackupSheetId(userId: string): Promise<string | null> {
+    if (!userId) {
+      throw new Error('Cannot get backup sheet id without a userId.');
+    }
+    const userRef = doc(this.#db, 'users', userId);
+    const snapshot = await getDoc(userRef);
+
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    const data = snapshot.data() as UserDocument;
+    return data.backup_sheet_id ?? null;
   }
 }

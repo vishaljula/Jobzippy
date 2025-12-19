@@ -5,7 +5,9 @@ import { ZodError } from 'zod';
 
 import { config } from './config.js';
 import { intakeRouter } from './routes/intake.js';
+import { jobsRouter } from './routes/jobs.js';
 import { oauthRouter } from './routes/oauth.js';
+import { onboardingRouter } from './routes/onboarding.js';
 import { GoogleOAuthError } from './services/google-oauth.js';
 
 const app = express();
@@ -50,6 +52,9 @@ app.get('/healthz', (_req: Request, res: Response) => {
 
 app.use('/oauth/google', oauthRouter);
 app.use('/intake', intakeRouter);
+app.use('/onboarding', onboardingRouter);
+app.use('/jobs', jobsRouter);
+// Checkout route removed - moved to Firebase Functions
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

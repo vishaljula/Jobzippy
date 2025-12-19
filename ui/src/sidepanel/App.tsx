@@ -6,402 +6,1165 @@ import {
   BarChart3,
   Shield,
   Bell,
-  Paperclip,
-  Send,
-  Loader2,
-  Sparkles,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
+  ClipboardCheck,
+  Upload,
+  CreditCard,
 } from 'lucide-react';
-import clsx from 'clsx';
-
-import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { SignInWithGoogle, GmailConsentMessage } from '@/components/SignInWithGoogle';
 import { useOnboarding } from '@/lib/onboarding';
+import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
+import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
+import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
+import { SubscriptionStatus, PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
-import { useIntakeAgent } from '@/lib/intake';
-import type {
-  IntakeAttachment,
-  IntakeMessage,
-  IntakePreviewSection,
-  IntakeStatusStep,
-} from '@/lib/types';
+import { logger } from '@/lib/logger';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const NAV_ITEMS = [
   { key: 'settings', icon: Settings, label: 'Settings' },
   { key: 'insights', icon: BarChart3, label: 'Insights' },
-  { key: 'vault', icon: Shield, label: 'Vault' },
+  {
+    key: 'vault',
+    icon: Shield,
+    label: 'Vault',
+    onClick: async () => {
+      try {
+        const backupSheetId = await chrome.storage.local.get('backupSheetId');
+        if (backupSheetId.backupSheetId) {
+          window.open(
+            `https://docs.google.com/spreadsheets/d/${backupSheetId.backupSheetId}/edit`,
+            '_blank'
+          );
+        } else {
+          console.warn('No backup sheet ID found');
+        }
+      } catch (error) {
+        console.error('Failed to open backup sheet:', error);
+      }
+    },
+  },
+  {
+    key: 'backup',
+    icon: Upload,
+    label: 'Backup',
+    onClick: async () => {
+      try {
+        const { forceBackup } = await import('@/lib/backup-scheduler');
+        const { toast } = await import('sonner');
+        const tokens = await chrome.storage.local.get('oauth_tokens');
+        if (tokens.oauth_tokens?.access_token) {
+          toast.loading('Backing up to Google Sheets...', { id: 'backup' });
+          await forceBackup(tokens.oauth_tokens.access_token);
+          toast.success('Backup completed!', { id: 'backup' });
+        } else {
+          toast.error('No OAuth token found', { id: 'backup' });
+        }
+      } catch (error) {
+        const { toast } = await import('sonner');
+        toast.error('Backup failed', { id: 'backup' });
+        console.error('Manual backup failed:', error);
+      }
+    },
+  },
   { key: 'alerts', icon: Bell, label: 'Alerts' },
 ] as const;
 
+interface ExtensionMessage {
+  type: string;
+  data?: {
+    state?: 'IDLE' | 'RUNNING' | 'PAUSED';
+    status?: string;
+    engineStatus?: string;
+    platform?: string;
+    loggedIn?: boolean;
+    [key: string]: unknown;
+  };
+}
+
 function App() {
-  const { isAuthenticated, isLoading: authLoading, user, logout: handleLogout } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    isReady,
+    needsOnboarding,
+    user,
+    login,
+    logout: handleLogout,
+  } = useAuth();
+
+  // Only load onboarding state if user needs onboarding
   const {
     snapshot,
     isLoading: onboardingLoading,
     begin,
     complete,
     skip,
-  } = useOnboarding(isAuthenticated);
-  const [isLoading, setIsLoading] = useState(true);
+  } = useOnboarding(isAuthenticated && needsOnboarding);
+
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [composerValue, setComposerValue] = useState('');
-  const [queuedFile, setQueuedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const onboardingInitRef = useRef(false);
+  const [manualWizardOpen, setManualWizardOpen] = useState(false);
+  const [navHighlight, setNavHighlight] = useState(false);
+  const prevWizardOpenRef = useRef(isWizardOpen);
+  const [showTutorial, setShowTutorial] = useState(false);
+  // Engine state/status
+  const [engineState, setEngineState] = useState<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
+  const [engineStatus, setEngineStatus] = useState<string>('Idle');
+  const [, setAuthNeeded] = useState<{ linkedin?: boolean; indeed?: boolean }>({});
+  const [, setPreflightPending] = useState(false);
+  const tabToastIdRef = useRef<string | number | null>(null);
 
+  // Subscription state
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{
+    status: string;
+    tier: string;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    cancelAtPeriodEnd?: boolean;
+    currentPeriodEnd?: { toDate: () => Date };
+  } | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showPricing, setShowPricing] = useState(!isAuthenticated); // Start with pricing if not authenticated
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false);
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  const countdownIntervalRef = useRef<number | null>(null);
+  const prevEngineStateRef = useRef<'IDLE' | 'RUNNING' | 'PAUSED'>('IDLE');
+
+  const renderNeonToast = useCallback(
+    (message: string, tone: 'info' | 'error' | 'success' = 'info') => (
+      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0f172a] px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
+        <div
+          className={`h-2.5 w-2.5 rounded-full ${
+            tone === 'error'
+              ? 'bg-[#ff4d6d] shadow-[0_0_12px_rgba(255,77,109,0.6)]'
+              : tone === 'success'
+                ? 'bg-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.6)]'
+                : 'bg-[#00f0ff] shadow-[0_0_12px_rgba(0,240,255,0.6)]'
+          }`}
+        />
+        <span className="text-sm font-semibold text-slate-50">{message}</span>
+      </div>
+    ),
+    []
+  );
+
+  // Log environment mode once so we can verify dev vs production behavior
   useEffect(() => {
-    if (!authLoading) {
-      setTimeout(() => setIsLoading(false), 300);
+    const envInfo = {
+      DEV: import.meta.env.DEV,
+      MODE: import.meta.env.MODE,
+      NODE_ENV: import.meta.env.NODE_ENV,
+    };
+    console.log('[Jobzippy] Sidepanel env info:', envInfo);
+    try {
+      chrome.runtime
+        .sendMessage({
+          type: 'LOG_MESSAGE',
+          data: {
+            component: 'SidePanel',
+            message: 'Sidepanel env info',
+            data: envInfo,
+          },
+        })
+        .catch(() => {});
+    } catch {
+      // ignore if messaging is not available yet
     }
-  }, [authLoading]);
+  }, []);
 
+  // Simple onboarding control - only if user needs onboarding
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !isReady) {
+      setIsWizardOpen(false);
+      onboardingInitRef.current = false;
+      setManualWizardOpen(false);
+      return;
+    }
+
+    // If user doesn't need onboarding, don't show wizard
+    if (!needsOnboarding) {
       setIsWizardOpen(false);
       return;
     }
 
+    // User needs onboarding
     if (onboardingLoading) {
       return;
     }
 
-    if (snapshot.status === 'in_progress') {
+    if (snapshot.status === 'not_started') {
+      if (!onboardingInitRef.current) {
+        onboardingInitRef.current = true;
+        void begin();
+      }
+      setIsWizardOpen(true);
+    } else if (snapshot.status === 'in_progress') {
       setIsWizardOpen(true);
     } else {
-      setIsWizardOpen(false);
+      setIsWizardOpen(manualWizardOpen);
+      onboardingInitRef.current = false;
     }
-  }, [isAuthenticated, onboardingLoading, snapshot.status]);
+  }, [
+    begin,
+    isAuthenticated,
+    isReady,
+    needsOnboarding,
+    onboardingLoading,
+    manualWizardOpen,
+    snapshot.status,
+  ]);
 
   const handleResumeOnboarding = useCallback(() => {
-    if (snapshot.status === 'completed') {
-      setIsWizardOpen(false);
-      return;
-    }
-    if (snapshot.status === 'not_started') {
+    if (snapshot.status === 'not_started' && !onboardingInitRef.current) {
+      onboardingInitRef.current = true;
       void begin();
     }
+    setManualWizardOpen(true);
     setIsWizardOpen(true);
   }, [begin, snapshot.status]);
 
   const handleCompleteOnboarding = useCallback(async () => {
     await complete();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [complete]);
 
   const handleSkipOnboarding = useCallback(async () => {
     await skip();
     setIsWizardOpen(false);
+    onboardingInitRef.current = false;
+    setManualWizardOpen(false);
   }, [skip]);
 
-  const appLoading = isLoading || authLoading || (isAuthenticated && onboardingLoading);
-
-  const {
-    isLoading: chatLoading,
-    isProcessing,
-    messages,
-    pendingAttachment,
-    setPendingAttachment,
-    sendMessage,
-    applyDraft,
-    requestManualEdit,
-    activeDraftMessageId,
-  } = useIntakeAgent({ enabled: isAuthenticated, user });
-
-  const sortedMessages = useMemo(
-    () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
-    [messages]
-  );
+  // App is loading until auth is ready (which includes restore check)
+  const appLoading = authLoading || !isReady;
 
   useEffect(() => {
-    if (!messagesEndRef.current) return;
-    messagesEndRef.current.scrollIntoView({
-      behavior: sortedMessages.length > 1 ? 'smooth' : 'auto',
-    });
-  }, [sortedMessages.length, chatLoading]);
-
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setQueuedFile(file);
-    setPendingAttachment({
-      id: 'pending',
-      kind: 'file',
-      name: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
-  };
-
-  const handleRemoveAttachment = () => {
-    setQueuedFile(null);
-    setPendingAttachment(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    if (isWizardOpen) {
+      setNavHighlight(false);
     }
-  };
+    if (prevWizardOpenRef.current && !isWizardOpen) {
+      setNavHighlight(true);
+      timeout = setTimeout(() => setNavHighlight(false), 1200);
+    }
+    prevWizardOpenRef.current = isWizardOpen;
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [isWizardOpen]);
 
-  const handleSubmit = async () => {
-    if (!isAuthenticated || isProcessing) return;
-    if (!composerValue.trim() && !queuedFile) return;
+  const onboardingNavItems = useMemo(() => {
+    if (!isAuthenticated) {
+      return [];
+    }
+    return [
+      {
+        key: 'onboarding',
+        icon: ClipboardCheck,
+        label: 'Onboarding',
+        onClick: handleResumeOnboarding,
+        active: isWizardOpen,
+        highlight: navHighlight,
+      },
+    ];
+  }, [handleResumeOnboarding, isAuthenticated, isWizardOpen, navHighlight]);
+
+  const navItems = useMemo(
+    () => [
+      ...NAV_ITEMS,
+      {
+        key: 'subscription',
+        icon: CreditCard,
+        label: 'Subscription',
+        onClick: () => setManageOpen(true),
+      },
+    ],
+    []
+  );
+
+  const {
+    jobs: _jobs,
+    status: _jobStatus,
+    refresh: _refreshJobs,
+    error: _jobError,
+  } = useJobMatches(isAuthenticated ? user : null);
+
+  // Listen for engine state broadcasts
+  useEffect(() => {
+    const handler = (message: ExtensionMessage) => {
+      if (message?.type === 'ENGINE_STATE') {
+        setEngineState(message.data?.state ?? 'IDLE');
+        setEngineStatus(message.data?.status ?? 'Idle');
+      } else if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        const loggedIn = Boolean(message.data.loggedIn);
+        setAuthNeeded((prev) => ({
+          linkedin: p === 'LinkedIn' ? !loggedIn : prev.linkedin,
+          indeed: p === 'Indeed' ? !loggedIn : prev.indeed,
+        }));
+      } else if (message?.type === 'TAB_ACTIVATED' || message?.type === 'SHOW_TAB_TOAST') {
+        // Show toast when user switches to search tab
+        const platform = message.data?.platform as 'LinkedIn' | 'Indeed';
+        console.log('[Jobzippy] TAB_ACTIVATED received:', { platform, engineState });
+        if (platform && engineState === 'RUNNING') {
+          // Dismiss previous toast if it exists to prevent accumulation
+          if (tabToastIdRef.current !== null) {
+            toast.dismiss(tabToastIdRef.current);
+          }
+          const toastId = toast.info(
+            `Jobzippy is working on ${platform}. Your actions will pause automation and it will auto-resume.`,
+            {
+              duration: Infinity,
+              closeButton: true,
+              className: 'rounded-xl border-slate-200 shadow-lg',
+            }
+          );
+          tabToastIdRef.current = toastId;
+          console.log('[Jobzippy] Toast shown for', platform, 'toastId:', toastId);
+        }
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handler);
+    };
+  }, [engineState, renderNeonToast]);
+
+  // Unified toast management - handles all toast states in one place
+  useEffect(() => {
+    // Clear existing countdown interval
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    const wasPaused = prevEngineStateRef.current === 'PAUSED';
+
+    const isNowRunning = engineState === 'RUNNING';
+    const isNowPaused = engineState === 'PAUSED';
+    const isNowIdle = engineState === 'IDLE';
+    const justResumed = wasPaused && isNowRunning;
+
+    // Dismiss all toasts when engine stops
+    if (isNowIdle) {
+      if (tabToastIdRef.current !== null) {
+        toast.dismiss(tabToastIdRef.current);
+        tabToastIdRef.current = null;
+      }
+      prevEngineStateRef.current = engineState;
+      return;
+    }
+
+    // Handle pause state with countdown
+    if (isNowPaused) {
+      // Dismiss any existing toast first
+      if (tabToastIdRef.current !== null) {
+        toast.dismiss(tabToastIdRef.current);
+      }
+
+      // Show initial countdown toast
+      const toastId = toast.loading('Paused. Resuming in 8 seconds...', {
+        duration: Infinity,
+        closeButton: true,
+        className: 'rounded-xl border-slate-200 shadow-lg',
+      });
+      tabToastIdRef.current = toastId;
+
+      // Start countdown interval
+      let countdown = 8;
+      countdownIntervalRef.current = window.setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          toast.loading(`Paused. Resuming in ${countdown} seconds...`, {
+            id: toastId,
+            duration: Infinity,
+            closeButton: true,
+            className: 'rounded-xl border-slate-200 shadow-lg',
+          });
+        } else {
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+        }
+      }, 1000);
+    }
+
+    // Handle resume from pause
+    if (justResumed) {
+      // Reuse the same toast ID to replace the countdown toast
+      if (tabToastIdRef.current !== null) {
+        toast.success('Jobzippy resumed', {
+          id: tabToastIdRef.current, // Reuse existing ID to replace countdown toast
+          duration: 2000,
+          closeButton: true,
+          className: 'rounded-xl border-slate-200 shadow-lg',
+        });
+        const currentToastId = tabToastIdRef.current;
+        setTimeout(() => {
+          toast.dismiss(currentToastId);
+          tabToastIdRef.current = null;
+        }, 2000);
+      }
+    }
+
+    // Update previous state
+    prevEngineStateRef.current = engineState;
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [engineState]);
+
+  // After sign-in: Check subscription and open Stripe if needed
+  useEffect(() => {
+    logger.log(
+      '[Subscription] 🔄 Subscription check effect triggered - isAuthenticated:',
+      isAuthenticated,
+      'user:',
+      !!user
+    );
+
+    if (!isAuthenticated || !user) {
+      if (!isAuthenticated) {
+        logger.log('[Subscription] Not authenticated, showing pricing page');
+        setShowPricing(true);
+      } else {
+        logger.log('[Subscription] Authenticated but no user object yet, waiting...');
+      }
+      return;
+    }
+
+    const checkSubscription = async () => {
+      logger.log('[Subscription] 🔍 Starting subscription check for user:', user.email);
+
+      try {
+        const { getFirestoreDb, getFirebaseApp } = await import('@/lib/firebase/client');
+        const { getAuth } = await import('firebase/auth');
+        const { doc, getDoc } = await import('firebase/firestore');
+
+        const firebaseApp = getFirebaseApp();
+        const auth = getAuth(firebaseApp);
+        const firebaseUid = auth.currentUser?.uid;
+
+        logger.log(
+          '[Subscription] Firebase currentUser:',
+          auth.currentUser?.email,
+          'UID:',
+          firebaseUid
+        );
+
+        if (!firebaseUid) {
+          logger.error(
+            '[Subscription] ❌ No Firebase UID - user is authenticated with Google but not synced to Firebase'
+          );
+          setSubscriptionChecked(true);
+          setShowPricing(true);
+          toast.error('Could not verify subscription. Please sign out and sign back in.');
+          return;
+        }
+
+        const firestore = getFirestoreDb();
+        const userDocPath = `users/${firebaseUid}`;
+        logger.log('[Subscription] 📖 Reading Firestore doc:', userDocPath);
+
+        const userDocRef = doc(firestore, userDocPath);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+          logger.log('[Subscription] ⚠️ User doc does not exist in Firestore');
+        }
+
+        const userData = userDoc.data();
+        const sub = userData?.subscription;
+
+        logger.log(
+          '[Subscription] 📋 Full user data from Firestore:',
+          JSON.stringify(userData, null, 2)
+        );
+        logger.log('[Subscription] 📋 Subscription object:', JSON.stringify(sub, null, 2));
+
+        setSubscriptionStatus(sub);
+        setSubscriptionChecked(true);
+
+        if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
+          logger.log('[Subscription] ❌ No active subscription found, showing pricing page');
+          logger.log('[Subscription] Sub status was:', sub?.status || 'NONE');
+          setShowPricing(true);
+        } else {
+          logger.log(
+            '[Subscription] ✅ Active subscription found! Status:',
+            sub.status,
+            '- Showing dashboard'
+          );
+          setShowPricing(false);
+        }
+      } catch (error) {
+        logger.error('[Subscription] ❌ Error checking subscription status:', error);
+        setSubscriptionChecked(true);
+        setShowPricing(true);
+
+        toast.custom(
+          () => renderNeonToast('Could not verify subscription status. Please try again.', 'error'),
+          {
+            id: 'sub-check-error',
+            duration: 5000,
+          }
+        );
+      }
+    };
+
+    checkSubscription();
+  }, [isAuthenticated, renderNeonToast, user]);
+
+  // Listen for subscription updates from success page (via background script)
+  useEffect(() => {
+    logger.log('[Subscription] 🎧 Setting up message listener for SUBSCRIPTION_ACTIVE');
+
+    // Activation handler function - FAST PATH: call finalize immediately, no retries
+    const handleSubscriptionActivation = async (sessionId?: string) => {
+      logger.log('[Subscription] 🚀 Processing subscription activation, sessionId:', sessionId);
+
+      // Show loading state immediately - hide pricing page
+      setShowPricing(false);
+      setSubscriptionChecked(false); // This will show the "Checking subscription..." loader
+
+      if (!user) {
+        logger.error('[Subscription] ❌ No user context when processing activation');
+        setShowPricing(true);
+        return;
+      }
+
+      if (!sessionId) {
+        logger.error('[Subscription] ❌ No sessionId provided');
+        setShowPricing(true);
+        return;
+      }
+
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getAuth } = await import('firebase/auth');
+      const firebaseApp = getFirebaseApp();
+      const auth = getAuth(firebaseApp);
+      const firebaseUid = auth.currentUser?.uid;
+
+      if (!firebaseUid) {
+        logger.error('[Subscription] ❌ No Firebase UID during activation');
+        setShowPricing(true);
+        return;
+      }
+
+      logger.log('[Subscription] Firebase UID:', firebaseUid);
+
+      try {
+        // Call finalize IMMEDIATELY - don't wait for webhook
+        logger.log('[Subscription] 📞 Calling finalizeSubscriptionFromSession immediately...');
+        const { getFunctions, httpsCallable } = await import('firebase/functions');
+        const functions = getFunctions(firebaseApp);
+        const finalize = httpsCallable(functions, 'finalizeSubscriptionFromSession');
+        const result = await finalize({ sessionId });
+        logger.log('[Subscription] ✅ Finalize result:', result);
+
+        // Read the subscription we just wrote
+        const { getFirestoreDb } = await import('@/lib/firebase/client');
+        const { doc, getDoc } = await import('firebase/firestore');
+        const firestore = getFirestoreDb();
+        const userDocRef = doc(firestore, `users/${firebaseUid}`);
+        const userDoc = await getDoc(userDocRef);
+        const sub = userDoc.data()?.subscription;
+
+        logger.log('[Subscription] Subscription status:', sub?.status);
+        setSubscriptionStatus(sub);
+
+        if (sub?.status === 'active' || sub?.status === 'trialing') {
+          logger.log('[Subscription] 🎉 Subscription activated! Showing dashboard.');
+          setSubscriptionChecked(true);
+          toast.custom(() => renderNeonToast('Trial started! Welcome to JobZippy 🎉', 'success'), {
+            id: 'sub-activated',
+            duration: 4000,
+          });
+        } else {
+          logger.error('[Subscription] ❌ Unexpected subscription status:', sub?.status);
+          setShowPricing(true);
+          setSubscriptionChecked(true);
+        }
+      } catch (err) {
+        logger.error('[Subscription] ❌ Finalize failed:', err);
+        toast.custom(
+          () => renderNeonToast('Failed to activate subscription. Please try again.', 'error'),
+          { id: 'sub-error', duration: 5000 }
+        );
+        setShowPricing(true);
+        setSubscriptionChecked(true);
+      }
+    };
+
+    // Check for pending activation in chrome.storage (in case sidepanel was closed during payment)
+    chrome.storage.local.get('pendingSubscriptionActivation').then((result) => {
+      const pending = result.pendingSubscriptionActivation;
+      if (pending && pending.timestamp > Date.now() - 5 * 60 * 1000) {
+        logger.log('[Subscription] 🔔 Found pending activation in storage:', pending);
+        handleSubscriptionActivation(pending.sessionId);
+        chrome.storage.local.remove('pendingSubscriptionActivation');
+      }
+    });
+
+    // Listen for forwarded message from background script
+    const handler = (message: { type: string; sessionId?: string; source?: string }) => {
+      logger.log('[Subscription] 📨 Received message:', message.type);
+      if (message.type === 'SUBSCRIPTION_ACTIVE_FROM_WEBSITE') {
+        logger.log(
+          '[Subscription] ✅ SUBSCRIPTION_ACTIVE received from website! sessionId:',
+          message.sessionId
+        );
+        handleSubscriptionActivation(message.sessionId);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handler);
+    logger.log('[Subscription] ✅ Internal message listener registered');
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handler);
+      logger.log('[Subscription] 🔇 Message listener removed');
+    };
+  }, [renderNeonToast, user]);
+
+  // Poll engine status on mount
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'ENGINE_STATE' }, (resp) => {
+      if (resp?.state) {
+        setEngineState(resp.state);
+        if (resp.engineStatus) setEngineStatus(resp.engineStatus);
+      }
+    });
+  }, []);
+
+  const handleStartTrial = useCallback(async () => {
+    logger.log('[Subscription] 🚀 Start trial button clicked');
+    logger.log(
+      '[Subscription] Current state - isAuthenticated:',
+      isAuthenticated,
+      'user:',
+      user?.email
+    );
+
+    if (!isAuthenticated) {
+      logger.log('[Subscription] User not authenticated, closing pricing to show sign-in page');
+      setShowPricing(false);
+      return;
+    }
+
+    logger.log('[Subscription] User is authenticated, proceeding to create checkout session...');
+    setCheckoutLoading(true);
 
     try {
-      await sendMessage({
-        text: composerValue,
-        attachments: queuedFile ? [queuedFile] : [],
+      logger.log('[Subscription] 📞 Calling createCheckoutSession Cloud Function...');
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const { getAuth } = await import('firebase/auth');
+
+      const firebaseApp = getFirebaseApp();
+      const auth = getAuth(firebaseApp);
+      const functions = getFunctions(firebaseApp);
+
+      logger.log('[Subscription] Firebase UID for checkout:', auth.currentUser?.uid);
+      logger.log('[Subscription] Firebase user email:', auth.currentUser?.email);
+
+      const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+      const toastId = 'checkout';
+      toast.custom(() => renderNeonToast('Opening payment page...'), {
+        id: toastId,
+        duration: Infinity,
       });
+
+      const result = await createCheckout({
+        successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+        cancelUrl: 'https://jobzippy.ai/welcome',
+      });
+
+      logger.log('[Subscription] ✅ Checkout session created successfully');
+      const { url, sessionId } = result.data as { url: string; sessionId: string };
+      logger.log('[Subscription] Session ID:', sessionId);
+      logger.log('[Subscription] 🌐 Opening Stripe checkout URL:', url);
+
+      chrome.tabs.create({ url });
+      toast.custom(() => renderNeonToast('Complete payment in the opened tab'), {
+        id: toastId,
+        duration: 6000,
+      });
+    } catch (error) {
+      logger.error('[Subscription] ❌ Failed to create checkout session:', error);
+      if (error instanceof Error) {
+        logger.error('[Subscription] Error details:', error.message, error.stack);
+      }
+      toast.custom(() => renderNeonToast('Failed to open payment page', 'error'), {
+        id: 'checkout',
+        duration: 6000,
+      });
+      setShowPricing(true);
     } finally {
-      setComposerValue('');
-      handleRemoveAttachment();
+      setCheckoutLoading(false);
     }
-  };
+  }, [isAuthenticated, renderNeonToast, user]);
+
+  const startAgent = useCallback(async () => {
+    // Preflight auth check: probe existing tabs, then open search URLs directly
+    setPreflightPending(true);
+    const required = { linkedin: true, indeed: true };
+    const received = { linkedin: false, indeed: false };
+    const results = { linkedin: false, indeed: false };
+    const openedTabIds: number[] = [];
+
+    // Build search URLs first
+    let urls: { linkedin?: string; indeed?: string } = {};
+    try {
+      const [{ deriveVaultPassword }, { vaultService }, { VAULT_STORES }, { buildSearchUrls }] =
+        await Promise.all([
+          import('@/lib/vault/utils'),
+          import('@/lib/vault/service'),
+          import('@/lib/vault/constants'),
+          import('@/lib/jobs/search'),
+        ]);
+      const password = deriveVaultPassword(user);
+      const [profile, history] = await Promise.all([
+        vaultService.load(VAULT_STORES.profile, password).catch(() => null),
+        vaultService.load(VAULT_STORES.history, password).catch(() => null),
+      ]);
+      urls = buildSearchUrls(profile, history);
+    } catch {
+      // ignore URL build errors; we'll still check auth
+    }
+
+    // Open search URLs directly (they'll trigger auth checks via content scripts)
+    if (urls.linkedin) {
+      chrome.tabs.create({ url: urls.linkedin, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+    if (urls.indeed) {
+      chrome.tabs.create({ url: urls.indeed, active: false }, (tab) => {
+        if (tab?.id) openedTabIds.push(tab.id);
+      });
+    }
+
+    // Timeout fallback (5 seconds)
+    const timeout = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(handler);
+      setPreflightPending(false);
+
+      // In dev mode, assume success if we timed out (bypass missing mock server/slow load)
+      // Check both DEV flag and MODE string for robustness
+      const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development';
+
+      // Log the timeout event
+      chrome.runtime
+        .sendMessage({
+          type: 'LOG_MESSAGE',
+          data: {
+            component: 'SidePanel',
+            message: `Auth check timed out. Dev mode: ${isDev}`,
+            data: {
+              env: {
+                DEV: import.meta.env.DEV,
+                MODE: import.meta.env.MODE,
+              },
+            },
+          },
+        })
+        .catch(() => {});
+
+      if (isDev) {
+        console.log('[Jobzippy] Dev mode timeout: Forcing auth success');
+        results.linkedin = true;
+        results.indeed = true;
+        // Update received tracking so start logic proceeds
+        received.linkedin = true;
+        received.indeed = true;
+      }
+
+      // If we didn't get responses, assume not logged in
+      const need = {
+        linkedin: required.linkedin && !results.linkedin,
+        indeed: required.indeed && !results.indeed,
+      };
+      setAuthNeeded(need);
+      const allMissing = need.linkedin && need.indeed;
+      if (!allMissing) {
+        chrome.runtime.sendMessage(
+          { type: 'START_AGENT', data: { maxApplications: 15 } },
+          (resp) => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                '[Jobzippy] ERROR sending START_AGENT from sidepanel:',
+                chrome.runtime.lastError.message
+              );
+            } else {
+              console.log('[Jobzippy] Sidepanel START_AGENT response:', resp);
+            }
+          }
+        );
+      }
+    }, 5000);
+
+    const handler = (message: ExtensionMessage) => {
+      if (message?.type === 'AUTH_STATE' && message?.data?.platform) {
+        const p = message.data.platform as 'LinkedIn' | 'Indeed';
+        if (p === 'LinkedIn') {
+          received.linkedin = true;
+          results.linkedin = Boolean(message.data.loggedIn);
+        }
+        if (p === 'Indeed') {
+          received.indeed = true;
+          results.indeed = Boolean(message.data.loggedIn);
+        }
+        if (received.linkedin && received.indeed) {
+          clearTimeout(timeout);
+          chrome.runtime.onMessage.removeListener(handler);
+          setPreflightPending(false);
+          const need = {
+            linkedin: required.linkedin && !results.linkedin,
+            indeed: required.indeed && !results.indeed,
+          };
+          setAuthNeeded(need);
+          // Allow starting if at least one platform is signed in
+          const allMissing = need.linkedin && need.indeed;
+          if (!allMissing) {
+            chrome.runtime.sendMessage(
+              { type: 'START_AGENT', data: { maxApplications: 15 } },
+              () => {}
+            );
+          }
+        }
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+
+    // Probe existing tabs first (in case user already has tabs open)
+    chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
+  }, [user]);
+  const stopAgent = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
+  }, []);
+
+  const handleOpenPortal = useCallback(async () => {
+    setPortalLoading(true);
+    try {
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const app = getFirebaseApp();
+      const functions = getFunctions(app);
+      const createPortal = httpsCallable(functions, 'createPortalSession');
+      const result = await createPortal({
+        returnUrl: 'https://jobzippy.ai/welcome',
+      });
+      const { url } = result.data as { url?: string };
+      if (url) {
+        chrome.tabs.create({ url });
+      } else {
+        toast.error('No portal URL returned');
+      }
+    } catch (error) {
+      logger.error('[Subscription] Failed to open billing portal:', error);
+      toast.error('Failed to open billing portal');
+    } finally {
+      setPortalLoading(false);
+    }
+  }, []);
+
+  const handleCancelSubscription = useCallback(async () => {
+    if (!subscriptionStatus?.stripeSubscriptionId) {
+      toast.error('No active subscription to cancel');
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const app = getFirebaseApp();
+      const functions = getFunctions(app);
+      const cancel = httpsCallable(functions, 'cancelSubscription');
+      await cancel({});
+      toast.success('Subscription cancellation requested');
+      setSubscriptionStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              cancelAtPeriodEnd: true,
+              status: 'canceled',
+            }
+          : prev
+      );
+      setShowPricing(true);
+    } catch (error) {
+      logger.error('[Subscription] Failed to cancel subscription:', error);
+      toast.error('Failed to cancel subscription');
+    } finally {
+      setCancelLoading(false);
+    }
+  }, [subscriptionStatus]);
+
+  // Tutorial gating: show after onboarding completed AND a profile exists in the vault, unless dismissed
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isAuthenticated || snapshot.status !== 'completed') {
+        if (!cancelled) setShowTutorial(false);
+        return;
+      }
+      try {
+        const [{ getStorage }, { deriveVaultPassword }, { vaultService }, { VAULT_STORES }] =
+          await Promise.all([
+            import('@/lib/storage'),
+            import('@/lib/vault/utils'),
+            import('@/lib/vault/service'),
+            import('@/lib/vault/constants'),
+          ]);
+        const dismissed = await getStorage('tutorialDismissed');
+        if (dismissed === true) {
+          if (!cancelled) setShowTutorial(false);
+          return;
+        }
+        const password = deriveVaultPassword(user);
+        const profile = await vaultService.load(VAULT_STORES.profile, password).catch(() => null);
+        if (!cancelled) {
+          setShowTutorial(Boolean(profile));
+        }
+      } catch {
+        if (!cancelled) setShowTutorial(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, snapshot.status, user]);
+
+  const handleDismissTutorial = useCallback(async () => {
+    try {
+      const { setStorage } = await import('@/lib/storage');
+      await setStorage('tutorialDismissed', true);
+    } finally {
+      setShowTutorial(false);
+    }
+  }, []);
+
+  const neonToaster = (
+    <Toaster
+      position="top-right"
+      theme="dark"
+      richColors
+      visibleToasts={1}
+      toastOptions={{
+        classNames: {
+          toast:
+            'bg-[#0f172a] text-slate-50 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)] font-semibold rounded-2xl',
+          title: 'text-slate-50 text-sm',
+          description: 'text-slate-400 text-xs',
+          actionButton:
+            'bg-[#00f0ff] text-slate-900 font-semibold rounded-lg px-3 py-1 shadow-[0_10px_25px_rgba(0,240,255,0.35)]',
+          cancelButton: 'text-slate-300',
+          closeButton:
+            'text-slate-300 hover:text-white rounded-full border border-white/10 bg-white/5',
+        },
+      }}
+    />
+  );
 
   if (appLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
+        {neonToaster}
         <div className="text-center">
-          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600"></div>
-          <p className="text-gray-600 font-medium">Loading Jobzippy...</p>
+          <div className="relative mx-auto mb-6 h-16 w-16">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
+            <div className="animate-spin rounded-full h-16 w-16 bg-gradient-to-r from-[#00f0ff]/60 via-[#7000ff]/60 to-[#00ff9d]/60 p-[3px] shadow-[0_0_25px_rgba(0,240,255,0.25)]">
+              <div className="h-full w-full rounded-full bg-[#020617]" />
+            </div>
+          </div>
+          <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">Loading Jobzippy...</p>
         </div>
       </div>
     );
   }
 
-  const statusLabel =
-    isAuthenticated && user ? (
-      <span className="flex items-center gap-2">
-        <span className="hidden md:inline text-slate-400">Signed in as</span>
-        <span className="font-medium text-slate-600">{user.given_name}</span>
-      </span>
-    ) : (
-      <span className="flex items-center gap-2 text-slate-500">
-        <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-        Not signed in
-      </span>
-    );
-
-  const heroCard = (
-    <div className="space-y-4 rounded-xl bg-white p-8 shadow-lg animate-slide-up">
-      <div className="relative mx-auto h-20 w-20">
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 opacity-20 blur-xl" />
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-secondary-500">
-          <Rocket className="h-10 w-10 text-white" strokeWidth={2.5} />
-        </div>
-      </div>
-      <h2 className="text-center text-2xl font-bold text-gray-900">Welcome to Jobzippy!</h2>
-      <p className="text-center text-gray-600">
-        Your personal agentic AI assistant who manages your job applications
-      </p>
-      <div className="space-y-3">
-        <SignInWithGoogle />
-        <GmailConsentMessage />
-      </div>
-    </div>
-  );
-
-  const conversationBody = (() => {
-    if (!isAuthenticated) {
-      return (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-6 text-sm text-slate-500">
-          Sign in to start chatting with Jobzippy. Upload your resume and the intake agent will
-          parse it in real time.
-        </div>
-      );
-    }
-
-    if (chatLoading) {
-      return (
-        <div className="flex h-48 items-center justify-center text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      );
-    }
-
-    if (sortedMessages.length === 0) {
-      return (
-        <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-sm text-indigo-600">
-          Whenever you&apos;re ready, attach a PDF or DOCX resume using the paperclip icon below.
-          You can also start the conversation by telling Jobzippy what you need help with.
-        </div>
-      );
-    }
-
+  // Wait for subscription check to complete for authenticated users
+  if (isAuthenticated && !subscriptionChecked) {
     return (
-      <div className="space-y-5">
-        {sortedMessages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            onApplyPreview={
-              activeDraftMessageId === message.id
-                ? () => {
-                    void applyDraft();
-                  }
-                : undefined
-            }
-            onEditPreview={activeDraftMessageId === message.id ? requestManualEdit : undefined}
-            isPreviewProcessing={isProcessing && activeDraftMessageId === message.id}
-          />
-        ))}
-        <div ref={messagesEndRef} />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617]">
+        {neonToaster}
+        <div className="text-center">
+          <div className="relative mx-auto mb-6 h-16 w-16">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00f0ff]/25 via-[#7000ff]/20 to-[#00ff9d]/25 blur-[10px] animate-pulse-slow" />
+            <div className="animate-spin rounded-full h-16 w-16 bg-gradient-to-r from-[#00f0ff]/60 via-[#7000ff]/60 to-[#00ff9d]/60 p-[3px] shadow-[0_0_25px_rgba(0,240,255,0.25)]">
+              <div className="h-full w-full rounded-full bg-[#020617]" />
+            </div>
+          </div>
+          <p className="text-[#00ff9d] font-semibold text-lg tracking-wide">
+            Checking subscription...
+          </p>
+        </div>
       </div>
     );
-  })();
+  }
+
+  // Show pricing page if user needs to subscribe
+  if (showPricing) {
+    return (
+      <>
+        {neonToaster}
+        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
+      </>
+    );
+  }
 
   const historyContent = (
     <div className="space-y-6">
-      {!isAuthenticated && heroCard}
-      {isAuthenticated && snapshot.status === 'skipped' && (
-        <ResumeOnboardingCard onResume={handleResumeOnboarding} />
-      )}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700">Intake Agent</h3>
-            <p className="text-xs text-slate-400">
-              Chat-first intake · Resume parsing · Vault sync
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles className="h-4 w-4 text-indigo-500" />
-            <span>{isProcessing ? 'Processing…' : 'Live'}</span>
-            {isAuthenticated && snapshot.status !== 'completed' && (
-              <Button
-                size="sm"
-                className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
-                onClick={handleResumeOnboarding}
-              >
-                Complete setup
-              </Button>
-            )}
-          </div>
-        </div>
-        {conversationBody}
-      </section>
+      {snapshot.status === 'skipped' && <ResumeOnboardingCard onResume={handleResumeOnboarding} />}
+
+      {/* Subscription Status - Shows trial/active status */}
+      <SubscriptionStatus />
+
+      <DashboardOverview
+        user={user}
+        onEditProfile={handleResumeOnboarding}
+        engineState={engineState}
+        engineStatus={engineStatus}
+        onStartAgent={startAgent}
+        onStopAgent={stopAgent}
+      />
     </div>
   );
 
-  const composerContent = isAuthenticated ? (
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur">
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:bg-slate-100"
-          onClick={handleAttachClick}
-          disabled={isProcessing}
-        >
-          <Paperclip className="h-4 w-4" />
-        </button>
-        <textarea
-          className="min-h-[72px] flex-1 resize-none border-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0"
-          placeholder="Ask Jobzippy anything or paste a job note..."
-          value={composerValue}
-          onChange={(event) => setComposerValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              void handleSubmit();
-            }
-          }}
-          disabled={isProcessing}
-        />
-      </div>
-      {(pendingAttachment || queuedFile) && (
-        <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2 text-xs text-indigo-500">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-indigo-500">
-              <Paperclip className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="font-semibold">
-                {pendingAttachment?.name ?? queuedFile?.name ?? 'pending-attachment'}
-              </p>
-              <p className="text-[11px] text-indigo-400">
-                {formatAttachmentSize(pendingAttachment?.size ?? queuedFile?.size ?? 0)} ·{' '}
-                {pendingAttachment?.mimeType ?? queuedFile?.type ?? 'Unknown format'}
-              </p>
+  // Show sign-in page without side menu if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
+        {neonToaster}
+        <div className="w-full max-w-md text-center space-y-8">
+          {/* Logo with neon glow */}
+          <div className="relative mx-auto h-20 w-20">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d] opacity-50 animate-pulse-slow" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#00f0ff] to-[#00ff9d]">
+              <Rocket className="h-10 w-10 text-black" strokeWidth={2.5} />
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-indigo-500 hover:bg-indigo-100"
-            onClick={handleRemoveAttachment}
-            disabled={isProcessing}
+
+          {/* Header */}
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold text-white">Welcome to Jobzippy</h1>
+            <p className="text-lg text-slate-400">
+              Your personal AI assistant for job applications
+            </p>
+          </div>
+
+          {/* Sign-in button styled like pricing button */}
+          <button
+            onClick={async () => {
+              try {
+                setSignInLoading(true);
+                await login(true); // includeGmailScope
+                toast.success('Successfully signed in!');
+              } catch (error) {
+                logger.error('[SignIn] Error:', error);
+                toast.error('Failed to sign in. Please try again.');
+              } finally {
+                setSignInLoading(false);
+              }
+            }}
+            disabled={signInLoading}
+            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 transition-opacity font-medium text-white shadow-lg shadow-[#00f0ff]/20 flex items-center justify-center gap-2 text-base disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Remove
-          </Button>
+            {signInLoading ? (
+              <>Signing in...</>
+            ) : (
+              <>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54772 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z"
+                    fill="currentColor"
+                    fillOpacity="0.9"
+                  />
+                </svg>
+                Continue with Google
+              </>
+            )}
+          </button>
+
+          {/* Trust signals - minimal */}
+          <div className="pt-8 space-y-3">
+            <p className="text-slate-500 text-sm">Trusted by job seekers worldwide</p>
+            <div className="flex justify-center gap-8 text-slate-400 text-xs">
+              <div>
+                <div className="text-xl font-bold text-[#00f0ff]">10K+</div>
+                <div className="text-slate-500">Applications</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-[#00ff9d]">500+</div>
+                <div className="text-slate-500">Hired</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-[#7000ff]">4.8/5</div>
+                <div className="text-slate-500">Rating</div>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-slate-400">
-          Commands · Attach resumes · Slash actions
-        </span>
-        <Button
-          size="sm"
-          className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-5 text-xs font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:to-purple-600"
-          onClick={() => {
-            void handleSubmit();
-          }}
-          disabled={isProcessing || (!composerValue.trim() && !queuedFile)}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-        </Button>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.doc,.docx"
-        hidden
-        onChange={handleFileChange}
-      />
-    </div>
-  ) : (
-    <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-sm text-slate-500 shadow-sm">
-      Sign in to unlock the chat composer and let Jobzippy parse your resume in real time.
-    </div>
-  );
+    );
+  }
 
   return (
     <>
-      <Toaster position="top-right" />
+      {neonToaster}
       <LayoutShell
         title="Jobzippy"
         subtitle="Your agentic AI for job search"
-        statusLabel={statusLabel}
-        headerActions={
-          <div className="flex items-center gap-2">
-            {isAuthenticated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs md:hidden"
-                onClick={handleLogout}
-              >
-                Logout
-              </Button>
-            )}
-          </div>
-        }
+        statusLabel={null}
         history={historyContent}
-        composer={composerContent}
-        navItems={NAV_ITEMS}
+        navItems={navItems}
+        secondaryNavItems={onboardingNavItems}
         avatar={
           user
             ? {
@@ -421,246 +1184,69 @@ function App() {
           </button>
         }
       />
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="bg-[#0f172a] border border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage subscription</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              View your current plan or cancel your subscription.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-300">Status</span>
+              <span className="font-semibold">
+                {subscriptionStatus?.status ?? 'No subscription'}
+                {subscriptionStatus?.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}
+              </span>
+            </div>
+            {subscriptionStatus?.currentPeriodEnd && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300">Current period ends</span>
+                <span className="font-semibold">
+                  {subscriptionStatus.currentPeriodEnd.toDate().toLocaleDateString()}
+                </span>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <button
+              onClick={handleOpenPortal}
+              disabled={portalLoading}
+              className="w-full rounded-lg bg-gradient-to-r from-[#00f0ff] to-[#7000ff] px-4 py-2.5 text-sm font-semibold shadow-[0_10px_25px_rgba(0,240,255,0.25)] hover:opacity-90 transition disabled:opacity-50"
+            >
+              {portalLoading ? 'Opening portal...' : 'Open billing portal'}
+            </button>
+            <button
+              onClick={handleCancelSubscription}
+              disabled={cancelLoading || !subscriptionStatus?.stripeSubscriptionId}
+              className="w-full rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white border border-white/20 hover:bg-white/15 transition disabled:opacity-50"
+            >
+              {cancelLoading ? 'Cancelling...' : 'Cancel subscription'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <OnboardingWizard
         open={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
+        onClose={() => {
+          setIsWizardOpen(false);
+          setManualWizardOpen(false);
+        }}
         onComplete={handleCompleteOnboarding}
         onSkip={handleSkipOnboarding}
+        autoCloseOnComplete={!manualWizardOpen}
       />
+      <TutorialCarousel open={showTutorial && !isWizardOpen} onClose={handleDismissTutorial} />
+      <TutorialCarousel open={false} onClose={() => {}} />
+      <TutorialCarousel
+        open={showTutorial && !isWizardOpen}
+        onClose={handleDismissTutorial}
+        onStart={startAgent}
+      />
+      {/* No bottom-right retry prompt by design; Start button itself conveys status */}
     </>
   );
 }
 
 export default App;
-
-function formatTimestamp(iso: string) {
-  const date = new Date(iso);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatAttachmentSize(size: number) {
-  if (size === 0) return '0 KB';
-  return `${(size / 1024).toFixed(0)} KB`;
-}
-
-function AttachmentChips({ attachments }: { attachments: IntakeAttachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {attachments.map((attachment) => (
-        <span
-          key={attachment.id}
-          className="inline-flex items-center space-x-2 rounded-full bg-white/70 px-3 py-1 text-xs text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur"
-        >
-          <Paperclip className="h-3 w-3" />
-          <span className="font-medium">{attachment.name}</span>
-          <span className="text-[10px] text-slate-400">
-            {formatAttachmentSize(attachment.size)}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function StatusStep({ step }: { step: IntakeStatusStep }) {
-  const Icon =
-    step.state === 'completed'
-      ? CheckCircle2
-      : step.state === 'in_progress'
-        ? Loader2
-        : step.state === 'error'
-          ? AlertTriangle
-          : Clock;
-
-  return (
-    <div className="flex items-start space-x-3">
-      <div
-        className={clsx(
-          'mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border',
-          step.state === 'completed' && 'border-emerald-200 bg-emerald-50 text-emerald-600',
-          step.state === 'in_progress' &&
-            'border-indigo-200 bg-indigo-50 text-indigo-600 animate-pulse',
-          step.state === 'error' && 'border-rose-200 bg-rose-50 text-rose-500',
-          step.state === 'pending' && 'border-slate-200 bg-white text-slate-300'
-        )}
-      >
-        <Icon className={clsx('h-4 w-4', step.state === 'in_progress' && 'animate-spin')} />
-      </div>
-      <div>
-        <p className="text-sm font-medium text-slate-700">{step.label}</p>
-        {step.description && <p className="text-xs text-slate-500">{step.description}</p>}
-        {step.error && <p className="text-xs text-rose-500">{step.error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function StatusMessage({ message }: { message: IntakeMessage }) {
-  const steps = message.statusSteps ?? [];
-  return (
-    <div className="rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <div className="mb-3 flex items-center space-x-2">
-        <Sparkles className="h-4 w-4 text-indigo-500" />
-        <p className="text-sm font-semibold text-indigo-600">{message.content}</p>
-      </div>
-      <div className="space-y-4">
-        {steps.map((step) => (
-          <StatusStep key={step.id} step={step} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PreviewSection({ section }: { section: IntakePreviewSection }) {
-  // Clamp confidence to 0-1 range in case API returns bad values
-  const normalizedConfidence = Math.min(1, Math.max(0, section.confidence));
-  const confidencePercent = Math.round(normalizedConfidence * 100);
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700">{section.title}</h4>
-          <p className="text-xs text-slate-400">Confidence {confidencePercent}%</p>
-        </div>
-      </div>
-      <div className="mt-3 space-y-2">
-        {section.fields.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No data extracted for this section</p>
-        ) : (
-          section.fields.map((field) => (
-            <div key={field.id} className="rounded-lg border border-slate-200 bg-white/70 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-400">{field.label}</p>
-              {Array.isArray(field.value) ? (
-                <p className="mt-1 text-sm text-slate-700">
-                  {field.value.length > 0 ? field.value.join(', ') : '(empty)'}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-slate-700">{field.value || '(empty)'}</p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PreviewMessage({
-  message,
-  onApply,
-  onEdit,
-  isApplying,
-}: {
-  message: IntakeMessage;
-  onApply?: () => void;
-  onEdit?: () => void;
-  isApplying?: boolean;
-}) {
-  const sections = message.previewSections ?? [];
-  const metadata = message.metadata ?? {};
-
-  return (
-    <div className="space-y-4 rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-indigo-600">Resume parsed successfully</p>
-          <p className="text-xs text-slate-400">
-            Confidence {Math.round(((metadata.confidence as number) ?? 0) * 100)}%
-          </p>
-        </div>
-        <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-600">
-          {(metadata.resumeMetadata as { fileName?: string })?.fileName ?? 'Resume'}
-        </span>
-      </div>
-      <p className="text-sm text-slate-700">{message.content}</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        {sections.map((section) => (
-          <PreviewSection key={section.id} section={section} />
-        ))}
-      </div>
-      {(onApply || onEdit) && (
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
-            onClick={onEdit}
-            disabled={!onEdit}
-          >
-            Edit manually
-          </Button>
-          <Button
-            size="sm"
-            className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-xs font-semibold text-white shadow-sm hover:from-indigo-600 hover:to-purple-600"
-            onClick={onApply}
-            disabled={!onApply || isApplying}
-          >
-            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChatMessage({
-  message,
-  onApplyPreview,
-  onEditPreview,
-  isPreviewProcessing,
-}: {
-  message: IntakeMessage;
-  onApplyPreview?: () => void;
-  onEditPreview?: () => void;
-  isPreviewProcessing?: boolean;
-}) {
-  const isAssistant = message.role !== 'user';
-  const alignment = isAssistant ? 'items-start' : 'items-end';
-  const bubbleClass = isAssistant
-    ? 'bg-white/80 text-slate-700 border border-indigo-100 rounded-3xl rounded-tl-md'
-    : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-3xl rounded-tr-md';
-
-  if (message.kind === 'status') {
-    return (
-      <div className="flex flex-col items-start space-y-2">
-        <StatusMessage message={message} />
-        <span className="text-[10px] uppercase tracking-wide text-slate-300">
-          {formatTimestamp(message.createdAt)}
-        </span>
-      </div>
-    );
-  }
-
-  if (message.kind === 'preview') {
-    return (
-      <div className="flex flex-col items-start space-y-2">
-        <PreviewMessage
-          message={message}
-          onApply={onApplyPreview}
-          onEdit={onEditPreview}
-          isApplying={isPreviewProcessing}
-        />
-        <span className="text-[10px] uppercase tracking-wide text-slate-300">
-          {formatTimestamp(message.createdAt)}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={clsx('flex flex-col', alignment, 'space-y-2')}>
-      <div
-        className={clsx('max-w-[85%] rounded-3xl px-4 py-3 shadow-sm backdrop-blur', bubbleClass)}
-      >
-        <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
-        {message.attachments && <AttachmentChips attachments={message.attachments} />}
-      </div>
-      <span className="text-[10px] uppercase tracking-wide text-slate-300">
-        {formatTimestamp(message.createdAt)}
-      </span>
-    </div>
-  );
-}

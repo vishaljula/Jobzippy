@@ -28,6 +28,7 @@ export interface UserProfile {
     remote: boolean;
     locations: string[];
     salary_min: number;
+    salary_currency: string;
     start_date: string;
   };
 }

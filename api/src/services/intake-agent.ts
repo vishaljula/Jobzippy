@@ -1,26 +1,78 @@
-import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import type { ClientOptions } from 'openai';
-import { config } from '../config.js';
 import type {
   IntakeLLMResponse,
   IntakeRequestBody,
   ResumeExtractionResult,
 } from '../types/intake.js';
-import { runHeuristicIntakeLLM } from './intake-heuristics.js';
+import { runHeuristicIntakeLLM } from './intake-fallback-heuristics.js';
+import { OPENAI_MODEL, openaiClient } from './openai-client.js';
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? 'claude-3-haiku-20240307';
 
-const openaiClient = (() => {
-  if (!config.openai.apiKey) {
-    return null;
-  }
-  const options: ClientOptions = {
-    apiKey: config.openai.apiKey,
-  };
-  return new OpenAI(options);
-})();
+const SALARY_CURRENCY_FALLBACK = 'USD';
+const SUPPORTED_CURRENCIES = new Set([
+  'USD',
+  'CAD',
+  'GBP',
+  'EUR',
+  'INR',
+  'AUD',
+  'NZD',
+  'SGD',
+  'MXN',
+  'CHF',
+  'SEK',
+  'NOK',
+  'DKK',
+  'JPY',
+  'CNY',
+  'HKD',
+  'KRW',
+  'ZAR',
+  'BRL',
+  'PLN',
+  'ILS',
+  'TRY',
+  'PHP',
+  'MYR',
+  'AED',
+]);
+const CURRENCY_ALIAS_MAP = new Map<string, string>([
+  ['usd', 'USD'],
+  ['us dollars', 'USD'],
+  ['dollars', 'USD'],
+  ['cad', 'CAD'],
+  ['canadian dollars', 'CAD'],
+  ['gbp', 'GBP'],
+  ['pounds', 'GBP'],
+  ['sterling', 'GBP'],
+  ['eur', 'EUR'],
+  ['euros', 'EUR'],
+  ['inr', 'INR'],
+  ['rupees', 'INR'],
+  ['aud', 'AUD'],
+  ['australian dollars', 'AUD'],
+  ['nzd', 'NZD'],
+  ['sgd', 'SGD'],
+  ['mxn', 'MXN'],
+  ['chf', 'CHF'],
+  ['sek', 'SEK'],
+  ['nok', 'NOK'],
+  ['dkk', 'DKK'],
+  ['jpy', 'JPY'],
+  ['cny', 'CNY'],
+  ['rmb', 'CNY'],
+  ['hkd', 'HKD'],
+  ['krw', 'KRW'],
+  ['zar', 'ZAR'],
+  ['brl', 'BRL'],
+  ['pln', 'PLN'],
+  ['ils', 'ILS'],
+  ['try', 'TRY'],
+  ['php', 'PHP'],
+  ['myr', 'MYR'],
+  ['aed', 'AED'],
+]);
 
 const claudeClient = (() => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -70,6 +122,7 @@ const RESPONSE_SCHEMA = {
               remote: { type: 'boolean' },
               locations: { type: 'array', items: { type: 'string' } },
               salary_min: { type: 'number' },
+              salary_currency: { type: 'string' },
               start_date: { type: 'string' },
             },
           },
@@ -187,6 +240,7 @@ function buildSystemPrompt(): string {
     'Always respect fields that are already known unless the resume provides higher confidence data.',
     'If information is missing, leave the field empty but include notes in the summary or warnings array.',
     'Provide high-level summary bullet points and confidence estimates for each preview section.',
+    'When the user states a salary range (e.g., "180-200k"), capture the lower bound as profile.preferences.salary_min.',
     'For followUpPrompt, use clear action-oriented language like: "Review the data above. Click Apply updates to save to your vault, or Edit manually to modify first."',
   ].join(' ');
 }
@@ -221,6 +275,78 @@ function coerceNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+const SALARY_MULTIPLIERS: Record<string, number> = {
+  k: 1_000,
+  m: 1_000_000,
+  b: 1_000_000_000,
+  thousand: 1_000,
+  million: 1_000_000,
+  billion: 1_000_000_000,
+};
+
+function parseSalaryFromString(raw: string): number | null {
+  const normalized = raw.replace(/[$,]/g, '').toLowerCase();
+  const regex = /(\d+(?:\.\d+)?)(?:\s*(k|m|b|thousand|million|billion))?/g;
+  const matches: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+  // eslint-disable-next-line no-cond-assign
+  while ((match = regex.exec(normalized)) !== null) {
+    matches.push(match);
+  }
+  if (!matches.length) {
+    return null;
+  }
+  const [first] = matches;
+  if (!first || !first[1]) {
+    return null;
+  }
+  const suffix = first[2] ?? matches[1]?.[2];
+  const multiplier = suffix ? SALARY_MULTIPLIERS[suffix] ?? 1 : 1;
+  const numeric = Number.parseFloat(first[1]);
+  if (Number.isNaN(numeric)) {
+    return null;
+  }
+  const result = numeric * multiplier;
+  if (!Number.isFinite(result)) {
+    return null;
+  }
+  return Math.round(result);
+}
+
+function coerceSalary(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = parseSalaryFromString(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+    const numeric = Number.parseFloat(value);
+    if (!Number.isNaN(numeric)) {
+      return numeric;
+    }
+  }
+  return fallback;
+}
+
+function normalizeCurrencyValue(input?: unknown): string {
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (trimmed.length > 0) {
+      const upper = trimmed.toUpperCase();
+      if (SUPPORTED_CURRENCIES.has(upper)) {
+        return upper;
+      }
+      const alias = CURRENCY_ALIAS_MAP.get(trimmed.toLowerCase());
+      if (alias) {
+        return alias;
+      }
+    }
+  }
+  return SALARY_CURRENCY_FALLBACK;
+}
+
 function normaliseLLMResponse(payload: Partial<IntakeLLMResponse>): IntakeLLMResponse {
   const identity = payload.profile?.identity;
   const preferences = payload.profile?.preferences;
@@ -242,7 +368,8 @@ function normaliseLLMResponse(payload: Partial<IntakeLLMResponse>): IntakeLLMRes
       preferences: {
         remote: Boolean(preferences?.remote),
         locations: Array.isArray(preferences?.locations) ? preferences.locations.map(String) : [],
-        salary_min: coerceNumber(preferences?.salary_min, 0),
+        salary_min: coerceSalary(preferences?.salary_min, 0),
+        salary_currency: normalizeCurrencyValue(preferences?.salary_currency),
         start_date: preferences?.start_date ?? '',
       },
     },
@@ -334,7 +461,7 @@ export async function runIntakeAgent(
 CRITICAL: Return ONLY valid JSON matching this EXACT schema:
 
 {
-  "profile": { "identity": { "first_name": "", "last_name": "", "email": "", "phone": "", "address": "" }, "work_auth": { "visa_type": "", "sponsorship_required": false }, "preferences": { "remote": false, "locations": [], "salary_min": 0, "start_date": "" } },
+  "profile": { "identity": { "first_name": "", "last_name": "", "email": "", "phone": "", "address": "" }, "work_auth": { "visa_type": "", "sponsorship_required": false }, "preferences": { "remote": false, "locations": [], "salary_min": 0, "salary_currency": "USD", "start_date": "" } },
   "compliance": { "veteran_status": "prefer_not", "disability_status": "prefer_not", "criminal_history_policy": "ask_if_required" },
   "history": { "employment": [], "education": [] },
   "policies": { "eeo": "ask_if_required", "salary": "ask_if_required", "relocation": "ask_if_required", "work_shift": "ask_if_required" },

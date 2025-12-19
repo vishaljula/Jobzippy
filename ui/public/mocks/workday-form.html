@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application - Salesforce Careers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .form-header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 3px solid #0070d2;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+
+        .mode-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #0070d2;
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .form-container {
+            background: white;
+            padding: 40px;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #0070d2;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            padding: 30px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: #0070d2;
+            background: #f0f7ff;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-text {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-button {
+            padding: 10px 20px;
+            background: #0070d2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .file-name {
+            margin-top: 10px;
+            color: #0070d2;
+            font-size: 14px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+
+        .btn-primary {
+            background: #0070d2;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #005fb2;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body data-ats-type="workday">
+    <div class="container">
+        <div class="form-header">
+            <span class="mode-badge" id="mode-badge">Autofill Mode</span>
+            <h1>Application for Software Engineering Architect</h1>
+            <p style="color: #666; margin-top: 10px;">Salesforce - San Francisco, CA</p>
+        </div>
+
+        <div class="form-container">
+            <form id="application-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firstName">First Name<span class="required"> *</span></label>
+                        <input type="text" id="firstName" name="firstName" required autocomplete="given-name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="lastName">Last Name<span class="required"> *</span></label>
+                        <input type="text" id="lastName" name="lastName" required autocomplete="family-name">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email<span class="required"> *</span></label>
+                    <input type="email" id="email" name="email" required autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number<span class="required"> *</span></label>
+                    <input type="tel" id="phone" name="phone" required autocomplete="tel">
+                </div>
+
+                <div class="form-group">
+                    <label>Resume<span class="required"> *</span></label>
+                    <div class="file-upload" onclick="document.getElementById('resume').click()">
+                        <p class="upload-text">Upload your resume</p>
+                        <button type="button" class="upload-button">Choose File</button>
+                    </div>
+                    <input type="file" id="resume" name="resume" class="file-input" accept=".pdf,.doc,.docx" required>
+                    <div class="file-name" id="file-name"></div>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn btn-secondary"
+                        onclick="document.getElementById('application-form').reset()">Clear</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit Application</button>
+                </div>
+
+                <div class="success-message" id="success-message">
+                    ✓ Application submitted successfully!
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Get mode from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode') || 'autofill';
+
+        const modeBadge = document.getElementById('mode-badge');
+        const modeText = {
+            'autofill': 'Autofill Mode',
+            'manual': 'Manual Entry',
+            'last': 'Using Last Application'
+        };
+        modeBadge.textContent = modeText[mode] || 'Autofill Mode';
+
+        // File upload handling
+        document.getElementById('resume').addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name;
+            const fileNameDisplay = document.getElementById('file-name');
+            if (fileName) {
+                fileNameDisplay.textContent = `Selected: ${fileName}`;
+            }
+            checkFormValidity();
+        });
+
+        // Form validation
+        function checkFormValidity() {
+            const form = document.getElementById('application-form');
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = !form.checkValidity();
+        }
+
+        // Listen to all inputs
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', checkFormValidity);
+        });
+
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[Workday Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[Workday Mock] Failed to log submission', err);
+            }
+        }
+
+        // Form submission
+        document.getElementById('application-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            // Capture current answers
+            const form = document.getElementById('application-form');
+            const formData = new FormData(form);
+            const answers = Object.fromEntries(formData.entries());
+            const resumeFile = formData.get('resume');
+            if (resumeFile && typeof resumeFile === 'object') {
+                answers.resume = resumeFile.name || 'uploaded-file';
+            }
+
+            const urlParamsForJob = new URLSearchParams(window.location.search);
+            const jobId = urlParamsForJob.get('job') || null;
+
+            logMockSubmission({
+                atsType: 'workday_form',
+                jobId,
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
+
+            // Simulate submission
+            setTimeout(() => {
+                document.getElementById('success-message').style.display = 'block';
+                submitBtn.textContent = 'Application Submitted';
+
+                // Trigger alert for extension to detect (intercepted by page-script.js)
+                alert('Application submitted successfully!');
+
+                // Notify extension that application is complete
+                window.postMessage({ type: 'ATS_APPLICATION_COMPLETE' }, '*');
+            }, 1500);
+        });
+    </script>
+</body>
+
+</html>
