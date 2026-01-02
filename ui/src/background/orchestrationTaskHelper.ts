@@ -6,7 +6,6 @@
 import type { SequentialJobState, StepOutput } from './orchestration-types';
 import { jobExists } from '../lib/jobs/store';
 import { persistJobCompleted, jobIdToMetadata, registerJobFromQueue } from './job-persistence';
-import type { JobQueueItem } from './index';
 import { backgroundVaultService, STORES } from './vault-service-worker';
 import { deriveVaultPassword } from '../lib/vault/utils';
 import { encodeBase64 } from '../lib/vault/crypto';
@@ -120,10 +119,13 @@ async function scrapeJobs(
     if (response?.status === 'ok' && response?.data) {
       const { jobIds, jobs, hasNextPage, currentPage } = response.data;
 
-      // Register job metadata
-      jobs.forEach((job: JobQueueItem) => {
+      // Register job metadata - use state.platform since jobs don't include platform
+      jobs.forEach((job: any) => {
         if (!jobIdToMetadata.has(job.id)) {
-          registerJobFromQueue(job.id, job);
+          registerJobFromQueue(job.id, {
+            ...job,
+            platform: state.platform, // Add platform from state
+          });
         }
       });
 
