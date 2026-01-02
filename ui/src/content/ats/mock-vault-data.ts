@@ -16,3 +16,15 @@ export const MOCK_VAULT_DATA = {
     sponsorship_required: false,
   },
 };
+
+/**
+ * Mock resume for testing
+ * A minimal PDF-like ArrayBuffer for testing resume upload functionality
+ */
+export const MOCK_RESUME: ArrayBuffer = (() => {
+  // Create a minimal PDF structure (PDF header + basic content)
+  const pdfContent =
+    '%PDF-1.4\n%Mock Resume\n1 0 obj\n<< /Type /Catalog >>\nendobj\nxref\n0 1\ntrailer\n<< /Size 1 /Root 1 0 R >>\nstartxref\n100\n%%EOF';
+  const encoder = new TextEncoder();
+  return encoder.encode(pdfContent).buffer;
+})();

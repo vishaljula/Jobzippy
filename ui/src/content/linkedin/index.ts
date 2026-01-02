@@ -1226,18 +1226,32 @@ function init() {
           const currentPage =
             parseInt(new URLSearchParams(window.location.search).get('start') || '0', 10) / 25 + 1;
 
+          const jobIds = jobs.map((j) => j.id);
+          const jobsData = jobs.map((j) => ({ ...j, platform: 'LinkedIn' as const }));
+
+          // Send separate message for legacy compatibility
           chrome.runtime
             .sendMessage({
               type: 'JOBS_SCRAPED',
               data: {
                 platform: 'LinkedIn',
-                jobs: jobs.map((j) => ({ ...j, platform: 'LinkedIn' as const })),
+                jobs: jobsData,
                 hasNextPage,
                 currentPage,
               },
             })
             .catch((err) => console.error('[Jobzippy] Error sending scraped jobs:', err));
-          sendResponse({ status: 'ok' });
+
+          // Return data in response for Orchestrator V2
+          sendResponse({
+            status: 'ok',
+            data: {
+              jobIds,
+              jobs: jobsData,
+              hasNextPage,
+              currentPage,
+            },
+          });
         } catch (error) {
           console.error('[Jobzippy] Error scraping jobs:', error);
           sendResponse({ status: 'error', message: String(error) });
@@ -1245,12 +1259,17 @@ function init() {
         break;
       }
 
-      case 'CLICK_JOB_CARD': {
+      case 'CLICK_JOB_CARD':
+      case 'CLICK_JOB_BY_ID': {
         const { jobId } = message.data;
-        console.log('[Jobzippy] LinkedIn received CLICK_JOB_CARD for:', jobId);
-        clickJobCard(jobId)
-          .then((details) => {
+        console.log('[Jobzippy] LinkedIn received CLICK_JOB_CARD/CLICK_JOB_BY_ID for:', jobId);
+
+        // Use async/await pattern for Orchestrator V2 compatibility
+        (async () => {
+          try {
+            const details = await clickJobCard(jobId);
             if (details) {
+              // Send separate message for legacy compatibility
               chrome.runtime
                 .sendMessage({
                   type: 'JOB_DETAILS_SCRAPED',
@@ -1261,14 +1280,24 @@ function init() {
                   },
                 })
                 .catch(() => {});
+
+              // Return data in response for Orchestrator V2
+              sendResponse({
+                success: true,
+                description: details.description,
+                applyType: details.applyType,
+              });
             } else {
               console.warn('[Jobzippy] Failed to scrape details for:', jobId);
-              // Send failure so background doesn't hang (or let timeout handle it)
+              sendResponse({ success: false, reason: 'No details found' });
             }
-          })
-          .catch((err) => console.error('[Jobzippy] Error clicking job card:', err));
-        sendResponse({ status: 'processing' });
-        break;
+          } catch (err) {
+            console.error('[Jobzippy] Error clicking job card:', err);
+            sendResponse({ success: false, reason: String(err) });
+          }
+        })();
+
+        return true; // Keep channel open for async response
       }
 
       case 'NAVIGATE_NEXT_PAGE': {
@@ -1296,8 +1325,22 @@ function init() {
         break;
       }
 
-      default:
+      default: {
+        // Don't respond to new Orchestrator V2 message types - let executor-v2 handle them
+        const newOrchestratorV2MessageTypes = [
+          'CLICK_APPLY_BUTTON',
+          'FILL_FORM',
+          'CLASSIFY_PAGE',
+          'CLICK_INTERMEDIATE_BUTTON',
+          'CLICK_MODAL_BUTTON',
+        ];
+        if (newOrchestratorV2MessageTypes.includes(message.type)) {
+          // Return false to indicate we didn't handle it, so executor-v2 can respond
+          return false;
+        }
         sendResponse({ status: 'unknown_command' });
+        break;
+      }
     }
     return true;
   });

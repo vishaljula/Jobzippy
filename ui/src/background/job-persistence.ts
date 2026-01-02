@@ -192,6 +192,15 @@ export async function persistJobCompleted(
 ): Promise<JobRecord | null> {
   const metadata = getJobMetadata(jobId);
   if (!metadata) {
+    console.warn(`[JobPersistence] No metadata found for jobId=${jobId}, skipping persist`);
+    return null;
+  }
+
+  // Defensive check: ensure platform exists
+  if (!metadata.platform) {
+    console.warn(
+      `[JobPersistence] Metadata for jobId=${jobId} missing platform property, skipping persist`
+    );
     return null;
   }
 

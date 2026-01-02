@@ -49,7 +49,7 @@
         "http://localhost:*/mocks/linkedin-jobs.html",
         "http://localhost:*/mocks/linkedin-easy-apply.html"
       ],
-      "js": ["content/content-linkedin.js"],
+      "js": ["content/executor-v2.js"],
       "run_at": "document_idle"
     },
     {
@@ -58,7 +58,7 @@
         "http://localhost:*/mocks/indeed-jobs.html",
         "http://localhost:*/mocks/indeed-apply.html"
       ],
-      "js": ["content/content-indeed.js"],
+      "js": ["content/executor-v2.js"],
       "run_at": "document_idle"
     },
     {
@@ -71,7 +71,7 @@
         "http://localhost:*/mocks/greenhouse-apply.html",
         "http://localhost:*/mocks/*-apply.html"
       ],
-      "js": ["content/content-ats.js"],
+      "js": ["content/executor-v2.js"],
       "run_at": "document_idle"
     }
   ],

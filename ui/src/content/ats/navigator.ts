@@ -89,7 +89,10 @@ export interface NavigationResult {
  * Main intelligent navigation function
  * Navigates through multi-step flows until reaching application form
  */
-export async function intelligentNavigate(): Promise<NavigationResult> {
+export async function intelligentNavigate(
+  providedResume?: { data: string; fileName?: string; mimeType?: string },
+  providedProfile?: any // Add profile parameter
+): Promise<NavigationResult> {
   logger.log('Navigator', 'Starting intelligent navigation...');
   console.log('[Navigator] Starting intelligent navigation...');
   console.log('[Navigator] Current URL:', window.location.href);
@@ -151,7 +154,7 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
 
     let result: NavigationResult | null = null;
     try {
-      result = await handlePageType(classification);
+      result = await handlePageType(classification, providedResume, providedProfile);
     } catch (error) {
       logger.error('Navigator', `Error handling page type ${classification.type}:`, error);
       console.error(`[Navigator] Error handling page type ${classification.type}:`, error);
@@ -204,7 +207,9 @@ export async function intelligentNavigate(): Promise<NavigationResult> {
  * Handle page based on its classification
  */
 async function handlePageType(
-  classification: PageClassification
+  classification: PageClassification,
+  providedResume?: { data: string; fileName?: string; mimeType?: string },
+  providedProfile?: any // Add profile parameter
 ): Promise<NavigationResult | null> {
   switch (classification.type) {
     case 'form':
@@ -233,7 +238,7 @@ async function handlePageType(
         navState.usedIntermediateOnFormPage = true;
         return await handleIntermediate(classification);
       }
-      return handleForm(classification);
+      return handleForm(classification, providedResume, providedProfile);
 
     case 'modal':
       return await handleModal(classification);
@@ -282,7 +287,11 @@ function hasVisibleApplyAction(classification: PageClassification): boolean {
 /**
  * Handle application form (fill and submit!)
  */
-async function handleForm(classification: PageClassification): Promise<NavigationResult> {
+async function handleForm(
+  classification: PageClassification,
+  providedResume?: { data: string; fileName?: string; mimeType?: string },
+  providedProfile?: any // Add profile parameter
+): Promise<NavigationResult> {
   logger.log('Navigator', '✓ Application form found!');
   console.log('[Navigator] ✓ Application form found!');
   logger.log('Navigator', 'Form details', {
@@ -293,10 +302,10 @@ async function handleForm(classification: PageClassification): Promise<Navigatio
   });
 
   try {
-    // Create form filler from vault data
+    // Create form filler from vault data WITH the provided resume
     logger.log('Navigator', 'Creating form filler from vault...');
     console.log('[Navigator] Creating form filler from vault...');
-    const filler = await createFormFillerFromVault();
+    const filler = await createFormFillerFromVault(providedResume, providedProfile);
     if (!filler) {
       logger.error('Navigator', 'Could not create form filler');
       console.error('[Navigator] Could not create form filler');

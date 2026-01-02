@@ -16,6 +16,11 @@ import {
   jobIdToMetadata,
 } from './job-persistence';
 import { jobExists } from '../lib/jobs/store';
+import { USE_ORCHESTRATOR_V2, executeOrchestration } from './orchestration';
+import {
+  initializeOrchestrationTabDetection,
+  isAtsTabTracked,
+} from './orchestration-tab-detection';
 import type {
   JobSession,
   ApplyJobStartMessage,
@@ -37,7 +42,8 @@ console.log('[Jobzippy] Background service worker initialized');
 // Extension Lifecycle - Welcome Page on Install
 // -----------------------------------------------------------------------------
 chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'install') {
+  // Disable welcome page for testing (can be re-enabled later)
+  if (details.reason === 'install' && process.env.NODE_ENV !== 'test') {
     console.log('[Jobzippy] Extension installed - opening welcome page');
     chrome.tabs.create({
       url: 'https://jobzippy.ai/welcome?installed=true',
@@ -546,6 +552,11 @@ function stopEngine() {
 
 // Process the next job in the queue
 async function processJobQueue(platform: 'LinkedIn' | 'Indeed') {
+  // Only run if NOT using Orchestrator V2 (defense against recursive calls)
+  if (USE_ORCHESTRATOR_V2) {
+    return;
+  }
+
   const state = platformStates.get(platform);
   if (!state || !state.isActive || engineState !== 'RUNNING' || !state.tabId) return;
 
@@ -728,6 +739,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // NEW ARCHITECTURE: JobSession Message Handlers
     // ========================================================================
     case 'APPLY_JOB_START': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as ApplyJobStartMessage;
       const { jobId, title, company, location, url, platform, applyType } = msg.data;
 
@@ -819,6 +837,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'LINKEDIN_MODAL_DETECTED': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as LinkedInModalDetectedMessage;
       const { jobId } = msg.data;
 
@@ -835,6 +860,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'JOB_COMPLETED': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as JobCompletedMessage;
       const { jobId, success, error } = msg.data;
 
@@ -860,6 +892,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'ATS_CONTENT_SCRIPT_READY': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as ATSContentScriptReadyMessage;
       const { jobId } = msg.data;
       const tabId = _sender.tab?.id;
@@ -974,6 +1013,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'OPEN_EXTERNAL_ATS_TAB': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const { jobId, url } = message.data || {};
       if (!jobId || !url) {
         sendResponse({ status: 'error', message: 'Missing jobId or url' });
@@ -1049,6 +1095,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'ATS_NAVIGATION_STARTING': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as ATSNavigationStartingMessage;
       const { jobId, newUrl } = msg.data;
 
@@ -1114,6 +1167,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'ATS_COMPLETE': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const msg = message as ATSCompleteMessage;
       const { jobId, success, error } = msg.data;
 
@@ -1196,6 +1256,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'PAGE_ACTIVE': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 uses orchestration-tab-detection.ts - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       // Content script is telling us it's active on a platform
       const platform = message.data?.platform as 'LinkedIn' | 'Indeed' | undefined;
       if (platform && _sender.tab?.id) {
@@ -1210,45 +1277,104 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'START_AUTO_APPLY':
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 uses START_AGENT instead - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       startEngine();
       sendResponse({ status: 'success', state: engineState });
       break;
-    case 'START_AGENT':
-      console.log('[Jobzippy] Background received START_AGENT, forwarding to active tabs only');
-      logToContentScripts('Background', 'START_AGENT received from sidepanel');
+    case 'START_AGENT': {
+      if (USE_ORCHESTRATOR_V2) {
+        // NEW CODE: Use orchestrator V2
+        console.log('[Jobzippy] Using Orchestrator V2');
 
-      // No auth preflight here in dev; sidepanel already decided it's OK to start.
-      // Just forward START_AGENT to any tabs that have reported PAGE_ACTIVE.
-      for (const [platform, state] of platformStates.entries()) {
-        if (state.tabId) {
-          console.log(`[Jobzippy] Forwarding START_AGENT to ${platform} tab:`, state.tabId);
-          chrome.tabs
-            .sendMessage(state.tabId, {
-              type: 'START_AGENT',
-              data: message.data || { maxApplications: 15 },
-            })
-            .catch((err) => {
-              console.error(`[Jobzippy] Error sending START_AGENT to ${platform}:`, err);
-            });
-        } else {
-          console.warn(
-            `[Jobzippy] START_AGENT: No active tabId for ${platform} (PAGE_ACTIVE not received yet)`
-          );
+        // Initialize tab detection for orchestration
+        initializeOrchestrationTabDetection();
+
+        // Find active tabs directly (don't rely on platformStates)
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (!tab.id || !tab.url) continue;
+
+            let platform: 'LinkedIn' | 'Indeed' | null = null;
+            const isLinkedInMock =
+              tab.url.startsWith('http://localhost:') && tab.url.includes('linkedin-jobs.html');
+            const isIndeedMock =
+              tab.url.startsWith('http://localhost:') && tab.url.includes('indeed-jobs.html');
+
+            if (tab.url.includes('linkedin.com/jobs') || isLinkedInMock) {
+              platform = 'LinkedIn';
+            } else if (
+              (tab.url.includes('indeed.com') && tab.url.includes('jobs')) ||
+              isIndeedMock
+            ) {
+              platform = 'Indeed';
+            }
+
+            if (platform) {
+              console.log(`[Jobzippy] Found ${platform} tab:`, tab.id, tab.url);
+              const orchestrationState = {
+                platform,
+                tabId: tab.id,
+                atsTabId: null,
+                scrapedJobIds: [],
+                currentJobIndex: 0,
+                currentPage: 0,
+                hasNextPage: false,
+                isProcessing: false,
+                isActive: true,
+              };
+
+              // Start orchestration
+              executeOrchestration(orchestrationState, 'START_AGENT').catch((error) => {
+                console.error('[Jobzippy] Orchestration error:', error);
+              });
+            }
+          }
+        });
+      } else {
+        // OLD CODE: Forward START_AGENT to content scripts (legacy AgentController)
+        console.log('[Jobzippy] Using legacy AgentController');
+        for (const [platform, state] of platformStates.entries()) {
+          if (state.tabId) {
+            chrome.tabs
+              .sendMessage(state.tabId, {
+                type: 'START_AGENT',
+                data: message.data, // Pass through any data (e.g., maxApplications)
+              })
+              .catch((err) => {
+                console.error(`[Jobzippy] Error sending START_AGENT to ${platform}:`, err);
+              });
+          }
         }
       }
 
-      // Optionally flip engine state to RUNNING so UI shows status immediately
-      engineState = 'RUNNING';
-      engineStatus = 'Starting…';
-      broadcastEngineState();
-
       sendResponse({ status: 'started' });
       break;
+    }
     case 'STOP_AUTO_APPLY':
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles stopping via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       stopEngine();
       sendResponse({ status: 'success', state: engineState });
       break;
     case 'ENGINE_STATE':
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 broadcasts its own state - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       sendResponse({ status: 'success', state: engineState, engineStatus });
       break;
 
@@ -1376,7 +1502,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })();
       return true;
 
-    case 'PROCESS_JOB':
+    case 'PROCESS_JOB': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       (async () => {
         const { job, platform } = message.data;
         console.log(`[Jobzippy] Received PROCESS_JOB for ${job.title} on ${platform}`);
@@ -1439,14 +1572,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
       })();
       return true;
+      break;
+    }
 
     case 'JOB_APPLIED':
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       // TODO: Log application to Google Sheet
       console.log('[Jobzippy] Job applied:', message.data);
       sendResponse({ status: 'success' });
       break;
 
     case 'JOBS_SCRAPED': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const data = message.data as {
         platform: 'LinkedIn' | 'Indeed';
         jobs: JobQueueItem[];
@@ -1465,6 +1614,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'JOB_DETAILS_SCRAPED': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       // Story 5: Handle scraped details and decide next step
       const data = message.data as {
         platform: 'LinkedIn' | 'Indeed';
@@ -1510,6 +1666,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     case 'PAGE_NAVIGATED': {
+      // Only handle if NOT using Orchestrator V2
+      if (USE_ORCHESTRATOR_V2) {
+        // Orchestrator V2 handles this via its own flow - ignore old handler
+        sendResponse({ status: 'ok' });
+        break;
+      }
+
       const data = message.data as { platform: 'LinkedIn' | 'Indeed'; url: string };
       if (data) {
         handlePageNavigated(data.platform);
@@ -1984,7 +2147,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return; // Handled by new architecture
   }
 
-  // If no JobSession found, log warning and proactively close the stray ATS tab.
+  // If no JobSession found, check if it's tracked by orchestration V2 before closing
+  // Orchestration V2 uses a different tracking mechanism (not JobSession)
+  if (USE_ORCHESTRATOR_V2 && isAtsTabTracked(tabId)) {
+    // Tab is tracked by orchestration V2, don't close it
+    console.log(
+      `[Jobzippy] External ATS tab loaded - tracked by orchestration V2, not closing: tabId=${tabId}`
+    );
+    return;
+  }
+
+  // If no JobSession found and not tracked by orchestration V2, log warning and proactively close the stray ATS tab.
   // This can happen when the browser opens a duplicate tab (e.g., both window.open and target="_blank"),
   // leaving an extra ATS tab that isn't tied to any active JobSession.
   console.warn(`[Jobzippy] External ATS tab loaded but no JobSession found for tabId=${tabId}`);

@@ -7,6 +7,10 @@ import { authenticateFirebase, type AuthenticatedRequest } from '../middleware/a
 const router = express.Router();
 
 // Initialize Stripe
+if (!config.stripe.secretKey) {
+  throw new Error('STRIPE_SECRET_KEY is required but not configured');
+}
+
 const stripe = new Stripe(config.stripe.secretKey, {
   apiVersion: '2025-11-17.clover',
 });
@@ -35,6 +39,15 @@ router.post('/create-checkout', authenticateFirebase, async (req: AuthenticatedR
     }
 
     console.log(`[Checkout] Creating checkout session for user: ${userId}`);
+
+    // Validate Stripe configuration
+    if (!config.stripe.priceId) {
+      res.status(500).json({
+        error: 'configuration_error',
+        message: 'Stripe price ID is not configured',
+      });
+      return;
+    }
 
     // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({

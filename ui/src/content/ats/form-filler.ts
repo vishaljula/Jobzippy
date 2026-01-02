@@ -34,12 +34,16 @@ export class FormFiller {
     console.log('[FormFiller] Starting form fill with', classification.fields.length, 'fields');
     logger.log('FormFiller', 'Page type', classification.type);
     logger.log('FormFiller', 'Page confidence', `${(classification.confidence * 100).toFixed(1)}%`);
-    logger.log('FormFiller', 'Fields detected', classification.fields.map(f => ({
-      purpose: f.purpose,
-      type: f.type,
-      confidence: f.confidence,
-      selector: f.selectors[0]
-    })));
+    logger.log(
+      'FormFiller',
+      'Fields detected',
+      classification.fields.map((f) => ({
+        purpose: f.purpose,
+        type: f.type,
+        confidence: f.confidence,
+        selector: f.selectors[0],
+      }))
+    );
 
     let filledCount = 0;
     let skippedCount = 0;
@@ -47,7 +51,10 @@ export class FormFiller {
 
     for (const field of classification.fields) {
       try {
-        logger.log('FormFiller', `Filling field: ${field.purpose}`, { type: field.type, selectors: field.selectors });
+        logger.log('FormFiller', `Filling field: ${field.purpose}`, {
+          type: field.type,
+          selectors: field.selectors,
+        });
         const filled = await this.fillField(field);
         if (filled) {
           filledCount++;
@@ -61,8 +68,13 @@ export class FormFiller {
       }
     }
 
-    logger.log('FormFiller', `Form fill complete: ${filledCount} filled, ${skippedCount} skipped, ${errorCount} errors`);
-    console.log(`[FormFiller] Form fill complete: ${filledCount} filled, ${skippedCount} skipped, ${errorCount} errors`);
+    logger.log(
+      'FormFiller',
+      `Form fill complete: ${filledCount} filled, ${skippedCount} skipped, ${errorCount} errors`
+    );
+    console.log(
+      `[FormFiller] Form fill complete: ${filledCount} filled, ${skippedCount} skipped, ${errorCount} errors`
+    );
   }
 
   /**
@@ -78,20 +90,28 @@ export class FormFiller {
 
     // For file inputs, check if they're required - if so, we MUST fill them even if hidden
     const isFileInput = element instanceof HTMLInputElement && element.type === 'file';
-    const isRequired = element.hasAttribute('required') || (element as HTMLInputElement | HTMLSelectElement).required;
-    
+    const isRequired =
+      element.hasAttribute('required') ||
+      (element as HTMLInputElement | HTMLSelectElement).required;
+
     if (!this.isVisible(element) && !(isFileInput && isRequired)) {
       logger.log('FormFiller', `Skipping hidden field: ${field.purpose} (not required file input)`);
       console.log('[FormFiller] Skipping hidden field:', field.purpose);
       return false;
     }
-    
+
     // For required hidden file inputs, make them temporarily visible to fill
     let wasHidden = false;
     let originalDisplay = '';
     if (isFileInput && isRequired && !this.isVisible(element)) {
-      logger.log('FormFiller', `Required file input is hidden, making temporarily visible: ${field.purpose}`);
-      console.log('[FormFiller] Required file input is hidden, making temporarily visible:', field.purpose);
+      logger.log(
+        'FormFiller',
+        `Required file input is hidden, making temporarily visible: ${field.purpose}`
+      );
+      console.log(
+        '[FormFiller] Required file input is hidden, making temporarily visible:',
+        field.purpose
+      );
       wasHidden = true;
       originalDisplay = (element as HTMLElement).style.display;
       (element as HTMLElement).style.display = 'block';
@@ -120,23 +140,26 @@ export class FormFiller {
       return false;
     }
 
-    logger.log('FormFiller', `Filling field: ${field.purpose}`, { value: String(value).substring(0, 20) + '...', elementType: element.tagName });
+    logger.log('FormFiller', `Filling field: ${field.purpose}`, {
+      value: String(value).substring(0, 20) + '...',
+      elementType: element.tagName,
+    });
     console.log('[FormFiller] Filling field:', field.purpose, 'with:', value);
 
     try {
-    if (element instanceof HTMLInputElement) {
-      await this.fillInput(element, value);
-    } else if (element instanceof HTMLTextAreaElement) {
-      await this.fillTextarea(element, value);
-    } else if (element instanceof HTMLSelectElement) {
-      await this.fillSelect(element, value);
+      if (element instanceof HTMLInputElement) {
+        await this.fillInput(element, value);
+      } else if (element instanceof HTMLTextAreaElement) {
+        await this.fillTextarea(element, value);
+      } else if (element instanceof HTMLSelectElement) {
+        await this.fillSelect(element, value);
       }
-      
+
       // Restore original display style if we temporarily made it visible
       if (wasHidden) {
         (element as HTMLElement).style.display = originalDisplay;
       }
-      
+
       logger.log('FormFiller', `Successfully filled field: ${field.purpose}`);
       return true;
     } catch (error) {
@@ -160,7 +183,8 @@ export class FormFiller {
       email: this.config.email,
       phone: this.config.phone,
       address: this.config.address,
-      workAuth: this.config.workAuth === 'yes' ? 'yes' : (this.config.workAuth === 'no' ? 'no' : 'yes'), // Default to 'yes' if not set
+      workAuth:
+        this.config.workAuth === 'yes' ? 'yes' : this.config.workAuth === 'no' ? 'no' : 'yes', // Default to 'yes' if not set
       sponsorship: this.config.sponsorshipRequired ? 'yes' : 'no',
       clearance: 'no', // Default to 'no' for clearance questions
       exportControls: 'us_citizen', // Default to US Citizen for export controls
@@ -228,8 +252,11 @@ export class FormFiller {
     }
 
     const stringValue = String(value).toLowerCase();
-    logger.log('FormFiller', `Filling select with value: ${stringValue}`, { 
-      options: Array.from(select.options).map(o => ({ value: o.value, text: o.textContent?.substring(0, 50) }))
+    logger.log('FormFiller', `Filling select with value: ${stringValue}`, {
+      options: Array.from(select.options).map((o) => ({
+        value: o.value,
+        text: o.textContent?.substring(0, 50),
+      })),
     });
 
     // Try multiple matching strategies
@@ -249,7 +276,10 @@ export class FormFiller {
       if (optionText.includes(stringValue)) {
         select.value = option.value;
         this.triggerEvents(select);
-        logger.log('FormFiller', `Selected option by text match: ${option.value} (${optionText.substring(0, 50)})`);
+        logger.log(
+          'FormFiller',
+          `Selected option by text match: ${option.value} (${optionText.substring(0, 50)})`
+        );
         return;
       }
 
@@ -274,14 +304,20 @@ export class FormFiller {
     }
 
     // If no match found, try to select first non-empty option as fallback
-    const firstNonEmpty = Array.from(select.options).find(opt => opt.value && opt.value !== '');
+    const firstNonEmpty = Array.from(select.options).find((opt) => opt.value && opt.value !== '');
     if (firstNonEmpty && select.required) {
-      logger.log('FormFiller', `No match found, selecting first non-empty option as fallback: ${firstNonEmpty.value}`);
+      logger.log(
+        'FormFiller',
+        `No match found, selecting first non-empty option as fallback: ${firstNonEmpty.value}`
+      );
       select.value = firstNonEmpty.value;
       this.triggerEvents(select);
     } else {
       logger.log('FormFiller', `No matching option found for: ${stringValue}`, {
-        availableOptions: Array.from(select.options).map(o => ({ value: o.value, text: o.textContent?.substring(0, 50) }))
+        availableOptions: Array.from(select.options).map((o) => ({
+          value: o.value,
+          text: o.textContent?.substring(0, 50),
+        })),
       });
       console.warn('[FormFiller] No matching option found for:', stringValue);
     }
@@ -311,11 +347,15 @@ export class FormFiller {
    * Fill a file input (resume)
    */
   private async fillFileInput(input: HTMLInputElement): Promise<void> {
+    console.log('[FormFiller] fillFileInput called, resumeFile status:', {
+      hasResumeFile: !!this.config.resumeFile,
+      fileName: this.config.resumeFile?.name,
+      fileSize: this.config.resumeFile?.size,
+    });
+
     if (!this.config.resumeFile) {
       logger.log('FormFiller', 'No resume file available - this is a required field!');
       console.error('[FormFiller] No resume file available - this is a required field!');
-      // Don't skip - this will cause validation to fail, which is correct
-      // The user needs to upload a resume during onboarding
       return;
     }
 
@@ -330,22 +370,24 @@ export class FormFiller {
         input.style.opacity = '1';
         input.style.position = 'absolute';
         input.style.left = '-9999px';
-        
+
         // Use DataTransfer API to set files
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(this.config.resumeFile!);
         input.files = dataTransfer.files;
+        input.setAttribute('data-selected-file', input.files[0]?.name || '');
         this.triggerEvents(input);
-        
+
         // Restore original display
         input.style.display = originalDisplay;
         logger.log('FormFiller', `Resume file attached: ${this.config.resumeFile.name}`);
         console.log('[FormFiller] Resume file attached:', this.config.resumeFile.name);
       } else {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(this.config.resumeFile);
-      input.files = dataTransfer.files;
-      this.triggerEvents(input);
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(this.config.resumeFile);
+        input.files = dataTransfer.files;
+        input.setAttribute('data-selected-file', input.files[0]?.name || '');
+        this.triggerEvents(input);
         logger.log('FormFiller', `Resume file attached: ${this.config.resumeFile.name}`);
         console.log('[FormFiller] Resume file attached:', this.config.resumeFile.name);
       }
@@ -394,15 +436,28 @@ export class FormFiller {
 /**
  * Create a FormFiller instance from vault data
  */
-export async function createFormFillerFromVault(): Promise<FormFiller | null> {
+export async function createFormFillerFromVault(
+  providedResume?: { data: string; fileName?: string; mimeType?: string },
+  providedProfile?: any // Add profile parameter
+): Promise<FormFiller | null> {
   try {
     logger.log('FormFiller', 'Loading user data from vault via background...');
+    console.log('[FormFiller] createFormFillerFromVault called with providedResume:', {
+      hasProvidedResume: !!providedResume,
+      hasData: !!providedResume?.data,
+      dataLength: providedResume?.data?.length || 0,
+      fileName: providedResume?.fileName,
+    });
 
-    // Request profile from background script (which has access to IndexedDB)
-    const response = await chrome.runtime.sendMessage({ type: 'GET_PROFILE' });
-    logger.log('FormFiller', 'Background response', response);
+    // Use provided profile if available, otherwise fetch from background
+    let profile = providedProfile;
 
-    let profile = response?.profile;
+    if (!profile) {
+      // Request profile from background script (which has access to IndexedDB)
+      const response = await chrome.runtime.sendMessage({ type: 'GET_PROFILE' });
+      logger.log('FormFiller', 'Background response', response);
+      profile = response?.profile;
+    }
 
     if (!profile) {
       logger.log('FormFiller', 'No profile returned from background, using mock data');
@@ -413,40 +468,92 @@ export async function createFormFillerFromVault(): Promise<FormFiller | null> {
       profile = MOCK_VAULT_DATA;
     }
 
-    // Load resume file from vault
+    // Load resume file - use provided resume if available, otherwise load from vault
     let resumeFile: File | undefined = undefined;
-    
-    try {
-      logger.log('FormFiller', 'Requesting resume file from vault...');
-      const resumeResponse = await chrome.runtime.sendMessage({ type: 'GET_RESUME' });
-      
-      if (resumeResponse?.status === 'success' && resumeResponse?.resume?.data) {
-        // Convert base64 back to ArrayBuffer
-        const binary = atob(resumeResponse.resume.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        const arrayBuffer = bytes.buffer;
-        
-        // Get file name from profile if available, otherwise use default
-        const fileName = profile.resume?.file_name || 'resume.pdf';
-        const mimeType = profile.resume?.mime_type || 'application/pdf';
-        
-        // Convert ArrayBuffer to File
-        const blob = new Blob([arrayBuffer], { type: mimeType });
-        resumeFile = new File([blob], fileName, { type: mimeType });
-        
-        logger.log('FormFiller', `Resume file loaded from vault: ${fileName} (${resumeResponse.resume.size} bytes)`);
-        console.log('[FormFiller] Resume file loaded from vault:', fileName);
+
+    if (providedResume?.data) {
+      // Use provided resume data
+      console.log(
+        '[FormFiller] Creating file from provided resume data, length:',
+        providedResume.data.length
+      );
+      if (!providedResume.data || providedResume.data.length === 0) {
+        console.error('[FormFiller] Provided resume data is empty!');
       } else {
-        logger.log('FormFiller', 'No resume file found in vault');
-        console.warn('[FormFiller] No resume file found in vault - user needs to upload resume during onboarding');
+        try {
+          const binary = atob(providedResume.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const arrayBuffer = bytes.buffer;
+          const fileName = providedResume.fileName || 'resume.pdf';
+          const mimeType = providedResume.mimeType || 'application/pdf';
+          const blob = new Blob([arrayBuffer], { type: mimeType });
+          resumeFile = new File([blob], fileName, { type: mimeType });
+          console.log(
+            '[FormFiller] Successfully created resume file:',
+            fileName,
+            'size:',
+            resumeFile.size,
+            'bytes'
+          );
+        } catch (error) {
+          console.error('[FormFiller] Error creating file from provided resume:', error);
+          console.error('[FormFiller] Error details:', {
+            message: error instanceof Error ? error.message : String(error),
+            dataLength: providedResume.data.length,
+            dataPreview: providedResume.data.substring(0, 50),
+          });
+        }
       }
-    } catch (error) {
-      logger.error('FormFiller', 'Error loading resume from vault', error);
-      console.error('[FormFiller] Error loading resume from vault:', error);
+    } else {
+      console.log('[FormFiller] No providedResume.data, falling back to vault');
+      // Load from vault (existing code)
+      try {
+        logger.log('FormFiller', 'Requesting resume file from vault...');
+        const resumeResponse = await chrome.runtime.sendMessage({ type: 'GET_RESUME' });
+
+        if (resumeResponse?.status === 'success' && resumeResponse?.resume?.data) {
+          // Convert base64 back to ArrayBuffer
+          const binary = atob(resumeResponse.resume.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const arrayBuffer = bytes.buffer;
+
+          // Get file name from profile if available, otherwise use default
+          const fileName = profile.resume?.file_name || 'resume.pdf';
+          const mimeType = profile.resume?.mime_type || 'application/pdf';
+
+          // Convert ArrayBuffer to File
+          const blob = new Blob([arrayBuffer], { type: mimeType });
+          resumeFile = new File([blob], fileName, { type: mimeType });
+
+          logger.log(
+            'FormFiller',
+            `Resume file loaded from vault: ${fileName} (${resumeResponse.resume.size} bytes)`
+          );
+          console.log('[FormFiller] Resume file loaded from vault:', fileName);
+        } else {
+          logger.log('FormFiller', 'No resume file found in vault');
+          console.warn(
+            '[FormFiller] No resume file found in vault - user needs to upload resume during onboarding'
+          );
+        }
+      } catch (error) {
+        logger.error('FormFiller', 'Error loading resume from vault', error);
+        console.error('[FormFiller] Error loading resume from vault:', error);
+      }
     }
+
+    // Log resumeFile status before creating config
+    console.log('[FormFiller] Resume file status before config creation:', {
+      hasResumeFile: !!resumeFile,
+      fileName: resumeFile?.name,
+      fileSize: resumeFile?.size,
+    });
 
     // Create config from vault data
     const config: FormFillerConfig = {
