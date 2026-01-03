@@ -736,7 +736,7 @@ function App() {
 
     // Preflight auth check: probe existing tabs, then open search URLs directly
     setPreflightPending(true);
-    const required = { linkedin: true, indeed: true };
+    const required = { linkedin: true, indeed: false }; // MVP1: Indeed disabled
     const received = { linkedin: false, indeed: false };
     const results = { linkedin: false, indeed: false };
     const openedTabIds: number[] = [];
@@ -767,11 +767,12 @@ function App() {
         if (tab?.id) openedTabIds.push(tab.id);
       });
     }
-    if (urls.indeed) {
-      chrome.tabs.create({ url: urls.indeed, active: false }, (tab) => {
-        if (tab?.id) openedTabIds.push(tab.id);
-      });
-    }
+    // MVP1: Indeed disabled
+    // if (urls.indeed) {
+    //   chrome.tabs.create({ url: urls.indeed, active: false }, (tab) => {
+    //     if (tab?.id) openedTabIds.push(tab.id);
+    //   });
+    // }
 
     // Timeout fallback (5 seconds)
     const timeout = setTimeout(() => {
@@ -843,7 +844,8 @@ function App() {
           received.indeed = true;
           results.indeed = Boolean(message.data.loggedIn);
         }
-        if (received.linkedin && received.indeed) {
+        if (received.linkedin) {
+          // MVP1: Indeed disabled - only wait for LinkedIn
           clearTimeout(timeout);
           chrome.runtime.onMessage.removeListener(handler);
           setPreflightPending(false);

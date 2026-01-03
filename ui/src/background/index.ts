@@ -1300,20 +1300,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           for (const tab of tabs) {
             if (!tab.id || !tab.url) continue;
 
-            let platform: 'LinkedIn' | 'Indeed' | null = null;
+            let platform: 'LinkedIn' | null = null; // MVP1: Indeed disabled
             const isLinkedInMock =
               tab.url.startsWith('http://localhost:') && tab.url.includes('linkedin-jobs.html');
-            const isIndeedMock =
-              tab.url.startsWith('http://localhost:') && tab.url.includes('indeed-jobs.html');
+            // MVP1: Indeed disabled
+            // const isIndeedMock =
+            //   tab.url.startsWith('http://localhost:') && tab.url.includes('indeed-jobs.html');
 
             if (tab.url.includes('linkedin.com/jobs') || isLinkedInMock) {
               platform = 'LinkedIn';
-            } else if (
-              (tab.url.includes('indeed.com') && tab.url.includes('jobs')) ||
-              isIndeedMock
-            ) {
-              platform = 'Indeed';
             }
+            // MVP1: Indeed disabled
+            // else if (
+            //   (tab.url.includes('indeed.com') && tab.url.includes('jobs')) ||
+            //   isIndeedMock
+            // ) {
+            //   platform = 'Indeed';
+            // }
 
             if (platform) {
               console.log(`[Jobzippy] Found ${platform} tab:`, tab.id, tab.url);
