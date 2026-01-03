@@ -160,24 +160,7 @@ async function clickJobCard(jobId: string): Promise<{
     return { description: '', applyType: 'external' };
   }
 
-  // Scroll into view to ensure element is visible before clicking
-  // This is for reliability - ensures card is in viewport
-  jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await new Promise<void>((resolve) => {
-    const checkScroll = () => {
-      const rect = jobCard.getBoundingClientRect();
-      if (rect.top >= 0 && rect.top <= window.innerHeight) {
-        resolve();
-      } else {
-        requestAnimationFrame(checkScroll);
-      }
-    };
-    requestAnimationFrame(checkScroll);
-  });
-
-  // Simply click the card directly - works on both real LinkedIn and mocks
-  // On real LinkedIn, the card has click handlers that open the job details panel
-  // On mocks, the card click handler shows the job details
+  // Just click - no scroll needed for MVP1
   jobCard.click();
 
   // Wait for job details panel to load
