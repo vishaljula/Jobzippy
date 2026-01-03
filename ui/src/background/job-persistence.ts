@@ -265,6 +265,36 @@ function broadcastJobUpdate(record: JobRecord): void {
 }
 
 /**
+ * Broadcast job status update to UI WITHOUT writing to IndexedDB
+ * Used for real-time status during processing (applying, ats_filling)
+ */
+export function broadcastJobStatusOnly(jobId: string, status: 'applying' | 'ats_filling'): void {
+  const metadata = getJobMetadata(jobId);
+  if (!metadata) {
+    console.warn(`[JobPersistence] No metadata found for jobId=${jobId}, cannot broadcast status`);
+    return;
+  }
+
+  // Create in-memory JobRecord for broadcasting (NOT persisted)
+  const record: JobRecord = {
+    id: `${metadata.platform.toLowerCase()}::${jobId}`,
+    platform: metadata.platform.toLowerCase(),
+    jobId,
+    title: metadata.title,
+    company: metadata.company,
+    location: metadata.location,
+    url: metadata.url,
+    status,
+    attempts: 1,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    applyType: metadata.applyType,
+  };
+
+  broadcastJobUpdate(record);
+}
+
+/**
  * Cleanup metadata for a job
  */
 export function cleanupJobMetadata(jobId: string): void {

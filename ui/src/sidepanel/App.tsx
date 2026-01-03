@@ -730,6 +730,10 @@ function App() {
   }, [isAuthenticated, renderNeonToast, user]);
 
   const startAgent = useCallback(async () => {
+    // Immediately show "Running" state - no need to wait for background
+    setEngineState('RUNNING');
+    setEngineStatus('Starting agent...');
+
     // Preflight auth check: probe existing tabs, then open search URLs directly
     setPreflightPending(true);
     const required = { linkedin: true, indeed: true };
@@ -865,6 +869,10 @@ function App() {
     chrome.runtime.sendMessage({ type: 'AUTH_PROBE_ALL' }, () => {});
   }, [user]);
   const stopAgent = useCallback(() => {
+    // Immediately show "Stopping..." state
+    setEngineState('PAUSED');
+    setEngineStatus('Stopping...');
+
     chrome.runtime.sendMessage({ type: 'STOP_AUTO_APPLY' }, () => {});
   }, []);
 

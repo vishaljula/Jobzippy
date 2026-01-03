@@ -6,6 +6,7 @@
 import type { SequentialJobState, StepOutput } from './orchestration-types';
 import { jobExists } from '../lib/jobs/store';
 import { persistJobCompleted, jobIdToMetadata, registerJobFromQueue } from './job-persistence';
+import { setOrchestrationStopFlag } from './orchestration';
 import { backgroundVaultService, STORES } from './vault-service-worker';
 import { deriveVaultPassword } from '../lib/vault/utils';
 import { encodeBase64 } from '../lib/vault/crypto';
@@ -38,7 +39,7 @@ function sendMessageToExecutor(tabId: number, message: { type: string; data?: an
 /**
  * Broadcast engine state to UI
  */
-function broadcastEngineState(state: 'IDLE' | 'RUNNING' | 'PAUSED', status: string): void {
+export function broadcastEngineState(state: 'IDLE' | 'RUNNING' | 'PAUSED', status: string): void {
   chrome.runtime
     .sendMessage({
       type: 'ENGINE_STATE',
@@ -65,6 +66,9 @@ async function startAgent(
   _data?: StepOutput | undefined
 ): Promise<StepOutput> {
   console.log('[Orchestrator V2] Step 1: START_AGENT');
+
+  // Reset stop flag
+  setOrchestrationStopFlag(false);
 
   // Initialize state
   state.currentJobIndex = 0;
@@ -129,6 +133,9 @@ async function scrapeJobs(
         }
       });
 
+      // Broadcast status update
+      broadcastEngineState('RUNNING', `Found ${jobs.length} jobs on page ${currentPage}`);
+
       return {
         state: {
           scrapedJobIds: jobIds || [],
@@ -181,6 +188,13 @@ async function checkDuplicate(
     // Register this job as active for tab detection
     if (state.tabId) {
       registerActiveJob(state.tabId, currentJobId);
+    }
+
+    // Broadcast status update
+    const jobNum = state.currentJobIndex + 1;
+    const totalJobs = state.scrapedJobIds.length;
+    if (totalJobs > 0) {
+      broadcastEngineState('RUNNING', `Processing job ${jobNum}/${totalJobs}`);
     }
 
     return {
@@ -321,6 +335,13 @@ async function fillModalForm(
   data?: StepOutput | undefined
 ): Promise<StepOutput> {
   console.log('[Orchestrator V2] Step 7b: FILL_MODAL_FORM');
+
+  // Broadcast status update
+  if (state.currentJobId) {
+    const metadata = jobIdToMetadata.get(state.currentJobId);
+    const jobTitle = metadata?.title || 'job';
+    broadcastEngineState('RUNNING', `Filling application form for ${jobTitle}`);
+  }
 
   if (!state.tabId || !state.currentJobId) {
     console.error('[Orchestrator V2] Missing tabId or currentJobId');
@@ -545,6 +566,13 @@ async function fillAtsForm(
   data?: StepOutput | undefined
 ): Promise<StepOutput> {
   console.log('[Orchestrator V2] Step 7e: FILL_ATS_FORM');
+
+  // Broadcast status update
+  if (state.currentJobId) {
+    const metadata = jobIdToMetadata.get(state.currentJobId);
+    const jobTitle = metadata?.title || 'job';
+    broadcastEngineState('RUNNING', `Filling ATS form for ${jobTitle}`);
+  }
 
   if (!state.atsTabId || !state.currentJobId) {
     console.error('[Orchestrator V2] Missing atsTabId or currentJobId');

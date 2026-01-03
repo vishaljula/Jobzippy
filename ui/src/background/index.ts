@@ -1359,7 +1359,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'STOP_AUTO_APPLY':
       // Only handle if NOT using Orchestrator V2
       if (USE_ORCHESTRATOR_V2) {
-        // Orchestrator V2 handles stopping via its own flow - ignore old handler
+        // Orchestrator V2: Set stop flag (UI already shows "Stopping...")
+        import('./orchestration').then(({ setOrchestrationStopFlag }) => {
+          setOrchestrationStopFlag(true);
+        });
         sendResponse({ status: 'ok' });
         break;
       }

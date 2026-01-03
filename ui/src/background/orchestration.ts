@@ -9,13 +9,27 @@
 
 import type { SequentialJobState, StepOutput, ConditionalNextStep } from './orchestration-types';
 import { taskOrchestrationMapper } from './orchestrationMapper';
-import { orchestrationTasks, taskActionParamHandlers } from './orchestrationTaskHelper';
+import {
+  orchestrationTasks,
+  taskActionParamHandlers,
+  broadcastEngineState,
+} from './orchestrationTaskHelper';
 import { evaluateConditionalNextStep } from './orchestrationHelper';
+import { broadcastJobStatusOnly } from './job-persistence';
 
 // ============================================================================
 // FEATURE FLAG
 // ============================================================================
 export const USE_ORCHESTRATOR_V2 = true; // Set to true only after tests pass
+
+// ============================================================================
+// STOP FLAG
+// ============================================================================
+let shouldStopOrchestration = false;
+
+export function setOrchestrationStopFlag(value: boolean): void {
+  shouldStopOrchestration = value;
+}
 
 // ============================================================================
 // QUOTA CHECKING
@@ -52,6 +66,14 @@ export async function executeOrchestration(
   console.log(`[Orchestrator V2] Starting orchestration from step: ${initialStep}`);
 
   while (currentStep !== null) {
+    // Check stop flag
+    if (shouldStopOrchestration) {
+      console.log('[Orchestrator V2] Stop requested, exiting orchestration');
+      state.isActive = false;
+      broadcastEngineState('IDLE', 'Agent stopped');
+      break;
+    }
+
     // Get step configuration from mapper
     const step = taskOrchestrationMapper[currentStep];
     if (!step) {
@@ -70,6 +92,18 @@ export async function executeOrchestration(
 
       // 3. Determine next step
       currentStep = determineNextStep(step, actionOutput, state);
+
+      // Broadcast job status based on step completion
+      if (state.currentJobId) {
+        // After CHECK_DUPLICATE completes, job is "applying"
+        if (step.name === 'CHECK_DUPLICATE') {
+          broadcastJobStatusOnly(state.currentJobId, 'applying');
+        }
+        // When about to fill form, job is "ats_filling"
+        else if (currentStep === 'FILL_MODAL_FORM' || currentStep === 'FILL_ATS_FORM') {
+          broadcastJobStatusOnly(state.currentJobId, 'ats_filling');
+        }
+      }
 
       // 4. Check quota after successful application (PERSIST_COMPLETION)
       if (step.name === 'PERSIST_COMPLETION' && state.fillFormResult?.success) {
