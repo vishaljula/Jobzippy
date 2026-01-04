@@ -244,8 +244,26 @@ async function clickApplyButton(jobId: string): Promise<{
     60000
   );
 
-  // Click apply element
-  applyElement.click();
+  // Check if this is an external link - if so, open via background to avoid tab focus
+  const isExternalLink =
+    applyElement.tagName === 'A' &&
+    (applyElement as HTMLAnchorElement).href &&
+    (applyElement.getAttribute('target') === '_blank' ||
+      !(applyElement as HTMLAnchorElement).href.includes('linkedin.com'));
+
+  if (isExternalLink) {
+    const href = (applyElement as HTMLAnchorElement).href;
+    console.log('[Executor V2] External apply link detected, opening via background:', href);
+
+    // Ask background to open tab with active: false
+    chrome.runtime.sendMessage({
+      type: 'OPEN_ATS_TAB',
+      data: { url: href, jobId },
+    });
+  } else {
+    // Click apply element directly (for modal/Easy Apply)
+    applyElement.click();
+  }
 
   // Wait for either modal or external ATS
   // Modal check: only resolve if modal is actually found, otherwise let it timeout

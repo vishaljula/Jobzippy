@@ -20,6 +20,7 @@ import { USE_ORCHESTRATOR_V2, executeOrchestration } from './orchestration';
 import {
   initializeOrchestrationTabDetection,
   isAtsTabTracked,
+  tryRegisterAtsTabFromUrl,
 } from './orchestration-tab-detection';
 import type {
   JobSession,
@@ -1384,6 +1385,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ status: 'success', state: engineState, engineStatus });
       break;
 
+    case 'OPEN_ATS_TAB': {
+      // Orchestrator V2: Open ATS tab in background (active: false) to avoid stealing focus
+      const { url, jobId } = message.data || {};
+      if (url) {
+        console.log(`[Jobzippy] Opening ATS tab in background: ${url} for job ${jobId}`);
+        chrome.tabs.create({ url, active: false }, (tab) => {
+          if (tab?.id) {
+            console.log(`[Jobzippy] ATS tab created in background: tabId=${tab.id}`);
+          }
+        });
+      }
+      sendResponse({ status: 'ok' });
+      break;
+    }
+
     case 'PING':
       sendResponse({ status: 'ok', timestamp: Date.now() });
       break;
@@ -2155,12 +2171,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
   // If no JobSession found, check if it's tracked by orchestration V2 before closing
   // Orchestration V2 uses a different tracking mechanism (not JobSession)
-  if (USE_ORCHESTRATOR_V2 && isAtsTabTracked(tabId)) {
-    // Tab is tracked by orchestration V2, don't close it
-    console.log(
-      `[Jobzippy] External ATS tab loaded - tracked by orchestration V2, not closing: tabId=${tabId}`
-    );
-    return;
+  if (USE_ORCHESTRATOR_V2) {
+    // First try to register the tab from URL (handles case where onCreated didn't have openerTabId)
+    const registration = tryRegisterAtsTabFromUrl(tabId, tab.url);
+    if (registration.registered) {
+      console.log(
+        `[Jobzippy] External ATS tab registered for V2: tabId=${tabId}, jobId=${registration.jobId}`
+      );
+      return;
+    }
+
+    // Also check if already tracked (from onCreated)
+    if (isAtsTabTracked(tabId)) {
+      console.log(
+        `[Jobzippy] External ATS tab loaded - tracked by orchestration V2, not closing: tabId=${tabId}`
+      );
+      return;
+    }
   }
 
   // If no JobSession found and not tracked by orchestration V2, log warning and proactively close the stray ATS tab.

@@ -191,6 +191,53 @@ export function isAtsTabTracked(tabId: number): boolean {
   return false;
 }
 
+/**
+ * Try to register an ATS tab from its URL
+ * Called by index.ts onUpdated when an ATS tab is detected
+ * Returns true if the tab was registered, false otherwise
+ */
+export function tryRegisterAtsTabFromUrl(
+  tabId: number,
+  url: string
+): { registered: boolean; jobId?: string; sourceTabId?: number } {
+  // Extract jobId from URL query param (e.g., ?job=123463)
+  const urlJobMatch = url.match(/[?&]job=(\d+)/);
+  if (!urlJobMatch) {
+    return { registered: false };
+  }
+
+  const urlJobId = urlJobMatch[1];
+
+  // Find which source tab has this job registered
+  for (const [srcTabId, registeredJobId] of activeJobBySourceTab.entries()) {
+    if (registeredJobId === urlJobId) {
+      console.log('[Orchestration Tab Detection] Registering ATS tab from URL', {
+        tabId,
+        jobId: urlJobId,
+        sourceTabId: srcTabId,
+        url,
+      });
+
+      // Store mapping for cleanup
+      atsTabByJobId.set(urlJobId, tabId);
+
+      // Send EXTERNAL_ATS_OPENED message to executor (content script)
+      chrome.tabs
+        .sendMessage(srcTabId, {
+          type: 'EXTERNAL_ATS_OPENED',
+          data: { jobId: urlJobId, atsTabId: tabId },
+        } as ExternalATSOpenedMessage)
+        .catch((err) => {
+          console.error('[Orchestration Tab Detection] Failed to send EXTERNAL_ATS_OPENED:', err);
+        });
+
+      return { registered: true, jobId: urlJobId, sourceTabId: srcTabId };
+    }
+  }
+
+  return { registered: false };
+}
+
 // ============================================================================
 // TAB DETECTION LISTENER
 // ============================================================================
@@ -202,16 +249,41 @@ export function isAtsTabTracked(tabId: number): boolean {
 export function initializeOrchestrationTabDetection(): void {
   // Detect when external ATS tabs are created via link clicks
   chrome.tabs.onCreated.addListener((tab) => {
-    const { id: tabId, openerTabId } = tab;
+    const { id: tabId, openerTabId, pendingUrl } = tab;
 
-    if (!openerTabId || !tabId) {
-      // No opener means it's a new user-created tab, not an apply flow
+    if (!tabId) {
       return;
     }
 
-    // Check if this tab was opened from one of our source tabs
-    const jobId = activeJobBySourceTab.get(openerTabId);
-    if (!jobId) {
+    // Try to find jobId and sourceTabId
+    let jobId: string | undefined;
+    let sourceTabId: number | undefined;
+
+    // Method 1: Use openerTabId if available
+    if (openerTabId) {
+      jobId = activeJobBySourceTab.get(openerTabId);
+      if (jobId) {
+        sourceTabId = openerTabId;
+      }
+    }
+
+    // Method 2: Fallback - extract jobId from pendingUrl and find source tab
+    if (!jobId && pendingUrl) {
+      const urlJobMatch = pendingUrl.match(/[?&]job=(\d+)/);
+      if (urlJobMatch) {
+        const urlJobId = urlJobMatch[1];
+        // Find which source tab has this job registered
+        for (const [srcTabId, registeredJobId] of activeJobBySourceTab.entries()) {
+          if (registeredJobId === urlJobId) {
+            jobId = urlJobId;
+            sourceTabId = srcTabId;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!jobId || !sourceTabId) {
       // Not part of our orchestration flow - ignore
       return;
     }
@@ -219,7 +291,9 @@ export function initializeOrchestrationTabDetection(): void {
     console.log('[Orchestration Tab Detection] ATS tab opened', {
       tabId,
       openerTabId,
+      sourceTabId,
       jobId,
+      pendingUrl,
     });
 
     // Store mapping for cleanup
@@ -227,7 +301,7 @@ export function initializeOrchestrationTabDetection(): void {
 
     // Send EXTERNAL_ATS_OPENED message to executor (content script)
     chrome.tabs
-      .sendMessage(openerTabId, {
+      .sendMessage(sourceTabId, {
         type: 'EXTERNAL_ATS_OPENED',
         data: { jobId, atsTabId: tabId },
       } as ExternalATSOpenedMessage)
