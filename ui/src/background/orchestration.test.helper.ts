@@ -88,7 +88,13 @@ async function injectExecutorIntoPage(page: Page): Promise<void> {
         sendMessage: (message: any, callback?: (response: any) => void) => {
           return new Promise((resolve, reject) => {
             try {
-              // Executor sending message to background (e.g., JOB_COMPLETED, ATS_COMPLETE)
+              // Executor sending message to background (e.g., JOB_COMPLETED, ATS_COMPLETE, OPEN_ATS_TAB)
+              // Add to pending messages queue for Node.js polling to pick up
+              (window as any).__pendingExecutorMessages =
+                (window as any).__pendingExecutorMessages || [];
+              (window as any).__pendingExecutorMessages.push(message);
+
+              // Also dispatch event for backwards compatibility
               const event = new CustomEvent('executor-to-background', {
                 detail: message,
               });
@@ -377,32 +383,68 @@ export function setupChromeAPIMocks(
   const runtimeOnMessage = {
     addListener: vi.fn((handler: any) => {
       backgroundMessageListeners.push(handler);
-
-      // Set up polling to forward executor messages to background listeners
-      if (!messagePollInterval) {
-        messagePollInterval = setInterval(async () => {
-          const messages = await pages.get(1)?.evaluate(() => {
-            // Poll from the main LinkedIn page
-            const pending = (window as any).__pendingExecutorMessages || [];
-            (window as any).__pendingExecutorMessages = [];
-            return pending;
-          });
-
-          if (messages) {
-            for (const message of messages) {
-              for (const listener of backgroundMessageListeners) {
-                listener(message, { tab: { id: 1 } }, () => {}); // Sender is always { tab: { id: 1 } } for main page
-              }
-            }
-          }
-        }, 100);
-      }
     }),
     removeListener: vi.fn((handler: any) => {
       const index = backgroundMessageListeners.indexOf(handler);
       if (index > -1) backgroundMessageListeners.splice(index, 1);
     }),
   };
+
+  // Start polling IMMEDIATELY to forward executor messages to background listeners
+  // This is needed because the simple test doesn't call chrome.runtime.onMessage.addListener
+  // but the executor still sends messages like OPEN_ATS_TAB via chrome.runtime.sendMessage
+  messagePollInterval = setInterval(async () => {
+    const mainPage = pages.get(1);
+    if (!mainPage) return;
+
+    let messages;
+    try {
+      messages = await mainPage.evaluate(() => {
+        // Poll from the main LinkedIn page
+        const pending = (window as any).__pendingExecutorMessages || [];
+        (window as any).__pendingExecutorMessages = [];
+        return pending;
+      });
+    } catch (error) {
+      // Page might be closed or navigating
+      return;
+    }
+
+    if (messages) {
+      for (const message of messages) {
+        // Handle OPEN_ATS_TAB specially - open the page via window.open
+        if (message.type === 'OPEN_ATS_TAB' && message.data?.url && message.data?.jobId) {
+          console.log(
+            `[Test Mock] Handling OPEN_ATS_TAB: ${message.data.url} for job ${message.data.jobId}`
+          );
+
+          try {
+            // Store jobId in window before opening so it can be retrieved
+            await mainPage.evaluate(
+              ({ url, jobId }) => {
+                (window as any).__currentJobId = jobId;
+                // Open new tab via window.open - this triggers context.on('page')
+                window.open(url, '_blank');
+              },
+              { url: message.data.url, jobId: message.data.jobId }
+            );
+            // The context.on('page') handler will take care of:
+            // - Injecting executor
+            // - Mapping to tabId 2
+            // - Sending EXTERNAL_ATS_OPENED message
+          } catch (error) {
+            console.error('[Test Mock] Error opening ATS tab:', error);
+          }
+          continue; // Don't forward to normal listeners
+        }
+
+        // Forward other messages to background listeners
+        for (const listener of backgroundMessageListeners) {
+          listener(message, { tab: { id: 1 } }, () => {}); // Sender is always { tab: { id: 1 } } for main page
+        }
+      }
+    }
+  }, 100);
 
   // Mock chrome.storage.local
   const storageLocalGet = vi.fn(
@@ -440,15 +482,8 @@ export function setupChromeAPIMocks(
     }
   );
 
-  // Set up executor message forwarding in page
-  pages.forEach((page) => {
-    page.evaluate(() => {
-      window.addEventListener('executor-to-background', (event: any) => {
-        (window as any).__pendingExecutorMessages = (window as any).__pendingExecutorMessages || [];
-        (window as any).__pendingExecutorMessages.push(event.detail);
-      });
-    });
-  });
+  // Note: Executor message forwarding is now set up in injectExecutorIntoPage
+  // Messages are added directly to __pendingExecutorMessages in chrome.runtime.sendMessage mock
 
   // Set global chrome object
   global.chrome = {
@@ -581,7 +616,8 @@ export async function setupTestEnvironment(
         }
       });
 
-      // If it's an ATS page, send EXTERNAL_ATS_OPENED immediately
+      // If it's an ATS page, send EXTERNAL_ATS_OPENED to the MAIN LinkedIn page (page 1)
+      // The executor on the LinkedIn page is waiting for this message
       const jobIdFromUrl = url.match(/[?&]job=([^&]+)/)?.[1];
       const jobIdFromPage = await newPage.evaluate(() => {
         return (window as any).__currentJobId;
@@ -594,8 +630,17 @@ export async function setupTestEnvironment(
         return;
       }
 
-      // Send EXTERNAL_ATS_OPENED message immediately
-      await newPage.evaluate(
+      // Get the main LinkedIn page (page 1) to send the message to
+      const mainPage = pages.get(1);
+      if (!mainPage) {
+        console.warn(
+          '[Test Helper] Main page (tabId 1) not found, cannot send EXTERNAL_ATS_OPENED'
+        );
+        return;
+      }
+
+      // Send EXTERNAL_ATS_OPENED message to the main LinkedIn page (where executor is waiting)
+      await mainPage.evaluate(
         ({ url, jobId }) => {
           const message = {
             type: 'EXTERNAL_ATS_OPENED',
@@ -606,7 +651,7 @@ export async function setupTestEnvironment(
             },
           };
 
-          console.log('[Test Helper] Sending EXTERNAL_ATS_OPENED:', message);
+          console.log('[Test Helper] Sending EXTERNAL_ATS_OPENED to main page:', message);
           const listeners = (window as any).__executorMessageListeners || [];
 
           const sender = {
@@ -627,7 +672,7 @@ export async function setupTestEnvironment(
         { url, jobId }
       );
 
-      console.log('[Test Helper] Sent EXTERNAL_ATS_OPENED to executor');
+      console.log('[Test Helper] Sent EXTERNAL_ATS_OPENED to main page executor');
     } else if (isJobDetailPage) {
       // Job detail page - inject executor and track
       console.log(`[Test Helper] Detected job detail page for job ${jobId}`);
