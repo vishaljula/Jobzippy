@@ -1,10 +1,21 @@
 /**
  * Form Filler - Automatically fills job application forms
  * Uses the dynamic classifier's field detection and vault data
+ *
+ * Humanization: Uses jitter and proper event sequences for anti-detection
  */
 
 import type { PageClassification, DetectedField } from './classifier';
 import { logger } from '../../lib/logger';
+import {
+  jitter,
+  humanType,
+  setValue,
+  humanSelect,
+  humanToggle,
+  attachFile,
+  humanizeConfig,
+} from '../../lib/humanize';
 
 export interface FormFillerConfig {
   firstName: string;
@@ -58,6 +69,10 @@ export class FormFiller {
         const filled = await this.fillField(field);
         if (filled) {
           filledCount++;
+          // Add jitter between fields for human-like behavior
+          if (humanizeConfig.enabled) {
+            await jitter(300, 800); // Shorter jitter between fields
+          }
         } else {
           skippedCount++;
         }
@@ -201,6 +216,7 @@ export class FormFiller {
 
   /**
    * Fill an input element
+   * Uses humanized typing for text inputs to avoid detection
    */
   private async fillInput(
     input: HTMLInputElement,
@@ -217,29 +233,36 @@ export class FormFiller {
     }
 
     if (input.type === 'checkbox') {
-      input.checked = Boolean(value);
-      this.triggerEvents(input);
+      await humanToggle(input, Boolean(value));
       return;
     }
 
-    // Text, email, tel, etc.
-    input.value = String(value);
-    this.triggerEvents(input);
+    // Text, email, tel, etc. - use human typing for realistic behavior
+    const stringValue = String(value);
+    if (humanizeConfig.useHumanTyping && stringValue.length <= 100) {
+      // Use character-by-character typing for shorter values
+      await humanType(input, stringValue, { clearFirst: true, blurAfter: true });
+    } else {
+      // For very long text (like cover letters), use direct set to save time
+      await setValue(input, stringValue);
+    }
   }
 
   /**
    * Fill a textarea element
+   * Uses direct setValue since textareas often contain longer text
    */
   private async fillTextarea(
     textarea: HTMLTextAreaElement,
     value: string | number | boolean | null | undefined
   ): Promise<void> {
-    textarea.value = String(value);
-    this.triggerEvents(textarea);
+    // Textareas typically have longer content, use direct set with proper events
+    await setValue(textarea, String(value));
   }
 
   /**
    * Fill a select element
+   * Uses humanSelect for proper focus/blur event sequence
    */
   private async fillSelect(
     select: HTMLSelectElement,
@@ -266,16 +289,14 @@ export class FormFiller {
 
       // Exact value match
       if (optionValue === stringValue) {
-        select.value = option.value;
-        this.triggerEvents(select);
+        await humanSelect(select, option.value);
         logger.log('FormFiller', `Selected option by exact value match: ${option.value}`);
         return;
       }
 
       // Text contains value
       if (optionText.includes(stringValue)) {
-        select.value = option.value;
-        this.triggerEvents(select);
+        await humanSelect(select, option.value);
         logger.log(
           'FormFiller',
           `Selected option by text match: ${option.value} (${optionText.substring(0, 50)})`
@@ -285,8 +306,7 @@ export class FormFiller {
 
       // Value contains text (for cases like "yes" matching "yes_active")
       if (optionValue.includes(stringValue) && stringValue.length >= 2) {
-        select.value = option.value;
-        this.triggerEvents(select);
+        await humanSelect(select, option.value);
         logger.log('FormFiller', `Selected option by partial value match: ${option.value}`);
         return;
       }
@@ -295,8 +315,7 @@ export class FormFiller {
       if (stringValue === 'yes' && (optionText.includes('yes') || optionValue.includes('yes'))) {
         // Prefer "Yes" over "Yes, I currently hold..." etc.
         if (!optionText.includes('currently') && !optionText.includes('eligible')) {
-          select.value = option.value;
-          this.triggerEvents(select);
+          await humanSelect(select, option.value);
           logger.log('FormFiller', `Selected option by 'yes' pattern: ${option.value}`);
           return;
         }
@@ -310,8 +329,7 @@ export class FormFiller {
         'FormFiller',
         `No match found, selecting first non-empty option as fallback: ${firstNonEmpty.value}`
       );
-      select.value = firstNonEmpty.value;
-      this.triggerEvents(select);
+      await humanSelect(select, firstNonEmpty.value);
     } else {
       logger.log('FormFiller', `No matching option found for: ${stringValue}`, {
         availableOptions: Array.from(select.options).map((o) => ({
@@ -325,6 +343,7 @@ export class FormFiller {
 
   /**
    * Fill a radio button
+   * Uses humanToggle for realistic click behavior
    */
   private async fillRadio(
     radio: HTMLInputElement,
@@ -336,8 +355,7 @@ export class FormFiller {
     for (const r of Array.from(radioGroup)) {
       const radioInput = r as HTMLInputElement;
       if (radioInput.value.toLowerCase() === stringValue) {
-        radioInput.checked = true;
-        this.triggerEvents(radioInput);
+        await humanToggle(radioInput, true);
         return;
       }
     }
@@ -345,6 +363,7 @@ export class FormFiller {
 
   /**
    * Fill a file input (resume)
+   * Uses attachFile from humanize for proper event handling
    */
   private async fillFileInput(input: HTMLInputElement): Promise<void> {
     console.log('[FormFiller] fillFileInput called, resumeFile status:', {
@@ -362,54 +381,50 @@ export class FormFiller {
     try {
       // Make sure input is accessible (even if hidden)
       const wasHidden = !this.isVisible(input);
+      let originalStyles: {
+        display: string;
+        visibility: string;
+        opacity: string;
+        position: string;
+        left: string;
+      } | null = null;
+
       if (wasHidden) {
         logger.log('FormFiller', 'File input is hidden, making temporarily accessible');
-        const originalDisplay = input.style.display;
+        originalStyles = {
+          display: input.style.display,
+          visibility: input.style.visibility,
+          opacity: input.style.opacity,
+          position: input.style.position,
+          left: input.style.left,
+        };
         input.style.display = 'block';
         input.style.visibility = 'visible';
         input.style.opacity = '1';
         input.style.position = 'absolute';
         input.style.left = '-9999px';
-
-        // Use DataTransfer API to set files
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(this.config.resumeFile!);
-        input.files = dataTransfer.files;
-        input.setAttribute('data-selected-file', input.files[0]?.name || '');
-        this.triggerEvents(input);
-
-        // Restore original display
-        input.style.display = originalDisplay;
-        logger.log('FormFiller', `Resume file attached: ${this.config.resumeFile.name}`);
-        console.log('[FormFiller] Resume file attached:', this.config.resumeFile.name);
-      } else {
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(this.config.resumeFile);
-        input.files = dataTransfer.files;
-        input.setAttribute('data-selected-file', input.files[0]?.name || '');
-        this.triggerEvents(input);
-        logger.log('FormFiller', `Resume file attached: ${this.config.resumeFile.name}`);
-        console.log('[FormFiller] Resume file attached:', this.config.resumeFile.name);
       }
+
+      // Use humanized attachFile for proper event sequence
+      await attachFile(input, this.config.resumeFile);
+      input.setAttribute('data-selected-file', input.files?.[0]?.name || '');
+
+      // Restore original styles if we modified them
+      if (wasHidden && originalStyles) {
+        input.style.display = originalStyles.display;
+        input.style.visibility = originalStyles.visibility;
+        input.style.opacity = originalStyles.opacity;
+        input.style.position = originalStyles.position;
+        input.style.left = originalStyles.left;
+      }
+
+      logger.log('FormFiller', `Resume file attached: ${this.config.resumeFile.name}`);
+      console.log('[FormFiller] Resume file attached:', this.config.resumeFile.name);
     } catch (error) {
       logger.error('FormFiller', 'Error attaching resume file', error);
       console.error('[FormFiller] Error attaching resume:', error);
       throw error;
     }
-  }
-
-  /**
-   * Trigger necessary events for form libraries to detect changes
-   */
-  private triggerEvents(element: HTMLElement): void {
-    // Trigger input event
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-
-    // Trigger change event
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-
-    // Trigger blur event (some forms validate on blur)
-    element.dispatchEvent(new Event('blur', { bubbles: true }));
   }
 
   /**

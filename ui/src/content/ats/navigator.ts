@@ -15,6 +15,7 @@ import {
 import { createFormFillerFromVault } from './form-filler';
 import { logger } from '../../lib/logger';
 import { waitForNavigation, waitForDOMStable } from '../../lib/dom-events';
+import { humanClick, jitter, humanizeConfig, scrollIntoViewIfNeeded } from '../../lib/humanize';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -759,8 +760,9 @@ async function handleCaptcha(classification: PageClassification): Promise<Naviga
     if (captchaField && captchaField.type === 'checkbox') {
       const checkbox = captchaField.element as HTMLInputElement;
       if (!checkbox.checked) {
-        checkbox.click();
-        console.log('[Navigator] Checked CAPTCHA checkbox');
+        // Use humanClick with jitter for CAPTCHA (important to look human here!)
+        await humanClick(checkbox, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+        console.log('[Navigator] Checked CAPTCHA checkbox with humanized click');
       }
     }
 
@@ -956,9 +958,14 @@ async function submitForm(classification: PageClassification): Promise<boolean> 
       }, 5000);
     });
 
-    submitAction.element.click();
-    logger.log('Navigator', 'Submit button clicked, waiting for response...');
-    console.log('[Navigator] Submit button clicked, waiting for response...');
+    // Use humanClick for submit button (proper event sequence)
+    await humanClick(submitAction.element as HTMLElement, {
+      jitterBefore: true,
+      minJitter: 500,
+      maxJitter: 1000,
+    });
+    logger.log('Navigator', 'Submit button clicked with humanized click, waiting for response...');
+    console.log('[Navigator] Submit button clicked with humanized click, waiting for response...');
 
     // Wait for submission or alert
     const alertSuccess = await alertPromise;
@@ -1235,13 +1242,16 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
     throw new Error(`Element ${actionType} is not visible`);
   }
 
-  // Scroll element into view if needed
+  // Scroll element into view if needed (using humanized scroll)
   if (!isInViewport) {
     logger.log('Navigator', `Scrolling element into view for ${actionType}`);
     console.log(`[Navigator] Scrolling element into view`);
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Wait a bit for scroll to complete
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await scrollIntoViewIfNeeded(element);
+  }
+
+  // Add jitter before click for human-like behavior
+  if (humanizeConfig.enabled) {
+    await jitter(800, 1500);
   }
 
   // Mark as clicked BEFORE clicking (to prevent double-clicks)
@@ -1504,9 +1514,9 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
         window.location.href = linkHref;
         return; // Page will reload, content script will restart
       } else {
-        // For buttons and other elements, use click()
-        element.click();
-        logger.log('Navigator', `✓ Element clicked via .click() method (attempt ${attempt})`);
+        // For buttons and other elements, use humanClick for proper event sequence
+        await humanClick(element, { jitterBefore: false }); // jitter already added above
+        logger.log('Navigator', `✓ Element clicked via humanClick (attempt ${attempt})`);
         console.log(`[Navigator] ✓ Element clicked (attempt ${attempt})`);
 
         // Wait for action to complete (event-driven)

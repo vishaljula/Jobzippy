@@ -12,6 +12,7 @@ import { intelligentNavigate } from './ats/navigator';
 import { waitForJobDetailsDom, waitForLinkedInModal, waitForMessage } from '../lib/dom-waits';
 import type { ExternalATSOpenedMessage } from '../types/job-session';
 import { classifyPage } from './ats/page-classifier';
+import { humanClick, humanizeConfig } from '../lib/humanize';
 
 // ============================================================================
 // Type Definitions
@@ -160,8 +161,12 @@ async function clickJobCard(jobId: string): Promise<{
     return { description: '', applyType: 'external' };
   }
 
-  // Just click - no scroll needed for MVP1
-  jobCard.click();
+  // Use humanized click for job card selection
+  if (humanizeConfig.enabled) {
+    await humanClick(jobCard, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+  } else {
+    jobCard.click();
+  }
 
   // Wait for job details panel to load
   await waitForJobDetailsDom(5000);
@@ -261,8 +266,12 @@ async function clickApplyButton(jobId: string): Promise<{
       data: { url: href, jobId },
     });
   } else {
-    // Click apply element directly (for modal/Easy Apply)
-    applyElement.click();
+    // Click apply element directly (for modal/Easy Apply) with humanized click
+    if (humanizeConfig.enabled) {
+      await humanClick(applyElement, { jitterBefore: true, minJitter: 800, maxJitter: 1500 });
+    } else {
+      applyElement.click();
+    }
   }
 
   // Wait for either modal or external ATS
@@ -347,14 +356,19 @@ async function clickApplyButton(jobId: string): Promise<{
 
 /**
  * Navigate to next page
+ * Uses humanized clicks for pagination
  */
-function navigateToNextPage(): boolean {
+async function navigateToNextPage(): Promise<boolean> {
   // Try Next button first
   const nextButton = document.querySelector<HTMLButtonElement>(
     'button[aria-label*="Next"], button[aria-label*="next"], button[data-test-pagination-page-btn-next]'
   );
   if (nextButton && !nextButton.disabled) {
-    nextButton.click();
+    if (humanizeConfig.enabled) {
+      await humanClick(nextButton, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+    } else {
+      nextButton.click();
+    }
     return true;
   }
 
@@ -363,7 +377,11 @@ function navigateToNextPage(): boolean {
     'a[aria-label*="Next"], a[aria-label*="next"], a[data-test-pagination-page-btn-next]'
   );
   if (nextLink) {
-    nextLink.click();
+    if (humanizeConfig.enabled) {
+      await humanClick(nextLink, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+    } else {
+      nextLink.click();
+    }
     return true;
   }
 
@@ -380,11 +398,19 @@ function navigateToNextPage(): boolean {
       const link = nextPageEl.querySelector<HTMLAnchorElement>('a');
       const button = nextPageEl.querySelector<HTMLButtonElement>('button');
       if (link) {
-        link.click();
+        if (humanizeConfig.enabled) {
+          await humanClick(link, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+        } else {
+          link.click();
+        }
         return true;
       }
       if (button && !button.disabled) {
-        button.click();
+        if (humanizeConfig.enabled) {
+          await humanClick(button, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+        } else {
+          button.click();
+        }
         return true;
       }
     }
@@ -503,7 +529,16 @@ if (!USE_ORCHESTRATOR_V2) {
               const applyAction = classification.actions.find((a) => a.purpose === 'apply');
 
               if (applyAction && applyAction.element) {
-                (applyAction.element as HTMLElement).click();
+                // Use humanized click for intermediate button
+                if (humanizeConfig.enabled) {
+                  await humanClick(applyAction.element as HTMLElement, {
+                    jitterBefore: true,
+                    minJitter: 800,
+                    maxJitter: 1500,
+                  });
+                } else {
+                  (applyAction.element as HTMLElement).click();
+                }
                 // Wait for page/modal to update
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 sendResponse({ success: true });
@@ -568,7 +603,7 @@ if (!USE_ORCHESTRATOR_V2) {
           }
 
           case 'NAVIGATE_NEXT_PAGE': {
-            const success = navigateToNextPage();
+            const success = await navigateToNextPage();
 
             if (success) {
               // Wait for navigation to complete
@@ -594,7 +629,12 @@ if (!USE_ORCHESTRATOR_V2) {
               const button = document.querySelector<HTMLElement>(selector);
 
               if (button) {
-                button.click();
+                // Use humanized click for modal button
+                if (humanizeConfig.enabled) {
+                  await humanClick(button, { jitterBefore: true, minJitter: 800, maxJitter: 1500 });
+                } else {
+                  button.click();
+                }
                 // Wait for page/modal to update
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 sendResponse({ success: true });
