@@ -32,42 +32,28 @@ const DEFAULT_MESSAGES: IntakeMessage[] = [
     role: 'assistant',
     kind: 'text',
     content:
-      "Hi! I'm Jobzippy’s onboarding guide. Drop your latest resume so I can learn about you. I’ll only ask for anything that’s missing.",
+      "Hi! I'm Jobzippy. Drop your resume and I'll set up your job search filters in under a minute.",
     createdAt: new Date().toISOString(),
   },
 ];
 
 const SALARY_CURRENCY_FALLBACK = 'USD';
 
+// LinkedIn-aligned onboarding fields (MVP1)
 const REQUIRED_FIELDS = [
-  { path: 'profile.identity.phone', parse: parsePhone, label: 'phone number' },
-  { path: 'profile.identity.address', parse: parseString, label: 'mailing address' },
+  { path: 'profile.preferences.target_roles', parse: parseTargetRoles, label: 'target job roles' },
+  {
+    path: 'profile.preferences.experience_level',
+    parse: parseExperienceLevel,
+    label: 'experience level',
+  },
+  { path: 'profile.preferences.job_type', parse: parseJobType, label: 'job type' },
+  {
+    path: 'profile.preferences.work_arrangement',
+    parse: parseWorkArrangement,
+    label: 'work arrangement',
+  },
   { path: 'profile.preferences.locations', parse: parseLocations, label: 'preferred locations' },
-  { path: 'profile.preferences.salary_min', parse: parseSalary, label: 'minimum salary' },
-  {
-    path: 'profile.preferences.salary_currency',
-    parse: parseCurrency,
-    label: 'salary currency',
-  },
-  { path: 'profile.work_auth.visa_type', parse: parseString, label: 'visa / work authorization' },
-  {
-    path: 'profile.work_auth.sponsorship_required',
-    parse: parseBoolean,
-    label: 'sponsorship requirement',
-  },
-  { path: 'policies.salary', parse: parsePolicyPreference, label: 'salary disclosure policy' },
-  { path: 'policies.relocation', parse: parsePolicyPreference, label: 'relocation policy' },
-  { path: 'compliance.veteran_status', parse: parseComplianceChoice, label: 'veteran status' },
-  {
-    path: 'compliance.disability_status',
-    parse: parseComplianceChoice,
-    label: 'disability status',
-  },
-  {
-    path: 'compliance.criminal_history_policy',
-    parse: parsePolicyPreference,
-    label: 'criminal history policy',
-  },
 ] as const;
 
 const VISA_REQUIRING_SPONSORSHIP = [
@@ -119,6 +105,7 @@ interface AssistantReply {
   reply: string;
   updates?: Array<{ path: string; value: string }>;
   requestedField?: string | null;
+  quickReplies?: string[];
 }
 
 export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingChatOptions) {
@@ -167,6 +154,7 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
           kind: 'text',
           content: reply.reply,
           createdAt: new Date().toISOString(),
+          quickReplies: reply.quickReplies,
         });
 
         let updatedDraft: ProfileVault | null = null;
@@ -368,17 +356,12 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
           createdAt: new Date().toISOString(),
         };
 
-        const historyAfterResume = [...messages, previewMessage];
-
         // Show the preview message to the user
-        logger.log(
-          'Onboarding',
-          '📋 Showing resume preview to user (Apply updates / Edit manually screen)'
-        );
+        logger.log('Onboarding', '📋 Showing resume preview to user (Edit / Looks good screen)');
         appendMessage(previewMessage);
 
-        // Run assistant turn to ask for missing fields (if any) or confirm completion
-        await runAssistantTurn(historyAfterResume, nextDraft, remaining);
+        // DON'T run assistant turn here - wait for user to confirm the preview
+        // The next question will be triggered when user clicks "Looks good" or "Save & continue"
       } catch (error) {
         logger.error('Onboarding', 'Resume processing failed', error);
         appendMessage({
@@ -693,6 +676,84 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
     syncDraftToVault,
   ]);
 
+  // Callback to update draft from edited preview sections
+  const updateDraftFromPreview = useCallback(
+    (editedSections: Array<{ id: string; fields: Array<{ id: string; value: string }> }>) => {
+      if (!draft) return;
+
+      // Deep clone to ensure React detects the change
+      const nextDraft: ProfileVault = {
+        ...draft,
+        profile: {
+          ...draft.profile,
+          identity: { ...draft.profile.identity },
+        },
+      };
+
+      for (const section of editedSections) {
+        if (section.id === 'resume-identity') {
+          // Map identity fields back to draft.profile.identity
+          for (const field of section.fields) {
+            if (field.id in nextDraft.profile.identity) {
+              (nextDraft.profile.identity as Record<string, string>)[field.id] = field.value;
+            }
+          }
+        }
+        // Note: employment and education edits are display-only for now
+        // (they show job titles/companies which aren't directly editable in this format)
+      }
+
+      setDraft(nextDraft);
+      logger.log('Onboarding', '✓ Updated draft from preview edits', nextDraft.profile.identity);
+    },
+    [draft]
+  );
+
+  // Callback to confirm the preview and proceed to next question
+  const confirmPreview = useCallback(
+    async (
+      editedSections?: Array<{ id: string; fields: Array<{ id: string; value: string }> }>
+    ) => {
+      if (!draft) return;
+
+      let currentDraft = draft;
+
+      // If edited sections provided, update the draft first
+      if (editedSections) {
+        const nextDraft: ProfileVault = {
+          ...draft,
+          profile: {
+            ...draft.profile,
+            identity: { ...draft.profile.identity },
+          },
+        };
+
+        for (const section of editedSections) {
+          if (section.id === 'resume-identity') {
+            for (const field of section.fields) {
+              if (field.id in nextDraft.profile.identity) {
+                (nextDraft.profile.identity as Record<string, string>)[field.id] = field.value;
+              }
+            }
+          }
+        }
+
+        setDraft(nextDraft);
+        currentDraft = nextDraft;
+        logger.log('Onboarding', '✓ Updated draft from preview edits', nextDraft.profile.identity);
+      }
+
+      // Now proceed to ask the next question
+      const remaining = computeMissingFields(currentDraft);
+      logger.log(
+        'Onboarding',
+        `Preview confirmed, proceeding with ${remaining.length} missing fields`
+      );
+      await runAssistantTurn(messages, currentDraft, remaining);
+    },
+    [draft, messages, runAssistantTurn]
+  );
+
   return {
     isLoading,
     isThinking,
@@ -705,6 +766,8 @@ export function useOnboardingChat({ enabled, user, overrides }: UseOnboardingCha
     startOver,
     hasResume,
     completedAt,
+    updateDraftFromPreview,
+    confirmPreview,
   } as const;
 }
 
@@ -766,6 +829,11 @@ async function loadVaultSnapshot(password: string): Promise<ProfileVault | null>
         salary_min: 0,
         salary_currency: SALARY_CURRENCY_FALLBACK,
         start_date: '',
+        // LinkedIn filter fields
+        target_roles: [],
+        experience_level: '',
+        job_type: '',
+        work_arrangement: '',
       },
     },
     compliance: compliance ?? {
@@ -815,6 +883,11 @@ function ensureDraft(draft: ProfileVault | null): ProfileVault {
         salary_min: 0,
         salary_currency: SALARY_CURRENCY_FALLBACK,
         start_date: '',
+        // LinkedIn filter fields
+        target_roles: [],
+        experience_level: '',
+        job_type: '',
+        work_arrangement: '',
       },
     },
     compliance: {
@@ -873,13 +946,14 @@ function isValueMissing(value: unknown): boolean {
   return false;
 }
 
-function parsePhone(input: string): string | null {
+// Unused parsers kept for potential future use (prefixed with _)
+function _parsePhone(input: string): string | null {
   const digits = input.replace(/[^\d]/g, '');
   if (digits.length < 10) return null;
   return formatPhoneDigits(digits);
 }
 
-function parseString(input: string): string | null {
+function _parseString(input: string): string | null {
   const trimmed = input.trim();
   return trimmed.length ? trimmed : null;
 }
@@ -907,7 +981,7 @@ const SALARY_SUFFIX_MULTIPLIERS: Record<string, number> = {
   billion: 1_000_000_000,
 };
 
-function parseSalary(input: string): number | null {
+function _parseSalary(input: string): number | null {
   if (!input) return null;
   const normalized = input.replace(/[$,]/g, '').toLowerCase();
   const regex = /(\d+(?:\.\d+)?)(?:\s*(k|m|b|thousand|million|billion))?/g;
@@ -936,7 +1010,7 @@ function parseSalary(input: string): number | null {
   return Math.round(computed);
 }
 
-function parseCurrency(input: string): string | null {
+function _parseCurrency(input: string): string | null {
   const trimmed = input.trim().toUpperCase();
   if (/^[A-Z]{3}$/.test(trimmed)) {
     return trimmed;
@@ -944,7 +1018,7 @@ function parseCurrency(input: string): string | null {
   return null;
 }
 
-function parseBoolean(input: string): boolean | null {
+function _parseBoolean(input: string): boolean | null {
   const normalized = input.trim().toLowerCase();
   if (!normalized) return null;
   if (['yes', 'y', 'true', 'yeah', 'yup', 'sure', 'affirmative'].includes(normalized)) return true;
@@ -954,7 +1028,7 @@ function parseBoolean(input: string): boolean | null {
   return null;
 }
 
-function parsePolicyPreference(
+function _parsePolicyPreference(
   input: string
 ): 'answer' | 'skip_if_optional' | 'ask_if_required' | 'never' | null {
   const normalized = input.trim().toLowerCase();
@@ -975,11 +1049,140 @@ function parsePolicyPreference(
   return null;
 }
 
-function parseComplianceChoice(input: string): 'yes' | 'no' | 'prefer_not' | null {
+function _parseComplianceChoice(input: string): 'yes' | 'no' | 'prefer_not' | null {
   const normalized = input.trim().toLowerCase();
   if (normalized.startsWith('y') || normalized.includes('affirm')) return 'yes';
   if (normalized.startsWith('n')) return 'no';
   if (normalized.includes('prefer') || normalized.includes('skip')) return 'prefer_not';
+  return null;
+}
+
+// New parsers for LinkedIn-aligned fields
+
+function parseTargetRoles(input: string): string[] | null {
+  const normalized = input.trim();
+  if (!normalized) return null;
+  // Split by comma, semicolon, or "or"
+  const roles = normalized
+    .split(/[,;]|\bor\b/i)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+  if (!roles.length) return null;
+  return Array.from(new Set(roles));
+}
+
+type ExperienceLevel =
+  | 'internship'
+  | 'entry'
+  | 'associate'
+  | 'mid_senior'
+  | 'director'
+  | 'executive';
+
+function parseExperienceLevel(input: string): ExperienceLevel | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+
+  // Direct matches
+  if (normalized.includes('intern')) return 'internship';
+  if (
+    normalized.includes('entry') ||
+    normalized.includes('junior') ||
+    normalized.includes('fresh grad')
+  )
+    return 'entry';
+  if (
+    normalized.includes('associate') ||
+    normalized.includes('mid-level') ||
+    normalized.includes('mid level')
+  )
+    return 'associate';
+  if (
+    normalized.includes('senior') ||
+    normalized.includes('mid-senior') ||
+    normalized.includes('lead')
+  )
+    return 'mid_senior';
+  if (
+    normalized.includes('director') ||
+    normalized.includes('vp') ||
+    normalized.includes('head of')
+  )
+    return 'director';
+  if (
+    normalized.includes('executive') ||
+    normalized.includes('c-level') ||
+    normalized.includes('chief')
+  )
+    return 'executive';
+
+  // Try to parse years and map to level
+  const yearsMatch = normalized.match(/(\d+)\s*(years?|yrs?)/i);
+  if (yearsMatch) {
+    const years = parseInt(yearsMatch[1], 10);
+    if (years < 1) return 'internship';
+    if (years <= 2) return 'entry';
+    if (years <= 5) return 'associate';
+    if (years <= 10) return 'mid_senior';
+    return 'director';
+  }
+
+  return null;
+}
+
+type JobType = 'full_time' | 'part_time' | 'contract' | 'internship';
+
+function parseJobType(input: string): JobType | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized.includes('full') || normalized.includes('ft') || normalized.includes('permanent'))
+    return 'full_time';
+  if (normalized.includes('part') || normalized.includes('pt')) return 'part_time';
+  if (
+    normalized.includes('contract') ||
+    normalized.includes('freelance') ||
+    normalized.includes('gig')
+  )
+    return 'contract';
+  if (normalized.includes('intern')) return 'internship';
+
+  return null;
+}
+
+type WorkArrangement = 'remote' | 'hybrid' | 'onsite' | 'any';
+
+function parseWorkArrangement(input: string): WorkArrangement | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (
+    normalized.includes('remote') ||
+    normalized.includes('wfh') ||
+    normalized.includes('work from home')
+  )
+    return 'remote';
+  if (
+    normalized.includes('hybrid') ||
+    normalized.includes('flexible') ||
+    normalized.includes('mix')
+  )
+    return 'hybrid';
+  if (
+    normalized.includes('onsite') ||
+    normalized.includes('on-site') ||
+    normalized.includes('in office') ||
+    normalized.includes('in-person')
+  )
+    return 'onsite';
+  if (
+    normalized.includes('any') ||
+    normalized.includes('either') ||
+    normalized.includes("don't mind") ||
+    normalized.includes('no preference')
+  )
+    return 'any';
+
   return null;
 }
 

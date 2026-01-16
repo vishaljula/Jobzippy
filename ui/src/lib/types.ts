@@ -21,6 +21,18 @@ export interface UserProfile {
     salary_min: number;
     salary_currency: string;
     start_date: string;
+    // LinkedIn filter fields
+    target_roles: string[];
+    experience_level:
+      | 'internship'
+      | 'entry'
+      | 'associate'
+      | 'mid_senior'
+      | 'director'
+      | 'executive'
+      | '';
+    job_type: 'full_time' | 'part_time' | 'contract' | 'internship' | '';
+    work_arrangement: 'remote' | 'hybrid' | 'onsite' | 'any' | '';
   };
 }
 
@@ -117,6 +129,7 @@ export interface IntakeMessage {
   statusSteps?: IntakeStatusStep[];
   previewSections?: IntakePreviewSection[];
   metadata?: Record<string, unknown>;
+  quickReplies?: string[]; // Quick reply button options
 }
 
 export interface IntakeDeferredTask {

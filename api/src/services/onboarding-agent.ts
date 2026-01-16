@@ -16,74 +16,55 @@ export interface OnboardingAgentResponse {
   reply: string;
   updates: Array<{ path: string; value: string }>;
   requestedField?: string | null;
+  quickReplies?: string[];
 }
 
 type OpenAIResponsesClient = NonNullable<typeof openaiClient>['responses'];
 type OpenAIResponsesCreate = Awaited<ReturnType<OpenAIResponsesClient['create']>>;
 type OpenAIResponsesCreateParams = Parameters<OpenAIResponsesClient['create']>[0];
 
+// LinkedIn-aligned onboarding fields (MVP1) - Just 5 questions!
 const ONBOARDING_FIELD_GUIDANCE = [
   {
-    path: 'profile.identity.phone',
-    label: 'Phone number',
-    instructions: 'Digits only, include country/area code if provided.',
+    path: 'profile.preferences.target_roles',
+    label: 'Target job roles',
+    question: 'What roles are you looking for?',
+    instructions: 'Extract job titles. Expand abbreviations (SWE → Software Engineer, PM → Product Manager). Return as comma-separated list.',
   },
   {
-    path: 'profile.identity.address',
-    label: 'Mailing address',
-    instructions: 'City and state or region. Mention country if not in US.',
+    path: 'profile.preferences.experience_level',
+    label: 'Experience level',
+    question: "What's your experience level?",
+    instructions: `Map user response to one of: internship, entry, associate, mid_senior, director, executive.
+    
+Mapping guide:
+- "fresh grad", "0-2 years", "junior" → entry
+- "2-5 years", "mid-level" → associate
+- "5-10 years", "senior", "lead" → mid_senior
+- "10+ years", "VP", "head of" → director
+- "C-level", "chief", "executive" → executive
+- "intern", "student" → internship`,
+    quickReplies: ['Entry level', 'Mid-level', 'Senior', 'Director+'],
   },
   {
-    path: 'profile.work_auth.visa_type',
-    label: 'Visa / work authorization',
-    instructions: 'Examples: H-1B, Green Card, F-1 OPT, US Citizen.',
+    path: 'profile.preferences.job_type',
+    label: 'Job type',
+    question: 'Full-time, part-time, or contract?',
+    instructions: 'Map to one of: full_time, part_time, contract, internship. "permanent" = full_time, "gig" = contract.',
+    quickReplies: ['Full-time', 'Part-time', 'Contract', 'Internship'],
   },
   {
-    path: 'profile.work_auth.sponsorship_required',
-    label: 'Sponsorship requirement',
-    instructions: 'Is sponsorship needed now or in the future? yes/no.',
+    path: 'profile.preferences.work_arrangement',
+    label: 'Work arrangement',
+    question: 'Remote, hybrid, or on-site?',
+    instructions: 'Map to one of: remote, hybrid, onsite, any. "WFH" = remote, "flexible" = hybrid, "in office" = onsite.',
+    quickReplies: ['Remote', 'Hybrid', 'On-site', 'Any'],
   },
   {
     path: 'profile.preferences.locations',
     label: 'Preferred locations',
-    instructions: 'Comma-separated list or “Remote”.',
-  },
-  {
-    path: 'profile.preferences.salary_min',
-    label: 'Minimum salary',
-    instructions: 'Numeric value (e.g., "150k"). If user gives a range, log the lower bound.',
-  },
-  {
-    path: 'profile.preferences.salary_currency',
-    label: 'Salary currency (ISO 4217)',
-    instructions:
-      'Pick the ISO currency code that matches the user’s stated location(s). Use USD if locations span multiple countries.',
-  },
-  {
-    path: 'policies.salary',
-    label: 'Salary question policy',
-    instructions: 'answer / skip_if_optional / ask_if_required / never.',
-  },
-  {
-    path: 'policies.relocation',
-    label: 'Relocation policy',
-    instructions: 'answer / skip_if_optional / ask_if_required / never.',
-  },
-  {
-    path: 'compliance.veteran_status',
-    label: 'Veteran status',
-    instructions: 'yes / no / prefer_not. Before asking, check known_fields and recent conversation for an answer.',
-  },
-  {
-    path: 'compliance.disability_status',
-    label: 'Disability status',
-    instructions: 'yes / no / prefer_not. Use the existing context if already provided.',
-  },
-  {
-    path: 'compliance.criminal_history_policy',
-    label: 'Criminal history policy',
-    instructions:
-      'answer / skip_if_optional / ask_if_required / never. Do not re-ask if the user has already answered.',
+    question: 'Where do you want to work?',
+    instructions: 'Normalize city names (SF → San Francisco, NYC → New York). Comma-separated list. If user says "remote anywhere", return ["Remote"].',
   },
 ] as const;
 
@@ -92,9 +73,9 @@ const ONBOARDING_RESPONSE_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['reply', 'updates', 'requested_field'],
+    required: ['reply', 'updates', 'requested_field', 'quick_replies'],
     properties: {
-      reply: { type: 'string', description: 'Message to show the user.' },
+      reply: { type: 'string', description: 'Short message to show the user. Keep under 15 words.' },
       updates: {
         type: 'array',
         items: {
@@ -113,6 +94,11 @@ const ONBOARDING_RESPONSE_SCHEMA = {
       requested_field: {
         type: ['string', 'null'],
         description: 'Path of the field you are currently asking about, if any.',
+      },
+      quick_replies: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional quick reply buttons to show. Use for job_type and work_arrangement fields.',
       },
     },
   },
@@ -149,9 +135,10 @@ export async function runOnboardingAgent(
     return {
       reply:
         parsed?.reply ??
-        "Thanks for the update! Could you share a bit more so I can finish setting up your profile?",
+        "Got it! What's next on your list?",
       updates: Array.isArray(parsed?.updates) ? parsed.updates : [],
       requestedField: parsed?.requested_field ?? null,
+      quickReplies: Array.isArray(parsed?.quick_replies) ? parsed.quick_replies : undefined,
     };
   } catch (error) {
     console.warn('[OnboardingAgent] Failed to generate response', error);
@@ -163,15 +150,22 @@ export async function runOnboardingAgent(
 
 function buildOnboardingSystemPrompt(): string {
   return [
-    "You are Jobzippy's onboarding assistant. You have a list of required profile fields that enable the agent to apply to jobs on behalf of the user.",
-    'Your job is to hold a friendly, professional conversation to collect the remaining fields.',
-    'When the user provides an answer, normalize it and include it in the `updates` array with the correct path.',
-    'Only emit updates when you are confident about the value; otherwise ask precise follow-up questions.',
-    'Be concise, one topic at a time. After covering contact info, move to preferences, then compliance/policies.',
-    'Before asking a compliance or policy question, check known_fields and the latest conversation; if an answer already exists, acknowledge it and move on without repeating the question.',
-    'Only re-open a compliance topic if the user says their previous answer was unclear or has changed.',
-    'If the user says “later” or similar, simply acknowledge and wait for them to resume.',
-  ].join(' ');
+    "You are Jobzippy's onboarding assistant. Your job is to quickly collect 5 job search preferences to set up LinkedIn filters.",
+    '',
+    'RULES:',
+    '1. Ask ONE short question at a time. Keep questions under 10 words.',
+    '2. When user answers, normalize the value per field_guidance instructions and add to updates array.',
+    '3. For job_type and work_arrangement, include quickReplies array with the suggested options.',
+    '4. Map experience to LinkedIn levels (entry/associate/mid_senior/director/executive).',
+    '5. Expand abbreviations: SWE→Software Engineer, PM→Product Manager, SF→San Francisco.',
+    '6. If user says "later", acknowledge and wait.',
+    '',
+    'QUESTION STYLE:',
+    '- Good: "What roles are you targeting?"',
+    '- Bad: "That\'s great! Now I\'d love to know what kind of positions you\'re interested in applying for."',
+    '',
+    'Be direct and efficient. Users want to finish onboarding fast.',
+  ].join('\n');
 }
 
 function buildOnboardingUserPrompt(payload: OnboardingAgentPayload): string {

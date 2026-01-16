@@ -12,9 +12,12 @@ import type {
 
 export interface ChatMessageProps {
   message: IntakeMessage;
-  onApplyPreview?: () => void;
+  onApplyPreview?: (
+    editedSections?: Array<{ id: string; fields: Array<{ id: string; value: string }> }>
+  ) => void;
   onEditPreview?: () => void;
   isPreviewProcessing?: boolean;
+  onQuickReply?: (reply: string) => void;
 }
 
 export function ChatMessage({
@@ -22,6 +25,7 @@ export function ChatMessage({
   onApplyPreview,
   onEditPreview,
   isPreviewProcessing,
+  onQuickReply,
 }: ChatMessageProps) {
   const isAssistant = message.role !== 'user';
   const alignment = isAssistant ? 'items-start' : 'items-end';
@@ -52,6 +56,9 @@ export function ChatMessage({
     );
   }
 
+  // Check if this assistant message has quick reply options
+  const hasQuickReplies = isAssistant && message.quickReplies && message.quickReplies.length > 0;
+
   return (
     <div className={clsx('flex flex-col', alignment, 'space-y-2')}>
       <div
@@ -60,6 +67,21 @@ export function ChatMessage({
         <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
         {message.attachments && <AttachmentChips attachments={message.attachments} />}
       </div>
+      {hasQuickReplies && (
+        <div className="flex flex-wrap gap-2 mt-1">
+          {message.quickReplies!.map((option) => (
+            <Button
+              key={option}
+              size="sm"
+              variant="outline"
+              className="rounded-full border-[#00f0ff]/30 text-[#00f0ff] hover:bg-[#00f0ff]/10 bg-transparent text-xs px-3 py-1"
+              onClick={() => onQuickReply?.(option)}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      )}
       <Timestamp iso={message.createdAt} />
     </div>
   );
@@ -130,7 +152,9 @@ function PreviewMessage({
   isApplying,
 }: {
   message: IntakeMessage;
-  onApply?: () => void;
+  onApply?: (
+    editedSections?: Array<{ id: string; fields: Array<{ id: string; value: string }> }>
+  ) => void;
   onEdit?: () => void;
   isApplying?: boolean;
 }) {
@@ -150,10 +174,16 @@ function PreviewMessage({
   };
 
   const handleSaveClick = () => {
-    // Update the message with edited data
+    // Update the message with edited data (for display)
     message.previewSections = editedSections;
     setIsEditing(false);
-    onApply?.();
+    // Pass edited sections to save to draft/vault
+    onApply?.(
+      editedSections.map((section) => ({
+        id: section.id,
+        fields: section.fields.map((f) => ({ id: f.id, value: f.value })),
+      }))
+    );
   };
 
   const handleCancelClick = () => {
@@ -219,7 +249,7 @@ function PreviewMessage({
                 className="rounded-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-xs font-semibold text-white shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:opacity-90 border-0"
                 onClick={handleSaveClick}
               >
-                Save changes
+                Save & continue
               </Button>
             </>
           ) : (
@@ -231,15 +261,15 @@ function PreviewMessage({
                 onClick={handleEditClick}
                 disabled={!onEdit}
               >
-                Edit manually
+                Edit
               </Button>
               <Button
                 size="sm"
                 className="rounded-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] text-xs font-semibold text-white shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:opacity-90 border-0"
-                onClick={onApply}
+                onClick={() => onApply?.()}
                 disabled={!onApply || isApplying}
               >
-                {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply updates'}
+                {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Looks good'}
               </Button>
             </>
           )}

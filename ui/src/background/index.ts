@@ -1037,7 +1037,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       console.log(`[Jobzippy] OPEN_EXTERNAL_ATS_TAB: jobId=${jobId}, url=${url}`);
       logToContentScripts('Background', `OPEN_EXTERNAL_ATS_TAB: jobId=${jobId}`, { url });
 
-      chrome.tabs.create({ url, active: false }, (tab) => {
+      chrome.tabs.create({ url, active: true }, (tab) => {
         const lastError = chrome.runtime.lastError;
         if (lastError || !tab?.id) {
           console.error(
@@ -1386,13 +1386,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case 'OPEN_ATS_TAB': {
-      // Orchestrator V2: Open ATS tab in background (active: false) to avoid stealing focus
+      // Orchestrator V2: Open ATS tab (active: true for testing, false for stealth)
       const { url, jobId } = message.data || {};
       if (url) {
-        console.log(`[Jobzippy] Opening ATS tab in background: ${url} for job ${jobId}`);
-        chrome.tabs.create({ url, active: false }, (tab) => {
+        console.log(`[Jobzippy] Opening ATS tab: ${url} for job ${jobId}`);
+        chrome.tabs.create({ url, active: true }, (tab) => {
           if (tab?.id) {
-            console.log(`[Jobzippy] ATS tab created in background: tabId=${tab.id}`);
+            console.log(`[Jobzippy] ATS tab created: tabId=${tab.id}`);
           }
         });
       }

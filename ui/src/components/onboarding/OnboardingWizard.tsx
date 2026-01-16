@@ -35,6 +35,7 @@ export function OnboardingWizard({
     sendMessage,
     startOver,
     hasResume,
+    confirmPreview,
   } = useOnboardingChat({ enabled: open && Boolean(user), user });
 
   const [composerValue, setComposerValue] = useState('');
@@ -134,13 +135,28 @@ export function OnboardingWizard({
     }
   };
 
-  const handleApplyPreview = useCallback(() => {
-    toast.success('Resume data applied to profile');
-  }, []);
+  const handleApplyPreview = useCallback(
+    async (
+      editedSections?: Array<{ id: string; fields: Array<{ id: string; value: string }> }>
+    ) => {
+      toast.success('Profile saved');
+      // Confirm the preview and trigger the next question
+      await confirmPreview(editedSections);
+    },
+    [confirmPreview]
+  );
 
   const handleEditPreview = useCallback(() => {
     // Edit mode is handled within ChatMessage component
   }, []);
+
+  const handleQuickReply = useCallback(
+    async (reply: string) => {
+      if (isThinking) return;
+      await sendMessage({ text: reply, attachments: [] });
+    },
+    [isThinking, sendMessage]
+  );
 
   if (!isMounted) return null;
 
@@ -271,7 +287,7 @@ export function OnboardingWizard({
                     </div>
                   ) : (
                     <div className="space-y-5">
-                      {sortedMessages.map((message) => (
+                      {sortedMessages.map((message, index) => (
                         <ChatMessage
                           key={message.id}
                           message={message}
@@ -279,6 +295,14 @@ export function OnboardingWizard({
                             message.kind === 'preview' ? handleApplyPreview : undefined
                           }
                           onEditPreview={message.kind === 'preview' ? handleEditPreview : undefined}
+                          onQuickReply={
+                            // Only show quick reply handler for the last assistant message
+                            message.role === 'assistant' &&
+                            index === sortedMessages.length - 1 &&
+                            message.quickReplies?.length
+                              ? handleQuickReply
+                              : undefined
+                          }
                         />
                       ))}
                       {isThinking && (

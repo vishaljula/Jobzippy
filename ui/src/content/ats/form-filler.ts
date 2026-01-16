@@ -192,23 +192,47 @@ export class FormFiller {
    */
   private getValueForField(purpose: string): string | number | boolean | null | undefined {
     const mapping: Record<string, string | number | boolean | null | undefined> = {
+      // Identity fields (from resume/onboarding)
       firstName: this.config.firstName,
       lastName: this.config.lastName,
       fullName: `${this.config.firstName} ${this.config.lastName}`,
       email: this.config.email,
       phone: this.config.phone,
       address: this.config.address,
+      linkedin: this.config.linkedin,
+      website: this.config.website,
+
+      // Work authorization (from onboarding or defaults)
       workAuth:
         this.config.workAuth === 'yes' ? 'yes' : this.config.workAuth === 'no' ? 'no' : 'yes', // Default to 'yes' if not set
       sponsorship: this.config.sponsorshipRequired ? 'yes' : 'no',
-      clearance: 'no', // Default to 'no' for clearance questions
-      exportControls: 'us_citizen', // Default to US Citizen for export controls
-      country: 'us', // Default to United States for country
-      previousApplication: 'no', // Default to 'no' for previous application
-      previousEmployment: 'no', // Default to 'no' for previous employment
-      conflictOfInterest: 'no', // Default to 'no' for conflict of interest
-      linkedin: this.config.linkedin,
-      website: this.config.website,
+
+      // Safe defaults for common form questions
+      clearance: 'no', // Most people don't have clearance
+      exportControls: 'us_citizen', // Default for US jobs
+      country: 'us', // Default for US jobs
+      previousApplication: 'no', // Safe default
+      previousEmployment: 'no', // Safe default
+      conflictOfInterest: 'no', // Safe default
+
+      // Additional common fields with safe defaults
+      veteranStatus: 'prefer_not_to_say', // EEO compliance
+      disabilityStatus: 'prefer_not_to_say', // EEO compliance
+      gender: 'prefer_not_to_say', // EEO compliance
+      ethnicity: 'prefer_not_to_say', // EEO compliance
+      race: 'prefer_not_to_say', // EEO compliance
+      degreeLevel: 'bachelors', // Common default
+      willingToRelocate: 'yes', // Assume flexibility
+      startDate: 'immediately', // Most job seekers available
+      salaryExpectation: '', // Skip if possible, or leave blank
+      yearsOfExperience: '3', // Generic mid-level default
+      legallyAuthorized: 'yes', // Match workAuth default
+      requireSponsorship: this.config.sponsorshipRequired ? 'yes' : 'no',
+      ageVerification: 'yes', // Assume 18+
+      backgroundCheck: 'yes', // Consent to background check
+      drugTest: 'yes', // Consent to drug test
+      referralSource: 'online_search', // Generic source
+      howDidYouHear: 'job_board', // Generic source
     };
 
     return mapping[purpose];

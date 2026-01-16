@@ -136,6 +136,7 @@ function App() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showPricing, setShowPricing] = useState(!isAuthenticated); // Start with pricing if not authenticated
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
+  const [awaitingPayment, setAwaitingPayment] = useState(false); // After sign-in, waiting for Stripe payment
   const [signInLoading, setSignInLoading] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -509,9 +510,13 @@ function App() {
         setSubscriptionChecked(true);
 
         if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) {
-          logger.log('[Subscription] ❌ No active subscription found, showing pricing page');
+          logger.log('[Subscription] ❌ No active subscription found, auto-redirecting to Stripe');
           logger.log('[Subscription] Sub status was:', sub?.status || 'NONE');
-          setShowPricing(true);
+          // Auto-trigger Stripe checkout instead of showing pricing again
+          setAwaitingPayment(true);
+          setShowPricing(false);
+          // Trigger checkout automatically
+          triggerCheckout();
         } else {
           logger.log(
             '[Subscription] ✅ Active subscription found! Status:',
@@ -546,8 +551,9 @@ function App() {
     const handleSubscriptionActivation = async (sessionId?: string) => {
       logger.log('[Subscription] 🚀 Processing subscription activation, sessionId:', sessionId);
 
-      // Show loading state immediately - hide pricing page
+      // Show loading state immediately - hide pricing page and awaiting payment
       setShowPricing(false);
+      setAwaitingPayment(false); // Clear awaiting payment state
       setSubscriptionChecked(false); // This will show the "Checking subscription..." loader
 
       if (!user) {
@@ -599,12 +605,14 @@ function App() {
         if (sub?.status === 'active' || sub?.status === 'trialing') {
           logger.log('[Subscription] 🎉 Subscription activated! Showing dashboard.');
           setSubscriptionChecked(true);
+          // awaitingPayment already cleared at start of function
           toast.custom(() => renderNeonToast('Trial started! Welcome to JobZippy 🎉', 'success'), {
             id: 'sub-activated',
             duration: 4000,
           });
         } else {
           logger.error('[Subscription] ❌ Unexpected subscription status:', sub?.status);
+          setAwaitingPayment(false);
           setShowPricing(true);
           setSubscriptionChecked(true);
         }
@@ -614,6 +622,7 @@ function App() {
           () => renderNeonToast('Failed to activate subscription. Please try again.', 'error'),
           { id: 'sub-error', duration: 5000 }
         );
+        setAwaitingPayment(false);
         setShowPricing(true);
         setSubscriptionChecked(true);
       }
@@ -729,6 +738,41 @@ function App() {
     }
   }, [isAuthenticated, renderNeonToast, user]);
 
+  // Auto-trigger checkout after sign-in (no auth check needed, already authenticated)
+  const triggerCheckout = useCallback(async () => {
+    logger.log('[Subscription] 🚀 Auto-triggering checkout after sign-in');
+    setCheckoutLoading(true);
+
+    try {
+      const { getFirebaseApp } = await import('@/lib/firebase/client');
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+
+      const firebaseApp = getFirebaseApp();
+      const functions = getFunctions(firebaseApp);
+      const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+      const result = await createCheckout({
+        successUrl: 'https://jobzippy.ai/success?session_id={CHECKOUT_SESSION_ID}',
+        cancelUrl: 'https://jobzippy.ai/welcome',
+      });
+
+      const { url } = result.data as { url: string; sessionId: string };
+      logger.log('[Subscription] 🌐 Opening Stripe checkout URL:', url);
+
+      chrome.tabs.create({ url });
+    } catch (error) {
+      logger.error('[Subscription] ❌ Failed to auto-trigger checkout:', error);
+      toast.custom(() => renderNeonToast('Failed to open payment page', 'error'), {
+        id: 'checkout-error',
+        duration: 6000,
+      });
+      setAwaitingPayment(false);
+      setShowPricing(true);
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }, [renderNeonToast]);
+
   const startAgent = useCallback(async () => {
     // Immediately show "Running" state - no need to wait for background
     setEngineState('RUNNING');
@@ -763,7 +807,7 @@ function App() {
 
     // Open search URLs directly (they'll trigger auth checks via content scripts)
     if (urls.linkedin) {
-      chrome.tabs.create({ url: urls.linkedin, active: false }, (tab) => {
+      chrome.tabs.create({ url: urls.linkedin, active: true }, (tab) => {
         if (tab?.id) openedTabIds.push(tab.id);
       });
     }
@@ -1038,6 +1082,53 @@ function App() {
     );
   }
 
+  // Show "Awaiting Payment" state while user is completing Stripe checkout in another tab
+  if (awaitingPayment) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] p-6">
+        {neonToaster}
+        <div className="w-full max-w-md text-center space-y-8">
+          {/* Animated card icon */}
+          <div className="relative mx-auto h-20 w-20">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#00f0ff] to-[#7000ff] opacity-30 animate-pulse blur-xl" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00f0ff]/20 to-[#7000ff]/20 border border-white/10">
+              <CreditCard className="h-10 w-10 text-[#00f0ff]" strokeWidth={1.5} />
+            </div>
+          </div>
+
+          {/* Status text */}
+          <div className="space-y-3">
+            <h2 className="text-2xl font-bold text-white">Complete your payment</h2>
+            <p className="text-slate-400">
+              A payment page has opened in a new tab.
+              <br />
+              Return here once you&apos;re done.
+            </p>
+          </div>
+
+          {/* Loading indicator */}
+          <div className="flex justify-center">
+            <div className="flex items-center gap-2 text-slate-500 text-sm">
+              <div className="h-2 w-2 rounded-full bg-[#00f0ff] animate-pulse" />
+              <span>Waiting for confirmation...</span>
+            </div>
+          </div>
+
+          {/* Back button */}
+          <button
+            onClick={() => {
+              setAwaitingPayment(false);
+              setShowPricing(true);
+            }}
+            className="text-slate-400 hover:text-white text-sm underline underline-offset-4 transition-colors"
+          >
+            Cancel and go back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Show pricing page if user needs to subscribe
   if (showPricing) {
     return (
@@ -1082,10 +1173,8 @@ function App() {
 
           {/* Header */}
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold text-white">Welcome to Jobzippy</h1>
-            <p className="text-lg text-slate-400">
-              Your personal AI assistant for job applications
-            </p>
+            <h1 className="text-4xl font-bold text-white">Sign in to continue</h1>
+            <p className="text-lg text-slate-400">Connect your Google account to get started</p>
           </div>
 
           {/* Sign-in button styled like pricing button */}
