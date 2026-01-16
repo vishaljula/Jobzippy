@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Vercel will handle the build automatically
+  eslint: {
+    // Disable ESLint during builds (we run it separately)
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

@@ -65,30 +65,34 @@ export function SubscriptionStatus() {
     : 0;
 
   return (
-    <Card className="border-primary-200 bg-gradient-to-r from-primary-500 to-secondary-500 text-white">
-      <CardContent className="p-4">
+    <Card className="relative overflow-hidden border-white/10 bg-white/5 backdrop-blur-lg text-white">
+      {/* Gradient glow effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#00f0ff]/10 to-[#7000ff]/10 pointer-events-none" />
+      <CardContent className="relative p-4">
         <div className="flex justify-between items-center mb-3">
           <div>
-            <p className="text-sm opacity-90">Applications This Month</p>
+            <p className="text-sm text-[#00f0ff] font-medium uppercase tracking-wider">
+              Applications This Month
+            </p>
             <p className="text-3xl font-bold">{usage.applications_this_month} / 300</p>
           </div>
 
           <div className="text-right">
             {isTrialing && (
-              <Badge variant="secondary" className="text-base px-3 py-1">
-                <Clock className="h-4 w-4 mr-1 inline" />
+              <Badge className="text-sm px-3 py-1.5 bg-white/10 border border-white/20 text-white hover:bg-white/20">
+                <Clock className="h-4 w-4 mr-1.5 inline text-[#00f0ff]" />
                 Trial ({trialDaysRemaining} days left)
               </Badge>
             )}
             {isActive && (
-              <Badge variant="secondary" className="text-base px-3 py-1">
-                <CheckCircle2 className="h-4 w-4 mr-1 inline" />
+              <Badge className="text-sm px-3 py-1.5 bg-[#00ff9d]/20 border border-[#00ff9d]/30 text-[#00ff9d] hover:bg-[#00ff9d]/30">
+                <CheckCircle2 className="h-4 w-4 mr-1.5 inline" />
                 Pro Active
               </Badge>
             )}
             {isPastDue && (
-              <Badge variant="destructive" className="text-base px-3 py-1">
-                <XCircle className="h-4 w-4 mr-1 inline" />
+              <Badge variant="destructive" className="text-sm px-3 py-1.5">
+                <XCircle className="h-4 w-4 mr-1.5 inline" />
                 Payment Failed
               </Badge>
             )}
@@ -96,16 +100,16 @@ export function SubscriptionStatus() {
         </div>
 
         {/* Progress bar */}
-        <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full bg-white transition-all duration-300"
+            className="h-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] transition-all duration-300"
             style={{
               width: `${(usage.applications_this_month / 300) * 100}%`,
             }}
           />
         </div>
 
-        <div className="mt-2 flex justify-between text-xs opacity-75">
+        <div className="mt-2 flex justify-between text-xs text-slate-400">
           <span>{applicationsRemaining} remaining</span>
           {subscription.currentPeriodEnd && (
             <span>

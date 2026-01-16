@@ -16,6 +16,7 @@ import {
 } from './orchestrationTaskHelper';
 import { evaluateConditionalNextStep } from './orchestrationHelper';
 import { broadcastJobStatusOnly } from './job-persistence';
+import { startDebugRun, logStep, logStepResult } from './orchestration-debug';
 
 // ============================================================================
 // FEATURE FLAG
@@ -23,12 +24,64 @@ import { broadcastJobStatusOnly } from './job-persistence';
 export const USE_ORCHESTRATOR_V2 = true; // Set to true only after tests pass
 
 // ============================================================================
-// STOP FLAG
+// STOP FLAG & STATE PERSISTENCE
 // ============================================================================
 let shouldStopOrchestration = false;
+let currentOrchestrationState: SequentialJobState | null = null;
 
 export function setOrchestrationStopFlag(value: boolean): void {
   shouldStopOrchestration = value;
+}
+
+/** Save orchestration state to chrome.storage for resume */
+export async function saveOrchestrationState(state: SequentialJobState): Promise<void> {
+  // Only save serializable parts of state
+  const stateToSave = {
+    platform: state.platform,
+    tabId: state.tabId,
+    atsTabId: state.atsTabId,
+    scrapedJobIds: state.scrapedJobIds,
+    currentJobIndex: state.currentJobIndex,
+    currentJobId: state.currentJobId,
+    currentPage: state.currentPage,
+    hasNextPage: state.hasNextPage,
+    savedAt: Date.now(),
+  };
+  await chrome.storage.local.set({ orchestrationState: stateToSave });
+  console.log('[Orchestrator V2] State saved for resume:', stateToSave);
+}
+
+/** Load saved orchestration state from chrome.storage */
+export async function loadOrchestrationState(): Promise<Partial<SequentialJobState> | null> {
+  const result = await chrome.storage.local.get('orchestrationState');
+  const saved = result.orchestrationState;
+
+  if (!saved) {
+    console.log('[Orchestrator V2] No saved state found');
+    return null;
+  }
+
+  // Check if state is stale (older than 1 hour)
+  const ONE_HOUR = 60 * 60 * 1000;
+  if (Date.now() - saved.savedAt > ONE_HOUR) {
+    console.log('[Orchestrator V2] Saved state is stale, discarding');
+    await clearOrchestrationState();
+    return null;
+  }
+
+  console.log('[Orchestrator V2] Loaded saved state:', saved);
+  return saved;
+}
+
+/** Clear saved orchestration state */
+export async function clearOrchestrationState(): Promise<void> {
+  await chrome.storage.local.remove('orchestrationState');
+  console.log('[Orchestrator V2] Saved state cleared');
+}
+
+/** Get current orchestration state (for saving on stop) */
+export function getCurrentOrchestrationState(): SequentialJobState | null {
+  return currentOrchestrationState;
 }
 
 // ============================================================================
@@ -63,14 +116,72 @@ export async function executeOrchestration(
   let currentStep: string | null = initialStep;
   let data: StepOutput | undefined;
 
-  console.log(`[Orchestrator V2] Starting orchestration from step: ${initialStep}`);
+  // Store reference for pause/resume
+  currentOrchestrationState = state;
+  // Reset stop flag on new orchestration
+  shouldStopOrchestration = false;
+
+  // Start debug logging for this run
+  const runId = startDebugRun();
+  console.log(
+    `[Orchestrator V2] Starting orchestration from step: ${initialStep} (runId: ${runId})`
+  );
 
   while (currentStep !== null) {
     // Check stop flag
     if (shouldStopOrchestration) {
-      console.log('[Orchestrator V2] Stop requested, exiting orchestration');
+      console.log('[Orchestrator V2] Stop requested, performing cleanup before pause');
+
+      // Log the stop event
+      await logStep({
+        jobId: state.currentJobId || null,
+        jobIndex: state.currentJobIndex,
+        step: 'STOP_REQUESTED',
+        action: 'userStop',
+        inputData: { currentStep, reason: 'user_requested' },
+        stateSnapshot: {
+          currentJobIndex: state.currentJobIndex,
+          scrapedJobIds: state.scrapedJobIds || [],
+          atsTabId: state.atsTabId || null,
+          currentPage: state.currentPage || 1,
+          hasNextPage: state.hasNextPage || false,
+        },
+      });
+
       state.isActive = false;
-      broadcastEngineState('IDLE', 'Agent stopped');
+
+      // Quick cleanup: close ATS tab if open
+      if (state.atsTabId) {
+        console.log(`[Orchestrator V2] Closing ATS tab ${state.atsTabId} before pause`);
+        try {
+          await chrome.tabs.remove(state.atsTabId);
+        } catch (e) {
+          console.warn('[Orchestrator V2] Failed to close ATS tab:', e);
+        }
+        state.atsTabId = null;
+      }
+
+      // If we were mid-job (after FILL form), mark it as incomplete so we skip on resume
+      if (
+        state.currentJobId &&
+        (currentStep === 'PERSIST_COMPLETION' ||
+          currentStep === 'CLEANUP' ||
+          currentStep === 'FILL_ATS_FORM' ||
+          currentStep === 'FILL_MODAL_FORM')
+      ) {
+        console.log(
+          `[Orchestrator V2] Mid-job pause detected, clearing currentJobId to skip on resume`
+        );
+        // Clear current job so resume starts fresh with next job
+        state.currentJobId = undefined;
+        state.fillFormResult = undefined;
+        // Move to SKIP_TO_NEXT_JOB step so resume picks up correctly
+        currentStep = 'SKIP_TO_NEXT_JOB';
+      }
+
+      // Save state for resume
+      await saveOrchestrationState(state);
+      broadcastEngineState('IDLE', 'Agent paused - click Start to resume');
       break;
     }
 
@@ -83,6 +194,23 @@ export async function executeOrchestration(
 
     console.log(`[Orchestrator V2] Executing: ${step.name}`);
 
+    // Log step start with state snapshot
+    const stepStartTime = Date.now();
+    const debugEntryId = await logStep({
+      jobId: state.currentJobId || null,
+      jobIndex: state.currentJobIndex,
+      step: step.name,
+      action: step.action,
+      inputData: data,
+      stateSnapshot: {
+        currentJobIndex: state.currentJobIndex,
+        scrapedJobIds: state.scrapedJobIds || [],
+        atsTabId: state.atsTabId || null,
+        currentPage: state.currentPage || 1,
+        hasNextPage: state.hasNextPage || false,
+      },
+    });
+
     try {
       // 1. Prepare step data (e.g., load vault data)
       data = await prepareStepData(step, state, data);
@@ -92,6 +220,12 @@ export async function executeOrchestration(
 
       // 3. Determine next step
       currentStep = determineNextStep(step, actionOutput, state);
+
+      // Log step success
+      await logStepResult(debugEntryId, {
+        outputData: actionOutput,
+        durationMs: Date.now() - stepStartTime,
+      });
 
       // Broadcast job status based on step completion
       if (state.currentJobId) {
@@ -119,10 +253,22 @@ export async function executeOrchestration(
         console.log('[Orchestrator V2] Orchestration completed');
       }
     } catch (error) {
+      // Log step error
+      await logStepResult(debugEntryId, {
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - stepStartTime,
+      });
+
       console.error(`[Orchestrator V2] Error in step ${step.name}:`, error);
       // On error, skip to next job
       currentStep = 'SKIP_TO_NEXT_JOB';
     }
+  }
+
+  // Clear saved state if orchestration completed normally (not paused)
+  if (!shouldStopOrchestration) {
+    await clearOrchestrationState();
+    currentOrchestrationState = null;
   }
 }
 

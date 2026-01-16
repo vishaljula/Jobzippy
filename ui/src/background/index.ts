@@ -16,7 +16,12 @@ import {
   jobIdToMetadata,
 } from './job-persistence';
 import { jobExists } from '../lib/jobs/store';
-import { USE_ORCHESTRATOR_V2, executeOrchestration } from './orchestration';
+import {
+  USE_ORCHESTRATOR_V2,
+  executeOrchestration,
+  loadOrchestrationState,
+  clearOrchestrationState,
+} from './orchestration';
 import {
   initializeOrchestrationTabDetection,
   isAtsTabTracked,
@@ -1296,50 +1301,108 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         // Initialize tab detection for orchestration
         initializeOrchestrationTabDetection();
 
-        // Find active tabs directly (don't rely on platformStates)
-        chrome.tabs.query({}, (tabs) => {
-          for (const tab of tabs) {
-            if (!tab.id || !tab.url) continue;
+        // Check for saved state (resume functionality)
+        (async () => {
+          const savedState = await loadOrchestrationState();
 
-            let platform: 'LinkedIn' | null = null; // MVP1: Indeed disabled
-            const isLinkedInMock =
-              tab.url.startsWith('http://localhost:') && tab.url.includes('linkedin-jobs.html');
-            // MVP1: Indeed disabled
-            // const isIndeedMock =
-            //   tab.url.startsWith('http://localhost:') && tab.url.includes('indeed-jobs.html');
+          if (savedState && savedState.tabId) {
+            // Try to resume from saved state
+            console.log('[Jobzippy] Found saved state, attempting to resume...');
 
-            if (tab.url.includes('linkedin.com/jobs') || isLinkedInMock) {
-              platform = 'LinkedIn';
-            }
-            // MVP1: Indeed disabled
-            // else if (
-            //   (tab.url.includes('indeed.com') && tab.url.includes('jobs')) ||
-            //   isIndeedMock
-            // ) {
-            //   platform = 'Indeed';
-            // }
+            // Verify tab still exists
+            try {
+              const tab = await chrome.tabs.get(savedState.tabId);
+              if (tab && tab.id) {
+                console.log('[Jobzippy] Resuming from saved state:', {
+                  platform: savedState.platform,
+                  tabId: savedState.tabId,
+                  currentJobIndex: savedState.currentJobIndex,
+                  scrapedJobIds: savedState.scrapedJobIds?.length || 0,
+                });
 
-            if (platform) {
-              console.log(`[Jobzippy] Found ${platform} tab:`, tab.id, tab.url);
-              const orchestrationState = {
-                platform,
-                tabId: tab.id,
-                atsTabId: null,
-                scrapedJobIds: [],
-                currentJobIndex: 0,
-                currentPage: 0,
-                hasNextPage: false,
-                isProcessing: false,
-                isActive: true,
-              };
+                const orchestrationState = {
+                  platform: savedState.platform as 'LinkedIn',
+                  tabId: savedState.tabId,
+                  atsTabId: savedState.atsTabId || null,
+                  scrapedJobIds: savedState.scrapedJobIds || [],
+                  currentJobIndex: savedState.currentJobIndex || 0,
+                  currentJobId: savedState.currentJobId,
+                  currentPage: savedState.currentPage || 0,
+                  hasNextPage: savedState.hasNextPage || false,
+                  isProcessing: false,
+                  isActive: true,
+                };
 
-              // Start orchestration
-              executeOrchestration(orchestrationState, 'START_AGENT').catch((error) => {
-                console.error('[Jobzippy] Orchestration error:', error);
-              });
+                // Determine resume step based on state
+                // If currentJobIndex is within bounds, resume at CHECK_DUPLICATE
+                // Otherwise, we've exhausted current page, go directly to SCRAPE_JOBS
+                // (SCRAPE_JOBS will scrape whatever page the browser is currently on,
+                // which handles both "stopped before navigation" and "stopped after navigation" cases)
+                let resumeStep: string;
+                if (orchestrationState.scrapedJobIds.length === 0) {
+                  resumeStep = 'SCRAPE_JOBS';
+                } else if (
+                  orchestrationState.currentJobIndex < orchestrationState.scrapedJobIds.length
+                ) {
+                  resumeStep = 'CHECK_DUPLICATE';
+                } else {
+                  // All jobs on current page processed - resume at SCRAPE_JOBS
+                  // This avoids double-navigation if CHECK_NEXT_PAGE already ran before stop
+                  resumeStep = 'SCRAPE_JOBS';
+                }
+                console.log(
+                  `[Jobzippy] Resuming from step: ${resumeStep} (jobIndex: ${orchestrationState.currentJobIndex}, jobs: ${orchestrationState.scrapedJobIds.length})`
+                );
+
+                executeOrchestration(orchestrationState, resumeStep).catch((error) => {
+                  console.error('[Jobzippy] Orchestration resume error:', error);
+                });
+                return;
+              }
+            } catch (e) {
+              console.log('[Jobzippy] Saved tab no longer exists, starting fresh');
+              await clearOrchestrationState();
             }
           }
-        });
+
+          // No saved state or tab gone - start fresh
+          console.log('[Jobzippy] Starting fresh orchestration');
+
+          // Find active tabs directly (don't rely on platformStates)
+          chrome.tabs.query({}, (tabs) => {
+            for (const tab of tabs) {
+              if (!tab.id || !tab.url) continue;
+
+              let platform: 'LinkedIn' | null = null; // MVP1: Indeed disabled
+              const isLinkedInMock =
+                tab.url.startsWith('http://localhost:') && tab.url.includes('linkedin-jobs.html');
+
+              if (tab.url.includes('linkedin.com/jobs') || isLinkedInMock) {
+                platform = 'LinkedIn';
+              }
+
+              if (platform) {
+                console.log(`[Jobzippy] Found ${platform} tab:`, tab.id, tab.url);
+                const orchestrationState = {
+                  platform,
+                  tabId: tab.id,
+                  atsTabId: null,
+                  scrapedJobIds: [],
+                  currentJobIndex: 0,
+                  currentPage: 0,
+                  hasNextPage: false,
+                  isProcessing: false,
+                  isActive: true,
+                };
+
+                // Start orchestration
+                executeOrchestration(orchestrationState, 'START_AGENT').catch((error) => {
+                  console.error('[Jobzippy] Orchestration error:', error);
+                });
+              }
+            }
+          });
+        })();
       } else {
         // OLD CODE: Forward START_AGENT to content scripts (legacy AgentController)
         console.log('[Jobzippy] Using legacy AgentController');

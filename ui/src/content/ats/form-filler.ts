@@ -30,6 +30,9 @@ export interface FormFillerConfig {
   resumeFile?: File;
 }
 
+// Guard to prevent double-filling during the same session
+let isCurrentlyFilling = false;
+
 export class FormFiller {
   private config: FormFillerConfig;
 
@@ -41,6 +44,21 @@ export class FormFiller {
    * Fill all detected fields in the classification
    */
   async fillForm(classification: PageClassification): Promise<void> {
+    // Prevent double-filling
+    if (isCurrentlyFilling) {
+      console.warn('[FormFiller] Already filling form, ignoring duplicate request');
+      return;
+    }
+    isCurrentlyFilling = true;
+
+    try {
+      await this._doFillForm(classification);
+    } finally {
+      isCurrentlyFilling = false;
+    }
+  }
+
+  private async _doFillForm(classification: PageClassification): Promise<void> {
     logger.log('FormFiller', `Starting form fill with ${classification.fields.length} fields`);
     console.log('[FormFiller] Starting form fill with', classification.fields.length, 'fields');
     logger.log('FormFiller', 'Page type', classification.type);
@@ -155,8 +173,20 @@ export class FormFiller {
       return false;
     }
 
+    // Skip if field already has the correct value (prevents duplicate typing on resume)
+    const stringValue = String(value);
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      const currentValue = element.value.trim();
+      const targetValue = stringValue.trim();
+      if (currentValue === targetValue) {
+        logger.log('FormFiller', `Field ${field.purpose} already has correct value, skipping`);
+        console.log('[FormFiller] Skipping field (already filled):', field.purpose);
+        return true; // Return true since field is correctly filled
+      }
+    }
+
     logger.log('FormFiller', `Filling field: ${field.purpose}`, {
-      value: String(value).substring(0, 20) + '...',
+      value: stringValue.substring(0, 20) + '...',
       elementType: element.tagName,
     });
     console.log('[FormFiller] Filling field:', field.purpose, 'with:', value);

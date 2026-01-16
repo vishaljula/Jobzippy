@@ -778,6 +778,18 @@ function App() {
     setEngineState('RUNNING');
     setEngineStatus('Starting agent...');
 
+    // Check if we're resuming (saved orchestration state exists)
+    const savedState = await chrome.storage.local.get('orchestrationState');
+    const isResuming = !!savedState.orchestrationState;
+
+    if (isResuming) {
+      console.log('[Jobzippy] Resuming from saved state - skipping new tab creation');
+      setEngineStatus('Resuming...');
+      // Just send START_AGENT - background will restore state and use existing tab
+      chrome.runtime.sendMessage({ type: 'START_AGENT' });
+      return;
+    }
+
     // Preflight auth check: probe existing tabs, then open search URLs directly
     setPreflightPending(true);
     const required = { linkedin: true, indeed: false }; // MVP1: Indeed disabled
@@ -806,10 +818,26 @@ function App() {
     }
 
     // Open search URLs directly (they'll trigger auth checks via content scripts)
+    // But first check if LinkedIn tab already exists to avoid duplicates
     if (urls.linkedin) {
-      chrome.tabs.create({ url: urls.linkedin, active: true }, (tab) => {
-        if (tab?.id) openedTabIds.push(tab.id);
-      });
+      const existingTabs = await chrome.tabs.query({});
+      const existingLinkedInTab = existingTabs.find(
+        (tab) =>
+          tab.url &&
+          (tab.url.includes('linkedin.com/jobs') ||
+            (tab.url.startsWith('http://localhost:') && tab.url.includes('linkedin-jobs.html')))
+      );
+
+      if (existingLinkedInTab?.id) {
+        console.log('[Jobzippy] Found existing LinkedIn tab, reusing:', existingLinkedInTab.id);
+        // Navigate existing tab to search URL and activate it
+        chrome.tabs.update(existingLinkedInTab.id, { url: urls.linkedin, active: true });
+        openedTabIds.push(existingLinkedInTab.id);
+      } else {
+        chrome.tabs.create({ url: urls.linkedin, active: true }, (tab) => {
+          if (tab?.id) openedTabIds.push(tab.id);
+        });
+      }
     }
     // MVP1: Indeed disabled
     // if (urls.indeed) {

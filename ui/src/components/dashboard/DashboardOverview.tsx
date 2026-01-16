@@ -272,10 +272,9 @@ function ControlCard({
         </div>
 
         <div className="flex items-center gap-3">
-          {!isRunning && (
+          {!isRunning && !isStopping && (
             <Button
               onClick={onStart}
-              disabled={isStopping}
               className="bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(0,240,255,0.3)] border-0 h-10 px-6 rounded-xl font-bold transition-all hover:scale-105"
             >
               <Play className="h-4 w-4 mr-2 fill-current" />
@@ -283,15 +282,23 @@ function ControlCard({
             </Button>
           )}
 
-          {isRunning && (
+          {(isRunning || isStopping) && (
             <Button
               onClick={onStop}
               disabled={isStopping}
-              variant="outline"
-              className="border-white/10 bg-white/5 text-white hover:bg-white/10 h-10 px-6 rounded-xl font-medium transition-all"
+              className="bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(0,240,255,0.3)] border-0 h-10 px-6 rounded-xl font-bold transition-all hover:scale-105"
             >
-              <Square className="h-4 w-4 mr-2 fill-current" />
-              Stop Agent
+              {isStopping ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Stopping...
+                </>
+              ) : (
+                <>
+                  <Square className="h-4 w-4 mr-2 fill-current" />
+                  Stop Agent
+                </>
+              )}
             </Button>
           )}
         </div>

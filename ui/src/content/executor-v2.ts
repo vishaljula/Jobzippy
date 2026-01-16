@@ -15,6 +15,21 @@ import { classifyPage } from './ats/page-classifier';
 import { humanClick, humanizeConfig } from '../lib/humanize';
 
 // ============================================================================
+// Double-Load Prevention
+// ============================================================================
+// Executor-v2 can be loaded via manifest content_scripts AND programmatic injection.
+// This guard prevents duplicate message listeners which cause race conditions
+// where the second listener returns 'duplicate_ignored' before the first completes.
+
+const ALREADY_LOADED = !!(window as any).__executorV2Loaded;
+if (ALREADY_LOADED) {
+  console.log('[Executor V2] Already loaded, skipping duplicate initialization');
+} else {
+  (window as any).__executorV2Loaded = true;
+  console.log('[Executor V2] First load, initializing...');
+}
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -429,6 +444,9 @@ const USE_ORCHESTRATOR_V2 = true; // Or read from chrome.storage
 if (!USE_ORCHESTRATOR_V2) {
   // Don't register message handlers if feature flag is off
   console.log('[Executor V2] Feature flag disabled, not registering handlers');
+} else if (ALREADY_LOADED) {
+  // Don't register if already loaded (prevents duplicate listeners)
+  console.log('[Executor V2] Skipping message handler registration (already loaded)');
 } else {
   // Register message handlers
   chrome.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
@@ -557,47 +575,59 @@ if (!USE_ORCHESTRATOR_V2) {
           }
 
           case 'FILL_FORM': {
-            const { jobId, formType, context, vaultProfile, vaultResume } = message.data;
-            console.log('[Executor V2] Filling form:', { jobId, formType, context });
-            console.log('[Executor V2] vaultResume received:', {
-              hasData: !!vaultResume?.data,
-              hasBase64: !!vaultResume?.base64,
-              fileName: vaultResume?.fileName,
-              mimeType: vaultResume?.mimeType,
-            });
+            // Guard against duplicate FILL_FORM messages
+            if ((window as any).__fillFormInProgress) {
+              console.warn('[Executor V2] FILL_FORM already in progress, ignoring duplicate');
+              sendResponse({ success: false, reason: 'duplicate_ignored' });
+              break;
+            }
+            (window as any).__fillFormInProgress = true;
 
-            // Convert vaultResume to the format expected by intelligentNavigate
-            const resumeData = vaultResume
-              ? {
-                  data: vaultResume.data || vaultResume.base64 || '',
-                  fileName: vaultResume.fileName || 'resume.pdf',
-                  mimeType: vaultResume.mimeType || 'application/pdf',
-                }
-              : undefined;
-
-            console.log('[Executor V2] resumeData for intelligentNavigate:', {
-              hasData: !!resumeData?.data,
-              dataLength: resumeData?.data?.length || 0,
-              fileName: resumeData?.fileName,
-              mimeType: resumeData?.mimeType,
-            });
-
-            const result = await intelligentNavigate(resumeData, vaultProfile);
-
-            // Return result directly via sendResponse (no need for separate ATS_COMPLETE/JOB_COMPLETED)
-            if (result?.success) {
-              sendResponse({
-                success: true,
-                reason: result.reason || 'form_found',
-                jobId, // Include jobId in response for consistency
+            try {
+              const { jobId, formType, context, vaultProfile, vaultResume } = message.data;
+              console.log('[Executor V2] Filling form:', { jobId, formType, context });
+              console.log('[Executor V2] vaultResume received:', {
+                hasData: !!vaultResume?.data,
+                hasBase64: !!vaultResume?.base64,
+                fileName: vaultResume?.fileName,
+                mimeType: vaultResume?.mimeType,
               });
-            } else {
-              sendResponse({
-                success: false,
-                reason: result?.reason || 'unknown',
-                message: result?.message,
-                jobId,
+
+              // Convert vaultResume to the format expected by intelligentNavigate
+              const resumeData = vaultResume
+                ? {
+                    data: vaultResume.data || vaultResume.base64 || '',
+                    fileName: vaultResume.fileName || 'resume.pdf',
+                    mimeType: vaultResume.mimeType || 'application/pdf',
+                  }
+                : undefined;
+
+              console.log('[Executor V2] resumeData for intelligentNavigate:', {
+                hasData: !!resumeData?.data,
+                dataLength: resumeData?.data?.length || 0,
+                fileName: resumeData?.fileName,
+                mimeType: resumeData?.mimeType,
               });
+
+              const result = await intelligentNavigate(resumeData, vaultProfile);
+
+              // Return result directly via sendResponse (no need for separate ATS_COMPLETE/JOB_COMPLETED)
+              if (result?.success) {
+                sendResponse({
+                  success: true,
+                  reason: result.reason || 'form_found',
+                  jobId, // Include jobId in response for consistency
+                });
+              } else {
+                sendResponse({
+                  success: false,
+                  reason: result?.reason || 'unknown',
+                  message: result?.message,
+                  jobId,
+                });
+              }
+            } finally {
+              (window as any).__fillFormInProgress = false;
             }
             break;
           }
@@ -669,4 +699,6 @@ if (!USE_ORCHESTRATOR_V2) {
   });
 }
 
-console.log('[Executor V2] Content script loaded and ready');
+if (!ALREADY_LOADED) {
+  console.log('[Executor V2] Content script loaded and ready');
+}
