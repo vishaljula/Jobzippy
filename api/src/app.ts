@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
 import { config } from './config.js';
+import { formHelperRouter } from './routes/form-helper.js';
 import { intakeRouter } from './routes/intake.js';
 import { jobsRouter } from './routes/jobs.js';
 import { oauthRouter } from './routes/oauth.js';
@@ -54,6 +55,7 @@ app.use('/oauth/google', oauthRouter);
 app.use('/intake', intakeRouter);
 app.use('/onboarding', onboardingRouter);
 app.use('/jobs', jobsRouter);
+app.use('/form-helper', formHelperRouter);
 // Checkout route removed - moved to Firebase Functions
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

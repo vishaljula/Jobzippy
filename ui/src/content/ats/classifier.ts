@@ -3,9 +3,6 @@
  * Intelligently classifies web pages and their elements for ATS automation
  */
 
-import { classifyPage } from './page-classifier';
-import { waitForDOMStable } from '../../lib/dom-events';
-
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -37,6 +34,7 @@ export type FieldPurpose =
   | 'clearance'
   | 'exportControls'
   | 'country'
+  | 'phoneCountryCode'
   | 'previousApplication'
   | 'previousEmployment'
   | 'conflictOfInterest'
@@ -45,6 +43,7 @@ export type FieldPurpose =
   | 'close'
   | 'skip'
   | 'guest'
+  | 'edit'
   | 'unknown';
 
 export type ElementType = 'input' | 'file' | 'checkbox' | 'button' | 'link' | 'select';
@@ -55,6 +54,8 @@ export interface DetectedField {
   element: HTMLElement;
   confidence: number;
   selectors: string[]; // How we found it
+  labelText?: string; // Question/label text for unknown fields (used by LLM)
+  value?: string; // Optional value hint (e.g. for resume radios)
 }
 
 export interface PageClassification {
@@ -83,7 +84,7 @@ export interface Indicator {
   value?: string | number;
   selectors?: string[];
   weight: number;
-  check?: (doc: Document) => boolean;
+  check?: (container: Document | Element) => boolean;
 }
 
 // ============================================================================
@@ -103,12 +104,49 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
           const hasModal = doc.querySelector('[role="dialog"], .modal, .popup, .modal-overlay');
           if (!hasModal) return false;
 
-          const hasInputs =
+          // Count text inputs
+          const textInputs =
             hasModal.querySelectorAll(
               'input[type="text"], input[type="email"], input[type="tel"], textarea'
             ).length || 0;
-          // Form modal if: has modal + has at least 2 inputs
-          return hasInputs >= 2;
+
+          // Count file inputs (resume uploads count as form fields)
+          const fileInputs = hasModal.querySelectorAll('input[type="file"]').length || 0;
+
+          // Check for LinkedIn Easy Apply indicators (Next/Submit/Review buttons with data attributes)
+          const hasLinkedInDataAttrs = !!(
+            doc.querySelector('[data-easy-apply-next-button]') ||
+            doc.querySelector('[data-live-test-easy-apply-next-button]') ||
+            doc.querySelector('[data-live-test-easy-apply-submit-button]') ||
+            doc.querySelector('[data-live-test-easy-apply-review-button]')
+          );
+
+          // Check for any Next/Continue/Submit/Review button inside the modal (fallback)
+          const buttons = hasModal.querySelectorAll('button, [role="button"]');
+          let hasProgressionButton = false;
+          buttons.forEach((btn) => {
+            const text = (btn.textContent || '').toLowerCase();
+            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+            if (
+              text.includes('next') ||
+              text.includes('continue') ||
+              text.includes('submit') ||
+              text.includes('review') ||
+              ariaLabel.includes('next') ||
+              ariaLabel.includes('continue') ||
+              ariaLabel.includes('submit') ||
+              ariaLabel.includes('review')
+            ) {
+              hasProgressionButton = true;
+            }
+          });
+
+          // Form modal if:
+          // - has at least 2 text inputs, OR
+          // - has at least 1 input (text or file) AND (LinkedIn data attrs OR progression button)
+          const totalInputs = textInputs + fileInputs;
+          const hasFormIndicators = hasLinkedInDataAttrs || hasProgressionButton;
+          return textInputs >= 2 || (totalInputs >= 1 && hasFormIndicators);
         },
       },
     ],
@@ -197,8 +235,10 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
         type: 'text',
         value: 'create account',
         weight: 0.7,
-        check: (doc) => {
-          const text = doc.body.textContent?.toLowerCase() || '';
+        check: (container) => {
+          // Handle both Document (use body) and Element
+          const root = container instanceof Document ? container.body : container;
+          const text = root?.textContent?.toLowerCase() || '';
           return text.includes('create account') || text.includes('sign up');
         },
       },
@@ -257,8 +297,9 @@ export const PAGE_TYPE_RULES: Record<PageType, ClassificationRule> = {
         type: 'text',
         value: 'captcha',
         weight: 0.5,
-        check: (doc) => {
-          const text = doc.body.textContent?.toLowerCase() || '';
+        check: (container) => {
+          const root = container instanceof Document ? container.body : container;
+          const text = root?.textContent?.toLowerCase() || '';
           return text.includes('captcha') || text.includes('verify you are human');
         },
       },
@@ -304,6 +345,9 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
       'input[autocomplete="email"]',
       'input[name*="email" i]',
       'input[id*="email" i]',
+      // LinkedIn uses select dropdowns for email (pre-populated from profile)
+      'select[name*="email" i]',
+      'select[id*="email" i]',
     ],
     weight: 1.0,
   },
@@ -316,6 +360,16 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
       'input[id*="phone" i]',
     ],
     weight: 0.9,
+  },
+
+  phoneCountryCode: {
+    selectors: [
+      'select[name*="phone" i][name*="country" i]',
+      'select[id*="phone" i][id*="country" i]',
+      'select[name*="country" i][name*="code" i]',
+      'select[autocomplete="tel-country-code"]',
+    ],
+    weight: 0.95,
   },
 
   // Combined full name field (e.g. "Full name")
@@ -473,6 +527,14 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
 
   close: {
     selectors: [
+      // LinkedIn-specific (most stable - data-test attributes rarely change)
+      '[data-test-modal-close-btn]',
+      // LinkedIn uses "Dismiss" for modal close buttons (aria-label pattern)
+      '[role="dialog"] button[aria-label*="dismiss" i]',
+      '.jobs-easy-apply-modal button[aria-label*="dismiss" i]',
+      // LinkedIn class (combined with role to avoid false positives)
+      '[role="dialog"] .artdeco-modal__dismiss',
+      // Generic close patterns (fallback)
       'button[aria-label*="close" i]',
       'button[data-automation-id*="close"]',
       '.close-button',
@@ -495,158 +557,19 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0.9,
   },
 
+  edit: {
+    selectors: [
+      'button[aria-label*="edit" i]', // Strong signal
+      'a[href*="edit" i]',
+      'button[name*="edit" i]',
+      '.edit-button',
+      '[data-control-name*="edit" i]',
+    ],
+    weight: 0.9,
+  },
+
   unknown: {
     selectors: [],
     weight: 0,
   },
 };
-
-// ============================================================================
-// POST-CLICK CLASSIFICATION HELPERS
-// ============================================================================
-
-/**
- * Get truly visible modals (not just present in DOM)
- * Checks display, visibility, opacity, and aria-hidden
- */
-export function getVisibleModals(doc: Document): HTMLElement[] {
-  return Array.from(
-    doc.querySelectorAll<HTMLElement>('[role="dialog"], .modal, .modal-overlay')
-  ).filter((el) => {
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
-      return false;
-    if (el.getAttribute('aria-hidden') === 'true') return false;
-    return true;
-  });
-}
-
-/**
- * Cheap pre-click guess based on button attributes
- * Fast path for obvious cases (external ATS links, Easy Apply buttons)
- */
-export function cheapGuessFromButton(applyButton: HTMLElement): 'modal' | 'external' | 'unknown' {
-  // Check <a> tags with external ATS domains
-  if (applyButton.tagName === 'A') {
-    const href = applyButton.getAttribute('href') || '';
-    const externalDomains = [
-      'greenhouse.io',
-      'workday',
-      'lever.co',
-      'smartrecruiters',
-      'ashbyhq.com',
-      'jobvite',
-    ];
-    if (externalDomains.some((domain) => href.includes(domain))) {
-      return 'external';
-    }
-  }
-
-  // Check for LinkedIn Easy Apply indicators
-  if (
-    applyButton.getAttribute('aria-label')?.includes('Easy Apply') ||
-    applyButton.closest('[data-test-global-easy-apply-modal]')
-  ) {
-    return 'modal';
-  }
-
-  return 'unknown';
-}
-
-/**
- * Post-click classification: click Apply button and detect what happens
- * Returns classification based on actual outcome (modal, navigation, or new tab)
- */
-export async function classifyAfterApply(applyButton: HTMLElement): Promise<PageClassification> {
-  const { logger } = await import('../../lib/logger');
-
-  logger.log('Classifier', 'Post-click classification: clicking Apply button...');
-  console.log('[Classifier] Post-click classification: clicking Apply button...');
-
-  // Notify background we're about to click
-  chrome.runtime.sendMessage({ type: 'APPLY_CLICK_START' }).catch(() => {
-    // Ignore if background script isn't ready
-  });
-
-  const initialUrl = window.location.href;
-  const initialModals = getVisibleModals(document).length;
-
-  logger.log('Classifier', 'Before click', { url: initialUrl, modals: initialModals });
-  console.log('[Classifier] Before click - URL:', initialUrl, 'Modals:', initialModals);
-
-  // Click the button
-  applyButton.click();
-  logger.log('Classifier', 'Apply button clicked, waiting for DOM changes...');
-  console.log('[Classifier] Apply button clicked, waiting for DOM changes...');
-
-  // Wait for DOM changes (event-driven)
-  await waitForDOMStable(300, 1000);
-
-  // Check what happened
-  const newModals = getVisibleModals(document).length;
-  const newUrl = window.location.href;
-
-  logger.log('Classifier', 'After click', {
-    url: newUrl,
-    modals: newModals,
-    urlChanged: newUrl !== initialUrl,
-    modalsChanged: newModals > initialModals,
-  });
-  console.log('[Classifier] After click - URL:', newUrl, 'Modals:', newModals);
-
-  if (newModals > initialModals) {
-    // Modal appeared - run full classification on it
-    logger.log('Classifier', 'Modal appeared, classifying modal...');
-    console.log('[Classifier] Modal appeared, classifying modal...');
-    return classifyPage(document);
-  }
-
-  if (newUrl !== initialUrl) {
-    // Same-page navigation - classify new page
-    logger.log('Classifier', 'URL changed, classifying new page...');
-    console.log('[Classifier] URL changed, classifying new page...');
-    return classifyPage(document);
-  }
-
-  // Check if new tab opened
-  logger.log('Classifier', 'Checking for new external tab...');
-  console.log('[Classifier] Checking for new external tab...');
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'CHECK_NEW_TAB' });
-    logger.log('Classifier', 'CHECK_NEW_TAB response', response);
-    console.log('[Classifier] CHECK_NEW_TAB response:', response);
-
-    if (response?.newTabId) {
-      logger.log(
-        'Classifier',
-        `External tab detected: ${response.newTabId}, returning intermediate classification`
-      );
-      console.log(
-        `[Classifier] External tab detected: ${response.newTabId}, returning intermediate classification`
-      );
-      return {
-        type: 'intermediate' as PageType, // Mark as intermediate, external tab will be handled separately
-        confidence: 1.0,
-        fields: [],
-        actions: [],
-        metadata: {
-          hasOverlay: false,
-          hasPasswordField: false,
-          hasFileUpload: false,
-          hasMultipleInputs: false,
-          formCount: 0,
-          modalCount: 0,
-        },
-      };
-    }
-  } catch (err) {
-    logger.error('Classifier', 'Error checking for new tab', err);
-    console.error('[Classifier] Error checking for new tab:', err);
-    // Background script not responding, continue
-  }
-
-  // Fallback to current page classification
-  logger.log('Classifier', 'No modal/URL/tab change detected, classifying current page...');
-  console.log('[Classifier] No modal/URL/tab change detected, classifying current page...');
-  return classifyPage(document);
-}

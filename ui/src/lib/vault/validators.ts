@@ -22,6 +22,14 @@ const preferencesSchema = z.object({
   salary_min: z.number(),
   salary_currency: z.string().optional().default('USD'),
   start_date: z.string(),
+  // LinkedIn-aligned fields (MVP1)
+  target_roles: z.array(z.string()).optional().default([]),
+  experience_level: z
+    .enum(['', 'internship', 'entry', 'associate', 'mid_senior', 'director', 'executive'])
+    .optional()
+    .default(''),
+  job_type: z.enum(['', 'full_time', 'part_time', 'contract', 'internship']).optional().default(''),
+  work_arrangement: z.enum(['', 'remote', 'hybrid', 'onsite', 'any']).optional().default(''),
 });
 
 const profileSchema = z.object({
@@ -58,6 +66,7 @@ const educationSchema = z.object({
 const historySchema = z.object({
   employment: z.array(employmentHistorySchema),
   education: z.array(educationSchema),
+  skills: z.array(z.string()).optional().default([]),
 });
 
 const policyChoice = z.enum(['answer', 'skip_if_optional', 'ask_if_required', 'never']);

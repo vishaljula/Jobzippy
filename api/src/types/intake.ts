@@ -60,6 +60,7 @@ export interface EducationHistory {
 export interface History {
   employment: EmploymentHistory[];
   education: EducationHistory[];
+  skills: string[]; // Skills extracted from resume (e.g., leadership, customer service, project management, Excel)
 }
 
 export interface Policies {

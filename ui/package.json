@@ -11,7 +11,7 @@
     "dev:mock": "node scripts/dev-mock-server.js",
     "build:dev": "npm run clean && tsc && cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite build --mode development --minify false --sourcemap true",
     "build": "npm run clean && tsc && vite build && npm run build:content",
-    "build:content": "npm run build:executor-v2",
+    "build:content": "npm run build:executor-v2 -- --mode production",
     "preview": "cross-env ROLLUP_SKIP_NODEJS_NATIVE_BUILD=1 vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -26,7 +26,7 @@
     "test:e2e:ui": "playwright test --ui",
     "log-server": "node log-server.js",
     "clear-logs": "echo '=== Agent Logs - '$(date -u +\"%Y-%m-%dT%H:%M:%S.000Z\")' ===' > agent-logs.txt && echo 'Logs cleared!'",
-    "build:executor-v2": "CONTENT_ENTRY=executor-v2 CONTENT_PATH=src/content/executor-v2.ts vite build -c vite.content.config.ts --mode production"
+    "build:executor-v2": "CONTENT_ENTRY=executor-v2 CONTENT_PATH=src/content/executor-v2.ts vite build -c vite.content.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

@@ -946,18 +946,6 @@ function isValueMissing(value: unknown): boolean {
   return false;
 }
 
-// Unused parsers kept for potential future use (prefixed with _)
-function _parsePhone(input: string): string | null {
-  const digits = input.replace(/[^\d]/g, '');
-  if (digits.length < 10) return null;
-  return formatPhoneDigits(digits);
-}
-
-function _parseString(input: string): string | null {
-  const trimmed = input.trim();
-  return trimmed.length ? trimmed : null;
-}
-
 function parseLocations(input: string): string[] | null {
   const normalized = input.trim();
   if (!normalized) return null;
@@ -972,92 +960,7 @@ function parseLocations(input: string): string[] | null {
   return Array.from(new Set(formatted));
 }
 
-const SALARY_SUFFIX_MULTIPLIERS: Record<string, number> = {
-  k: 1_000,
-  m: 1_000_000,
-  b: 1_000_000_000,
-  thousand: 1_000,
-  million: 1_000_000,
-  billion: 1_000_000_000,
-};
-
-function _parseSalary(input: string): number | null {
-  if (!input) return null;
-  const normalized = input.replace(/[$,]/g, '').toLowerCase();
-  const regex = /(\d+(?:\.\d+)?)(?:\s*(k|m|b|thousand|million|billion))?/g;
-  const matches: RegExpExecArray[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(normalized)) !== null) {
-    matches.push(match);
-  }
-  if (!matches.length) {
-    return null;
-  }
-  const [first] = matches;
-  if (!first || !first[1]) {
-    return null;
-  }
-  const fallbackSuffix = first[2] ?? matches[1]?.[2];
-  const multiplier = fallbackSuffix ? (SALARY_SUFFIX_MULTIPLIERS[fallbackSuffix] ?? 1) : 1;
-  const value = Number(first[1]);
-  if (Number.isNaN(value)) {
-    return null;
-  }
-  const computed = value * multiplier;
-  if (!Number.isFinite(computed)) {
-    return null;
-  }
-  return Math.round(computed);
-}
-
-function _parseCurrency(input: string): string | null {
-  const trimmed = input.trim().toUpperCase();
-  if (/^[A-Z]{3}$/.test(trimmed)) {
-    return trimmed;
-  }
-  return null;
-}
-
-function _parseBoolean(input: string): boolean | null {
-  const normalized = input.trim().toLowerCase();
-  if (!normalized) return null;
-  if (['yes', 'y', 'true', 'yeah', 'yup', 'sure', 'affirmative'].includes(normalized)) return true;
-  if (['no', 'n', 'false', 'nope', 'nah', 'negative'].includes(normalized)) return false;
-  if (normalized.startsWith('y')) return true;
-  if (normalized.startsWith('n')) return false;
-  return null;
-}
-
-function _parsePolicyPreference(
-  input: string
-): 'answer' | 'skip_if_optional' | 'ask_if_required' | 'never' | null {
-  const normalized = input.trim().toLowerCase();
-  if (normalized.includes('skip')) return 'skip_if_optional';
-  if (normalized.includes('ask')) return 'ask_if_required';
-  if (normalized.includes('never') || normalized.includes('decline')) return 'never';
-  if (
-    normalized.includes('answer') ||
-    normalized.includes('reply') ||
-    normalized.includes('go ahead') ||
-    normalized.includes('share')
-  ) {
-    return 'answer';
-  }
-  if (normalized.includes('only if required') || normalized.includes('only if needed')) {
-    return 'ask_if_required';
-  }
-  return null;
-}
-
-function _parseComplianceChoice(input: string): 'yes' | 'no' | 'prefer_not' | null {
-  const normalized = input.trim().toLowerCase();
-  if (normalized.startsWith('y') || normalized.includes('affirm')) return 'yes';
-  if (normalized.startsWith('n')) return 'no';
-  if (normalized.includes('prefer') || normalized.includes('skip')) return 'prefer_not';
-  return null;
-}
-
-// New parsers for LinkedIn-aligned fields
+// Parsers for LinkedIn-aligned fields
 
 function parseTargetRoles(input: string): string[] | null {
   const normalized = input.trim();
@@ -1118,7 +1021,7 @@ function parseExperienceLevel(input: string): ExperienceLevel | null {
 
   // Try to parse years and map to level
   const yearsMatch = normalized.match(/(\d+)\s*(years?|yrs?)/i);
-  if (yearsMatch) {
+  if (yearsMatch && yearsMatch[1]) {
     const years = parseInt(yearsMatch[1], 10);
     if (years < 1) return 'internship';
     if (years <= 2) return 'entry';
@@ -1242,16 +1145,6 @@ function buildValidationNotice(paths: string[]): string {
       ? (labels[0] ?? 'that answer')
       : `${labels.slice(0, -1).join(', ')} and ${labels.slice(-1)}`;
   return `I couldn’t quite understand your ${formatted}. Could you rephrase or clarify?`;
-}
-
-function formatPhoneDigits(digits: string): string {
-  if (digits.length === 10) {
-    return `+1${digits}`;
-  }
-  if (digits.startsWith('1') && digits.length === 11) {
-    return `+${digits}`;
-  }
-  return digits.startsWith('+') ? digits : `+${digits}`;
 }
 
 function formatLocationToken(token: string): string | null {

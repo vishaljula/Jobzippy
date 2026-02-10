@@ -8,6 +8,30 @@
  */
 
 // ============================================================================
+// GLOBAL CONFIG - SINGLE FLAG TO CONTROL ALL HUMANIZATION
+// ============================================================================
+
+/**
+ * Global humanize configuration
+ * Set humanizeConfig.enabled = false to disable ALL delays for testing
+ */
+export const humanizeConfig = {
+  /** Enable/disable all humanization (for testing) */
+  enabled: true, // <-- SET TO false FOR TESTING
+
+  /** Default jitter range */
+  defaultJitterMin: 1500, // Increased for testing observation
+  defaultJitterMax: 2500, // Increased for testing observation
+
+  /** Keystroke delay range */
+  keystrokeDelayMin: 30,
+  keystrokeDelayMax: 120,
+
+  /** Whether to use human typing for all text inputs */
+  useHumanTyping: true,
+};
+
+// ============================================================================
 // TIMING UTILITIES
 // ============================================================================
 
@@ -17,6 +41,7 @@
  * @param max Maximum delay in ms (default 1500)
  */
 export async function jitter(min = 800, max = 1500): Promise<void> {
+  if (!humanizeConfig.enabled) return; // Skip delay if humanize disabled
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
 }
@@ -25,6 +50,7 @@ export async function jitter(min = 800, max = 1500): Promise<void> {
  * Short jitter for between-keystroke pauses
  */
 export async function microJitter(min = 30, max = 120): Promise<void> {
+  if (!humanizeConfig.enabled) return; // Skip delay if humanize disabled
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
 }
@@ -366,31 +392,11 @@ export async function attachFile(input: HTMLInputElement, file: File): Promise<v
 }
 
 // ============================================================================
-// CONFIGURATION
+// HELPER
 // ============================================================================
 
 /**
- * Global humanize configuration
- * Can be modified at runtime to adjust behavior
- */
-export const humanizeConfig = {
-  /** Enable/disable all humanization (for testing) */
-  enabled: true,
-
-  /** Default jitter range */
-  defaultJitterMin: 800,
-  defaultJitterMax: 1500,
-
-  /** Keystroke delay range */
-  keystrokeDelayMin: 30,
-  keystrokeDelayMax: 120,
-
-  /** Whether to use human typing for all text inputs */
-  useHumanTyping: true,
-};
-
-/**
- * Wrapper that respects humanizeConfig.enabled
+ * Wrapper that respects humanizeConfig.enabled (legacy - jitter now checks directly)
  */
 export async function maybeJitter(min?: number, max?: number): Promise<void> {
   if (!humanizeConfig.enabled) return;

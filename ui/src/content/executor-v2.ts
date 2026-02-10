@@ -8,11 +8,34 @@
  * - All logic resides in background orchestrator
  */
 
-import { intelligentNavigate } from './ats/navigator';
+import { executePageAction } from './ats/navigator';
 import { waitForJobDetailsDom, waitForLinkedInModal, waitForMessage } from '../lib/dom-waits';
 import type { ExternalATSOpenedMessage } from '../types/job-session';
 import { classifyPage } from './ats/page-classifier';
 import { humanClick, humanizeConfig } from '../lib/humanize';
+
+// ============================================================================
+// Visibility Helpers (Stealth-safe - works in background tabs)
+// ============================================================================
+
+/**
+ * Check if an element is actually hidden via CSS properties.
+ *
+ * NOTE: We intentionally do NOT check offsetWidth/offsetHeight because:
+ * 1. In background tabs, Chrome doesn't compute layout dimensions (returns 0)
+ * 2. This causes false positives (visible elements marked as hidden)
+ * CSS property checks are sufficient to detect truly hidden elements.
+ */
+function isActuallyHidden(element: HTMLElement): boolean {
+  // Check inline style first (faster, catches dynamic visibility toggling)
+  const inlineDisplay = element.style.display;
+  if (inlineDisplay === 'none') {
+    return true;
+  }
+
+  const style = getComputedStyle(element);
+  return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+}
 
 // ============================================================================
 // Double-Load Prevention
@@ -55,23 +78,41 @@ interface JobCard {
 function scrapeJobCards(): JobCard[] {
   const jobs: JobCard[] = [];
 
+  // LinkedIn 2024/2025 job card selectors - most specific first
   const jobSelectors = [
+    'li.ember-view.jobs-search-results__list-item', // Most reliable for 2024/2025
     'li.jobs-search-results__list-item',
     'div[data-job-id]',
     'div.job-card-container',
     'div.job-card-list__entity-lockup',
+    '.scaffold-layout__list-item', // Newer LinkedIn selector
   ];
 
   let jobElements: NodeListOf<Element> | null = null;
+  let matchedSelector = '';
   for (const selector of jobSelectors) {
     jobElements = document.querySelectorAll(selector);
-    if (jobElements.length > 0) break;
+    console.log(`[Executor V2] Selector "${selector}" found ${jobElements.length} elements`);
+    if (jobElements.length > 0) {
+      matchedSelector = selector;
+      break;
+    }
   }
 
   if (!jobElements || jobElements.length === 0) {
-    console.log('[Executor V2] No job cards found');
+    console.log('[Executor V2] No job cards found with any selector');
+    // Debug: log what's on the page
+    console.log('[Executor V2] Page URL:', window.location.href);
+    console.log(
+      '[Executor V2] Has job list container:',
+      !!document.querySelector('.jobs-search-results-list')
+    );
     return jobs;
   }
+
+  console.log(
+    `[Executor V2] Using selector "${matchedSelector}", found ${jobElements.length} job cards`
+  );
 
   jobElements.forEach((card, index) => {
     try {
@@ -87,27 +128,32 @@ function scrapeJobCards(): JobCard[] {
         }
       }
 
-      // Extract title
+      // Extract title (LinkedIn 2024/2025 - note both single and double dash variants exist)
       const titleEl =
-        card.querySelector<HTMLElement>(
-          'a.job-card-list__title-link, a[data-control-name="job_card_title_link"]'
-        ) ||
+        card.querySelector<HTMLElement>('a.job-card-list__title--link') || // Double dash (LinkedIn 2024)
+        card.querySelector<HTMLElement>('a.job-card-list__title-link') || // Single dash (LinkedIn 2025 / mock)
+        card.querySelector<HTMLElement>('a.job-card-container__link') ||
+        card.querySelector<HTMLElement>('a[data-control-name="job_card_title_link"]') ||
         card.querySelector<HTMLElement>('h3.base-search-card__title') ||
-        card.querySelector<HTMLElement>('span.job-card-list__title');
-      const title = titleEl?.textContent?.trim() || '';
+        card.querySelector<HTMLElement>('span.job-card-list__title') ||
+        card.querySelector<HTMLElement>('.artdeco-entity-lockup__title a') ||
+        card.querySelector<HTMLElement>('.job-card-list__title'); // Generic fallback
+      const title = titleEl?.textContent?.trim().replace(/\s+/g, ' ') || '';
 
-      // Extract company
+      // Extract company (LinkedIn 2024/2025)
       const companyEl =
-        card.querySelector<HTMLElement>(
-          'h4.base-search-card__subtitle, a.job-card-container__company-name'
-        ) || card.querySelector<HTMLElement>('span.job-card-container__company-name');
+        card.querySelector<HTMLElement>('.artdeco-entity-lockup__subtitle span') ||
+        card.querySelector<HTMLElement>('h4.base-search-card__subtitle') ||
+        card.querySelector<HTMLElement>('a.job-card-container__company-name') ||
+        card.querySelector<HTMLElement>('span.job-card-container__company-name');
       const company = companyEl?.textContent?.trim() || '';
 
-      // Extract location
+      // Extract location (LinkedIn 2024/2025)
       const locationEl =
-        card.querySelector<HTMLElement>(
-          'span.job-card-container__metadata-item, span.job-card-container__primary-description'
-        ) || card.querySelector<HTMLElement>('li.job-card-container__metadata-item');
+        card.querySelector<HTMLElement>('.artdeco-entity-lockup__caption li span') ||
+        card.querySelector<HTMLElement>('span.job-card-container__metadata-item') ||
+        card.querySelector<HTMLElement>('span.job-card-container__primary-description') ||
+        card.querySelector<HTMLElement>('li.job-card-container__metadata-item');
       const location = locationEl?.textContent?.trim() || '';
 
       // Extract URL
@@ -140,11 +186,24 @@ function scrapeJobCards(): JobCard[] {
         applyType = 'external';
       }
 
-      if (title && company) {
+      // Debug logging for selector issues
+      if (!title || !company) {
+        console.warn(`[Executor V2] Job card ${index} missing data:`, {
+          hasTitle: !!title,
+          hasCompany: !!company,
+          titleText: title || '(empty)',
+          companyText: company || '(empty)',
+          cardClasses: card.className,
+          cardHTML: card.outerHTML.substring(0, 500),
+        });
+      }
+
+      // Include jobs even without company (fallback to generate ID)
+      if (title || jobId) {
         jobs.push({
           id: jobId,
-          title,
-          company,
+          title: title || 'Unknown Title',
+          company: company || 'Unknown Company',
           location,
           url,
           description,
@@ -228,32 +287,87 @@ async function clickApplyButton(jobId: string): Promise<{
 }> {
   console.log('[Executor V2] Clicking apply button for job:', jobId);
 
+  // LinkedIn 2024/2025 selectors - updated to match current HTML structure
   const detailsContainer = document.querySelector(
-    '.jobs-search__job-details--container, .jobs-details__main-content'
+    '.job-details-jobs-unified-top-card__container--two-pane, ' +
+      '.jobs-search__job-details--container, ' +
+      '.jobs-details__main-content, ' +
+      '.jobs-unified-top-card'
   );
+
+  console.log(
+    '[Executor V2] Details container found:',
+    !!detailsContainer,
+    detailsContainer?.className
+  );
+
   if (!detailsContainer) {
-    console.error('[Executor V2] Details container not found');
-    return { type: 'timeout', timeout: true };
+    // Fallback: search entire document if container not found
+    console.warn('[Executor V2] Details container not found, searching entire document');
   }
 
-  // Find apply element: Easy Apply button, regular Apply button, or Apply link
-  let applyElement: HTMLElement | null =
-    detailsContainer.querySelector('button[aria-label*="Easy Apply" i]') ||
-    detailsContainer.querySelector('button[aria-label*="easy apply" i]') ||
-    detailsContainer.querySelector('a[data-testid="external-apply-button"]');
+  const searchRoot = detailsContainer || document;
 
+  // Find apply element using multiple strategies (LinkedIn 2024/2025 structure)
+  // Strategy 1: Direct ID (most reliable)
+  let applyElement: HTMLElement | null = searchRoot.querySelector('#jobs-apply-button-id');
+
+  // Strategy 2: Class-based selector
   if (!applyElement) {
-    // Fallback: find any button or link with "apply" in text
-    const allElements = Array.from(detailsContainer.querySelectorAll('button, a'));
+    applyElement = searchRoot.querySelector('.jobs-apply-button');
+  }
+
+  // Strategy 3: Data attribute selector
+  if (!applyElement) {
+    applyElement = searchRoot.querySelector('button[data-live-test-job-apply-button]');
+  }
+
+  // Strategy 4: aria-label based (Easy Apply)
+  if (!applyElement) {
+    applyElement =
+      searchRoot.querySelector('button[aria-label*="Easy Apply" i]') ||
+      searchRoot.querySelector('button[aria-label*="easy apply" i]');
+  }
+
+  // Strategy 5: External apply link
+  if (!applyElement) {
+    applyElement = searchRoot.querySelector('a[data-testid="external-apply-button"]');
+  }
+
+  // Strategy 6: Fallback - find any VISIBLE button with "apply" text
+  if (!applyElement) {
+    const allElements = Array.from(searchRoot.querySelectorAll('button, a'));
     applyElement =
       (allElements.find((el) => {
+        const htmlEl = el as HTMLElement;
         const text = el.textContent?.toLowerCase() || '';
-        return text.includes('apply');
+        const ariaLabel = el.getAttribute('aria-label')?.toLowerCase() || '';
+
+        // Must contain "apply"
+        const hasApplyText = text.includes('apply') || ariaLabel.includes('apply');
+        if (!hasApplyText) return false;
+
+        // Exclude non-apply buttons by text patterns
+        const excludePatterns = ['save', 'show results', 'filter', 'search', 'clear'];
+        if (excludePatterns.some((p) => text.includes(p) || ariaLabel.includes(p))) return false;
+
+        // Stealth-safe visibility check (works in background tabs)
+        if (isActuallyHidden(htmlEl)) return false;
+
+        return true;
       }) as HTMLElement) || null;
   }
 
+  console.log(
+    '[Executor V2] Apply element found:',
+    !!applyElement,
+    applyElement?.tagName,
+    applyElement?.className,
+    applyElement?.getAttribute('aria-label')?.substring(0, 50)
+  );
+
   if (!applyElement) {
-    console.error('[Executor V2] Apply button/link not found');
+    console.error('[Executor V2] Apply button/link not found after all strategies');
     return { type: 'timeout', timeout: true };
   }
 
@@ -574,26 +688,16 @@ if (!USE_ORCHESTRATOR_V2) {
             break;
           }
 
-          case 'FILL_FORM': {
-            // Guard against duplicate FILL_FORM messages
-            if ((window as any).__fillFormInProgress) {
-              console.warn('[Executor V2] FILL_FORM already in progress, ignoring duplicate');
-              sendResponse({ success: false, reason: 'duplicate_ignored' });
-              break;
+          case 'EXECUTE_PAGE_ACTION': {
+            if ((window as any).__actionInProgress) {
+              console.warn('[Executor V2] EXECUTE_PAGE_ACTION overlapping');
             }
-            (window as any).__fillFormInProgress = true;
+            (window as any).__actionInProgress = true;
 
             try {
-              const { jobId, formType, context, vaultProfile, vaultResume } = message.data;
-              console.log('[Executor V2] Filling form:', { jobId, formType, context });
-              console.log('[Executor V2] vaultResume received:', {
-                hasData: !!vaultResume?.data,
-                hasBase64: !!vaultResume?.base64,
-                fileName: vaultResume?.fileName,
-                mimeType: vaultResume?.mimeType,
-              });
+              const { jobId, vaultProfile, vaultResume } = message.data;
+              console.log('[Executor V2] EXECUTE_PAGE_ACTION received for job:', jobId);
 
-              // Convert vaultResume to the format expected by intelligentNavigate
               const resumeData = vaultResume
                 ? {
                     data: vaultResume.data || vaultResume.base64 || '',
@@ -602,32 +706,23 @@ if (!USE_ORCHESTRATOR_V2) {
                   }
                 : undefined;
 
-              console.log('[Executor V2] resumeData for intelligentNavigate:', {
-                hasData: !!resumeData?.data,
-                dataLength: resumeData?.data?.length || 0,
-                fileName: resumeData?.fileName,
-                mimeType: resumeData?.mimeType,
+              const result = await executePageAction(resumeData, vaultProfile);
+
+              sendResponse({
+                success: true,
+                status: result.status,
+                reason: result.reason,
+                actionResult: result.action,
               });
-
-              const result = await intelligentNavigate(resumeData, vaultProfile);
-
-              // Return result directly via sendResponse (no need for separate ATS_COMPLETE/JOB_COMPLETED)
-              if (result?.success) {
-                sendResponse({
-                  success: true,
-                  reason: result.reason || 'form_found',
-                  jobId, // Include jobId in response for consistency
-                });
-              } else {
-                sendResponse({
-                  success: false,
-                  reason: result?.reason || 'unknown',
-                  message: result?.message,
-                  jobId,
-                });
-              }
+            } catch (error) {
+              console.error('[Executor V2] Error executing page action:', error);
+              sendResponse({
+                success: false,
+                status: 'error',
+                reason: String(error),
+              });
             } finally {
-              (window as any).__fillFormInProgress = false;
+              (window as any).__actionInProgress = false;
             }
             break;
           }
@@ -679,6 +774,109 @@ if (!USE_ORCHESTRATOR_V2) {
                 error: error instanceof Error ? error.message : String(error),
               });
             }
+            break;
+          }
+
+          case 'CLOSE_MODAL': {
+            // Close ALL Easy Apply modal layers (confirmation dialog + main modal)
+            console.log('[Executor V2] Closing all Easy Apply modal layers');
+
+            let totalClosed = 0;
+            const maxAttempts = 3; // Close up to 3 modal layers
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+              console.log(`[Executor V2] Modal cleanup attempt ${attempt + 1}/${maxAttempts}`);
+
+              // PRIORITY 1: Check for confirmation dialog first (top layer)
+              // This is the "Save this application?" dialog that appears when trying to close mid-application
+              const confirmDialog = document.querySelector(
+                '[data-test-modal-id*="discard-confirmation"], .artdeco-modal--layer-confirmation'
+              );
+
+              if (confirmDialog) {
+                console.log('[Executor V2] Found confirmation dialog, clicking Discard');
+
+                // Try Discard button first (preferred - discards the application)
+                const discardBtn = confirmDialog.querySelector('[data-test-dialog-secondary-btn]');
+                if (discardBtn) {
+                  (discardBtn as HTMLElement).click();
+                  totalClosed++;
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                  continue; // Check for next layer
+                }
+
+                // Fallback to X button on confirmation dialog
+                const closeBtn = confirmDialog.querySelector('[data-test-modal-close-btn]');
+                if (closeBtn) {
+                  (closeBtn as HTMLElement).click();
+                  totalClosed++;
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                  continue;
+                }
+              }
+
+              // PRIORITY 2: Check for main Easy Apply modal
+              const mainModal = document.querySelector(
+                '.jobs-easy-apply-modal, [data-test-modal-id="easy-apply-modal"]'
+              );
+
+              if (mainModal) {
+                console.log('[Executor V2] Found main Easy Apply modal, closing');
+
+                // Try to find the specific close button first
+                // Use the selector provided by user findings: data-test-modal-close-btn
+                const dismissBtn = mainModal.querySelector(
+                  '[data-test-modal-close-btn], button[aria-label="Dismiss"], button[aria-label="Close"]'
+                );
+
+                if (dismissBtn) {
+                  console.log('[Executor V2] Clicking dismiss button');
+                  (dismissBtn as HTMLElement).click();
+                  totalClosed++;
+                  await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for animation/React state
+                  continue;
+                }
+
+                // Fallback: If no close button found but modal is open, try Esc key
+                console.log('[Executor V2] No dismiss button found, trying Escape key');
+                document.dispatchEvent(
+                  new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })
+                );
+                totalClosed++;
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                continue;
+              }
+
+              // PRIORITY 3: Generic modal overlay (fallback)
+              const genericOverlay = document.querySelector('.artdeco-modal-overlay--is-top-layer');
+              if (genericOverlay) {
+                console.log('[Executor V2] Found generic modal overlay, closing');
+
+                const closeBtn = genericOverlay.querySelector(
+                  '[data-test-modal-close-btn], button[aria-label*="dismiss" i]'
+                );
+                if (closeBtn) {
+                  (closeBtn as HTMLElement).click();
+                  totalClosed++;
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                  continue;
+                }
+              }
+            } // End of for loop
+
+            console.log(`[Executor V2] Closed ${totalClosed} modal layer(s)`);
+
+            // Final fallback: press Escape if no modals were closed
+            if (totalClosed === 0) {
+              document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+              );
+              console.log('[Executor V2] No modals found, sent Escape key as fallback');
+            }
+
+            // Wait for animations to complete
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            sendResponse({ success: true, closed: totalClosed });
             break;
           }
 

@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 
 interface PricingWelcomeProps {
   onStartTrial: () => void;
+  onSignIn: () => void;
   loading?: boolean;
 }
 
-export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
+export function PricingWelcome({ onStartTrial, onSignIn, loading }: PricingWelcomeProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617]">
       <div className="max-w-5xl w-full">
@@ -106,6 +107,17 @@ export function PricingWelcome({ onStartTrial, loading }: PricingWelcomeProps) {
               <p className="text-center text-[10px] text-slate-500 mt-2">
                 Card required • Cancel anytime
               </p>
+
+              {/* Sign In Link */}
+              <div className="mt-4 pt-4 border-t border-white/10 text-center">
+                <button
+                  onClick={onSignIn}
+                  className="text-xs text-slate-400 hover:text-white transition-colors"
+                >
+                  Already have an account?{' '}
+                  <span className="text-[#00f0ff] font-medium">Sign in</span>
+                </button>
+              </div>
             </div>
           </div>
 

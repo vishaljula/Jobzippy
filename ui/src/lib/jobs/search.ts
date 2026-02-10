@@ -127,8 +127,20 @@ function buildLinkedInUrl(titles: string[], locations: string[], remote: boolean
 
 // Enhanced LinkedIn URL builder with all filters
 export function buildLinkedInUrlWithFilters(profile: ProfileVault['profile'] | null): string {
-  const base = 'https://www.linkedin.com/jobs/search/?';
+  // Check if we should use mock pages
+  const useMockPages =
+    import.meta.env.VITE_USE_MOCK_PAGES === 'true'
+      ? true
+      : import.meta.env.VITE_USE_MOCK_PAGES === 'false'
+        ? false
+        : import.meta.env.MODE === 'development' || import.meta.env.DEV;
+
+  // Build params first (used for both real and mock URLs)
   const params = new URLSearchParams();
+
+  // Debug logging
+  console.log('[Jobzippy] buildLinkedInUrlWithFilters - profile:', profile);
+  console.log('[Jobzippy] buildLinkedInUrlWithFilters - preferences:', profile?.preferences);
 
   // Job titles / keywords
   const targetRoles = profile?.preferences?.target_roles;
@@ -163,9 +175,20 @@ export function buildLinkedInUrlWithFilters(profile: ProfileVault['profile'] | n
     params.set('f_WT', '2');
   }
 
-  // Easy Apply only
+  // Easy Apply filter - COMMENTED OUT for external ATS testing
+  // f_AL=true shows ONLY Easy Apply jobs
+  // f_AL=false or omitted shows ALL jobs (Easy Apply + External ATS)
+  // TODO: Make this configurable once external ATS flow is fully tested
   params.set('f_AL', 'true');
 
+  // Return mock or real URL with the same parameters
+  if (useMockPages) {
+    const mockUrl = `${MOCK_SERVER_URL}/mocks/linkedin-jobs.html?${params.toString()}`;
+    console.log('[Jobzippy] buildLinkedInUrlWithFilters - Using MOCK URL:', mockUrl);
+    return mockUrl;
+  }
+
+  const base = 'https://www.linkedin.com/jobs/search/?';
   return base + params.toString();
 }
 

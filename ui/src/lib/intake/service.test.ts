@@ -40,6 +40,10 @@ describe('processResumeWithAgent', () => {
         salary_min: 0,
         salary_currency: 'USD',
         start_date: '',
+        target_roles: [],
+        experience_level: '',
+        job_type: '',
+        work_arrangement: '',
       },
     },
     compliance: {

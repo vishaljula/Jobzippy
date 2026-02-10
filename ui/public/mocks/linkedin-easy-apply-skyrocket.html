@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Easy Apply - Skyrocket Ventures (4-Step Multi-Page)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f2ef; }
+    .artdeco-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 8px; width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .artdeco-modal__header { padding: 16px 24px; border-bottom: 1px solid #e0e0e0; }
+    .artdeco-modal__header h2 { font-size: 18px; font-weight: 600; }
+    .artdeco-modal__content { padding: 0; }
+    .artdeco-modal__dismiss { position: absolute; right: 12px; top: 12px; background: none; border: none; cursor: pointer; padding: 8px; border-radius: 50%; }
+    .artdeco-modal__dismiss:hover { background: #f0f0f0; }
+    .ph5 { padding-left: 24px; padding-right: 24px; }
+    .pv2 { padding-top: 8px; padding-bottom: 8px; }
+    .pv4 { padding-top: 16px; padding-bottom: 16px; }
+    .mt1 { margin-top: 4px; }
+    .mt2 { margin-top: 8px; }
+    .mt3 { margin-top: 12px; }
+    .mt4 { margin-top: 16px; }
+    .mt5 { margin-top: 20px; }
+    .mb2 { margin-bottom: 8px; }
+    .mr2 { margin-right: 8px; }
+    .pl3 { padding-left: 12px; }
+    .t-12 { font-size: 12px; }
+    .t-14 { font-size: 14px; }
+    .t-16 { font-size: 16px; }
+    .t-18 { font-size: 18px; }
+    .t-bold { font-weight: 600; }
+    .t-black--light { color: #666; }
+    .artdeco-entity-lockup { display: flex; align-items: center; gap: 12px; }
+    .artdeco-entity-lockup__image img { width: 56px; height: 56px; border-radius: 50%; }
+    .artdeco-entity-lockup__subtitle, .artdeco-entity-lockup__metadata { font-size: 14px; color: #666; }
+    .fb-dash-form-element__label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .fb-dash-form-element__label-title--is-required::after { content: ' *'; color: #d93025; }
+    .fb-dash-form-element__select-dropdown, input[type="text"] { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .artdeco-divider { border: none; border-top: 1px solid #e0e0e0; }
+    footer { padding: 16px 24px; border-top: 1px solid #e0e0e0; }
+    .display-flex { display: flex; }
+    .flex-grow-1 { flex-grow: 1; }
+    .justify-flex-end { justify-content: flex-end; }
+    .justify-space-between { justify-content: space-between; }
+    .artdeco-button { padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+    .artdeco-button--primary { background: #0a66c2; color: white; }
+    .artdeco-button--primary:hover { background: #004182; }
+    .artdeco-button--tertiary { background: none; color: #0a66c2; }
+    .artdeco-button--tertiary:hover { background: #e8f4fc; }
+    .jobs-document-upload-redesign-card__container { background: #f3f2ef; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-top: 8px; }
+    .jobs-document-upload-redesign-card__container--selected { border-color: #0a66c2; background: #e8f4fc; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+    .page { display: none; }
+    .page.active { display: block; }
+    progress { width: 100%; height: 6px; border-radius: 3px; }
+    progress::-webkit-progress-bar { background: #e0e0e0; border-radius: 3px; }
+    progress::-webkit-progress-value { background: #0a66c2; border-radius: 3px; }
+    .artdeco-completeness-meter-linear__progress-container { display: flex; align-items: center; }
+    .review-item { margin-top: 12px; }
+    .review-label { font-size: 12px; color: #666; }
+    .review-value { font-size: 14px; margin-top: 4px; }
+    .white-space-pre-line { white-space: pre-line; }
+  </style>
+</head>
+<body>
+  <div data-test-modal="" role="dialog" tabindex="-1" class="artdeco-modal artdeco-modal--layer-default jobs-easy-apply-modal" size="large" aria-labelledby="jobs-apply-header">
+    <span class="a11y-text">Dialog content start.</span>
+    <button aria-label="Dismiss" class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary artdeco-modal__dismiss" data-test-modal-close-btn="">✕</button>
+    
+    <div class="artdeco-modal__header">
+      <h2 id="jobs-apply-header">Apply to Skyrocket Ventures</h2>
+    </div>
+    
+    <div class="artdeco-modal__content jobs-easy-apply-modal__content p0">
+      <div tabindex="-1" id="progress-region" aria-label="Your job application progress is at 0 percent." role="region">
+        <div class="display-flex ph5 pv2">
+          <div class="flex-grow-1 artdeco-completeness-meter-linear">
+            <div class="artdeco-completeness-meter-linear__progress-container">
+              <progress id="progress-bar" max="100" value="0" class="artdeco-completeness-meter-linear__progress-element" aria-valuetext="Current value: 0" aria-valuemin="0" aria-valuenow="0" aria-valuemax="100">
+                Current value: 0
+              </progress>
+            </div>
+          </div>
+          <span id="progress-text" class="pl3 t-14 t-black--light" role="note">0%</span>
+        </div>
+
+        <!-- PAGE 1: Contact Info -->
+        <div id="page-1" class="page active">
+          <form>
+            <div class="ph5">
+              <div>
+                <h3 class="t-16 t-bold">Contact info</h3>
+                <div class="mt3 artdeco-entity-lockup artdeco-entity-lockup--size-4">
+                  <div class="artdeco-entity-lockup__image">
+                    <img width="56" height="56" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='28' fill='%23ccc'/%3E%3C/svg%3E" alt="User">
+                  </div>
+                  <div class="artdeco-entity-lockup__content">
+                    <div class="artdeco-entity-lockup__title t-bold">Test User</div>
+                    <div class="artdeco-entity-lockup__subtitle">Full Stack Engineer</div>
+                    <div class="artdeco-entity-lockup__metadata">Malden, Massachusetts, United States</div>
+                  </div>
+                </div>
+
+                <!-- Email Select -->
+                <div class="mt4" data-test-form-element="">
+                  <div data-test-text-entity-list-form-component="">
+                    <label for="email-select" class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                      <span aria-hidden="true">Email address</span>
+                    </label>
+                    <select id="email-select" class="fb-dash-form-element__select-dropdown" aria-required="true" required="" data-test-text-entity-list-form-select="">
+                      <option value="Select an option">Select an option</option>
+                      <option value="test@example.com">test@example.com</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Phone Country Code Select -->
+                <div class="mt4" data-test-form-element="">
+                  <div data-test-text-entity-list-form-component="">
+                    <label for="phone-country-select" class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                      <span aria-hidden="true">Phone country code</span>
+                    </label>
+                    <select id="phone-country-select" class="fb-dash-form-element__select-dropdown" aria-required="true" required="" data-test-text-entity-list-form-select="">
+                      <option value="Select an option">Select an option</option>
+                      <option value="United States (+1)">United States (+1)</option>
+                      <option value="Afghanistan (+93)">Afghanistan (+93)</option>
+                      <option value="Australia (+61)">Australia (+61)</option>
+                      <option value="Canada (+1)">Canada (+1)</option>
+                      <option value="India (+91)">India (+91)</option>
+                      <option value="United Kingdom (+44)">United Kingdom (+44)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Phone Number Input -->
+                <div class="mt4" data-test-form-element="">
+                  <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                    <div class="artdeco-text-input">
+                      <div class="artdeco-text-input--container">
+                        <label for="phone-input" class="artdeco-text-input--label">Mobile phone number</label>
+                        <input inputmode="text" class="artdeco-text-input--input" id="phone-input" required="" type="text">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <footer role="presentation">
+              <div class="jobs-easy-apply-footer__info">
+                <p class="t-12 t-black--light">Submitting this application won't change your LinkedIn profile.</p>
+              </div>
+              <div class="display-flex justify-flex-end ph5 pv4">
+                <button aria-label="Continue to next step" class="artdeco-button artdeco-button--2 artdeco-button--primary" data-easy-apply-next-button="" data-live-test-easy-apply-next-button="" type="button" onclick="showPage(2)">
+                  <span class="artdeco-button__text">Next</span>
+                </button>
+              </div>
+            </footer>
+          </form>
+        </div>
+
+        <!-- PAGE 2: Resume -->
+        <div id="page-2" class="page">
+          <form>
+            <div class="ph5">
+              <div>
+                <h3 class="t-16 t-bold">Resume</h3>
+                <div class="full-width mt1">
+                  <span class="t-14 jobs-document-upload__title--is-required">Be sure to include an updated resume</span>
+                  <div class="mt2">
+                    <div class="jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--selected ui-attachment--pdf" tabindex="0" aria-label="Selected">
+                      <h3 class="t-12 t-bold jobs-document-upload-redesign-card__file-name truncate">TestResume.pdf</h3>
+                      <p class="pt1 t-12 t-black--light">53 KB · Last used on 1/15/2026</p>
+                    </div>
+                  </div>
+                  <div class="mt2">
+                    <label class="jobs-document-upload__upload-button artdeco-button artdeco-button--secondary artdeco-button--2" for="resume-upload">
+                      <span role="button" aria-label="Upload resume button.">Upload resume</span>
+                    </label>
+                    <input name="file" class="hidden visually-hidden" id="resume-upload" accept="application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" type="file">
+                    <p class="jobs-document-upload__format-text t-12 t-black--light full-width">DOC, DOCX, PDF (2 MB)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <footer role="presentation">
+              <div class="jobs-easy-apply-footer__info">
+                <p class="t-12 t-black--light">Submitting this application won't change your LinkedIn profile.</p>
+              </div>
+              <div class="display-flex justify-flex-end ph5 pv4">
+                <button aria-label="Back to previous step" class="mr2 artdeco-button artdeco-button--2 artdeco-button--tertiary" type="button" onclick="showPage(1)">
+                  <span class="artdeco-button__text">Back</span>
+                </button>
+                <button aria-label="Continue to next step" class="artdeco-button artdeco-button--2 artdeco-button--primary" data-easy-apply-next-button="" data-live-test-easy-apply-next-button="" type="button" onclick="showPage(3)">
+                  <span class="artdeco-button__text">Next</span>
+                </button>
+              </div>
+            </footer>
+          </form>
+        </div>
+
+        <!-- PAGE 3: Additional Questions -->
+        <div id="page-3" class="page">
+          <form>
+            <div class="ph5">
+              <div>
+                <h3 class="t-16 t-bold">Additional Questions</h3>
+
+                <!-- Angular Experience Question -->
+                <div class="mt4" data-test-form-element="">
+                  <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                    <div class="artdeco-text-input artdeco-text-input--type-text artdeco-text-input--state-required">
+                      <div class="artdeco-text-input--container">
+                        <label for="angular-exp-input" class="artdeco-text-input--label">How many years of professional experience do you have as a front end engineer using Angular?</label>
+                        <input inputmode="text" class="artdeco-text-input--input" id="angular-exp-input" required="" type="text">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Salary Question -->
+                <div class="mt4" data-test-form-element="">
+                  <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                    <div class="artdeco-text-input artdeco-text-input--type-text artdeco-text-input--state-required">
+                      <div class="artdeco-text-input--container">
+                        <label for="salary-input" class="artdeco-text-input--label">How much annual cash compensation do you require?</label>
+                        <input inputmode="text" class="artdeco-text-input--input" id="salary-input" required="" type="text">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <footer role="presentation">
+              <div class="jobs-easy-apply-footer__info">
+                <p class="t-12 t-black--light">Submitting this application won't change your LinkedIn profile.</p>
+              </div>
+              <div class="display-flex justify-flex-end ph5 pv4">
+                <button aria-label="Back to previous step" class="mr2 artdeco-button artdeco-button--2 artdeco-button--tertiary" type="button" onclick="showPage(2)">
+                  <span class="artdeco-button__text">Back</span>
+                </button>
+                <button aria-label="Review your application" class="artdeco-button artdeco-button--2 artdeco-button--primary" data-live-test-easy-apply-review-button="" type="button" onclick="showPage(4)">
+                  <span class="artdeco-button__text">Review</span>
+                </button>
+              </div>
+            </footer>
+          </form>
+        </div>
+
+        <!-- PAGE 4: Review & Submit -->
+        <div id="page-4" class="page">
+          <div>
+            <div class="ph5">
+              <h3 class="t-18">Review your application</h3>
+              <div class="t-14 t-black--light">The employer will also receive a copy of your profile.</div>
+
+              <hr class="artdeco-divider mt5 mb2">
+              
+              <!-- Contact Info Review -->
+              <div class="display-flex justify-space-between">
+                <h4 class="t-14 t-bold">Contact info</h4>
+                <button class="link-without-visited-state hoverable-link-text t-14 t-bold artdeco-button artdeco-button--tertiary" aria-label="Edit Contact info" type="button" onclick="showPage(1)">Edit</button>
+              </div>
+              <div class="mt3 artdeco-entity-lockup">
+                <div class="artdeco-entity-lockup__image">
+                  <img width="56" height="56" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='28' fill='%23ccc'/%3E%3C/svg%3E" alt="User">
+                </div>
+                <div class="artdeco-entity-lockup__content">
+                  <div class="artdeco-entity-lockup__title t-bold">Test User</div>
+                  <div class="artdeco-entity-lockup__subtitle">Full Stack Engineer</div>
+                  <div class="artdeco-entity-lockup__metadata">Malden, Massachusetts, United States</div>
+                </div>
+              </div>
+              <div class="review-item">
+                <div class="review-label form-section-preview-element-title--is-required">Email address</div>
+                <div id="review-email" class="review-value white-space-pre-line">-</div>
+              </div>
+              <div class="review-item">
+                <div class="review-label form-section-preview-element-title--is-required">Phone country code</div>
+                <div id="review-phone-country" class="review-value white-space-pre-line">-</div>
+              </div>
+              <div class="review-item">
+                <div class="review-label form-section-preview-element-title--is-required">Mobile phone number</div>
+                <div id="review-phone" class="review-value white-space-pre-line">-</div>
+              </div>
+
+              <hr class="artdeco-divider mt5 mb2">
+              
+              <!-- Resume Review -->
+              <div class="display-flex justify-space-between">
+                <h4 class="t-14 t-bold">Resume</h4>
+                <button class="artdeco-button artdeco-button--tertiary" aria-label="Edit Resume" type="button" onclick="showPage(2)">Edit</button>
+              </div>
+              <div class="review-label mt3 form-section-preview-element-title--is-required">Be sure to include an updated resume</div>
+              <div class="inline-block mt2">
+                <div class="jobs-document-card">
+                  <div class="ui-attachment jobs-document-card__attachment ui-attachment--pdf">
+                    <h3 class="ui-attachment__filename jobs-document-card__filename">TestResume.pdf</h3>
+                    <p class="ui-attachment__filesize jobs-document-card__date">Last used on 1/15/2026</p>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="artdeco-divider mt5 mb2">
+              
+              <!-- Additional Questions Review -->
+              <div class="display-flex justify-space-between">
+                <h4 class="t-14 t-bold">Additional Questions</h4>
+                <button class="artdeco-button artdeco-button--tertiary" aria-label="Edit Additional Questions" type="button" onclick="showPage(3)">Edit</button>
+              </div>
+              <div class="review-item">
+                <div class="review-label form-section-preview-element-title--is-required">How many years of professional experience do you have as a front end engineer using Angular?</div>
+                <div id="review-angular" class="review-value white-space-pre-line">-</div>
+              </div>
+              <div class="review-item">
+                <div class="review-label form-section-preview-element-title--is-required">How much annual cash compensation do you require?</div>
+                <div id="review-salary" class="review-value white-space-pre-line">-</div>
+              </div>
+
+              <hr class="artdeco-divider mt5 mb2">
+            </div>
+
+            <footer role="presentation">
+              <div class="job-details-easy-apply-footer__section">
+                <input id="follow-company-checkbox" class="visually-hidden" type="checkbox">
+                <label for="follow-company-checkbox" class="t-14 t-black--light">
+                  Follow <span class="t-bold t-black">Skyrocket Ventures</span> to stay up to date with their page.
+                </label>
+              </div>
+              <div class="jobs-easy-apply-footer__info mt3">
+                <p class="t-12 t-black--light">We automatically save your answers and resume to make future applications easier.</p>
+              </div>
+              <div class="display-flex justify-flex-end ph5 pv4">
+                <button aria-label="Back to previous step" class="mr2 artdeco-button artdeco-button--2 artdeco-button--tertiary" type="button" onclick="showPage(3)">
+                  <span class="artdeco-button__text">Back</span>
+                </button>
+                <button aria-label="Submit application" class="artdeco-button artdeco-button--2 artdeco-button--primary" data-live-test-easy-apply-submit-button="" type="button" onclick="submitApplication()">
+                  <span class="artdeco-button__text">Submit application</span>
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="a11y-text">Dialog content end.</span>
+  </div>
+
+  <script>
+    const progressValues = { 1: 0, 2: 33, 3: 67, 4: 100 };
+    
+    function showPage(pageNum) {
+      // Hide all pages
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      // Show target page
+      document.getElementById('page-' + pageNum).classList.add('active');
+      // Update progress
+      const progress = progressValues[pageNum];
+      document.getElementById('progress-bar').value = progress;
+      document.getElementById('progress-bar').setAttribute('aria-valuenow', progress);
+      document.getElementById('progress-text').textContent = progress + '%';
+      document.getElementById('progress-region').setAttribute('aria-label', 'Your job application progress is at ' + progress + ' percent.');
+      
+      // If review page, populate review values
+      if (pageNum === 4) {
+        document.getElementById('review-email').textContent = document.getElementById('email-select').value || '-';
+        document.getElementById('review-phone-country').textContent = document.getElementById('phone-country-select').value || '-';
+        document.getElementById('review-phone').textContent = document.getElementById('phone-input').value || '-';
+        document.getElementById('review-angular').textContent = document.getElementById('angular-exp-input').value || '-';
+        document.getElementById('review-salary').textContent = document.getElementById('salary-input').value || '-';
+      }
+      
+      console.log('[Mock] Showing page', pageNum, '- Progress:', progress + '%');
+    }
+
+    function submitApplication() {
+      console.log('[Mock] Submit application clicked');
+      console.log('[Mock] Form data:', {
+        email: document.getElementById('email-select').value,
+        phoneCountry: document.getElementById('phone-country-select').value,
+        phone: document.getElementById('phone-input').value,
+        angularExp: document.getElementById('angular-exp-input').value,
+        salary: document.getElementById('salary-input').value,
+      });
+      alert('Application submitted successfully!');
+    }
+  </script>
+</body>
+</html>
+

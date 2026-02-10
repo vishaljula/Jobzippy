@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Easy Apply - Cover Letter (FinTech Global)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f2ef;
+        }
+        .a11y-text, .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+        /* Modal overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        /* LinkedIn Modal Styles */
+        .artdeco-modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        .artdeco-modal__header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .artdeco-modal__header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.9);
+        }
+        .artdeco-modal__dismiss {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: rgba(0, 0, 0, 0.6);
+            padding: 8px;
+            border-radius: 50%;
+        }
+        .artdeco-modal__dismiss:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+        .artdeco-modal__content {
+            overflow-y: auto;
+            max-height: calc(90vh - 140px);
+        }
+        /* Progress bar */
+        .artdeco-completeness-meter-linear__progress-container {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            flex: 1;
+        }
+        .artdeco-completeness-meter-linear__progress-element {
+            height: 100%;
+            background: #0a66c2;
+            transition: width 0.3s;
+        }
+        .display-flex {
+            display: flex;
+        }
+        .ph5 {
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+        .pv2 {
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+        .pv4 {
+            padding-top: 16px;
+            padding-bottom: 16px;
+        }
+        .pl3 {
+            padding-left: 12px;
+        }
+        .mt1 {
+            margin-top: 4px;
+        }
+        .mt3 {
+            margin-top: 12px;
+        }
+        .mt4 {
+            margin-top: 16px;
+        }
+        .mr2 {
+            margin-right: 8px;
+        }
+        .t-12 {
+            font-size: 12px;
+        }
+        .t-14 {
+            font-size: 14px;
+        }
+        .t-16 {
+            font-size: 16px;
+        }
+        .t-bold {
+            font-weight: 600;
+        }
+        .t-black--light {
+            color: rgba(0, 0, 0, 0.6);
+        }
+        /* Form elements */
+        .fb-dash-form-element {
+            margin-bottom: 0;
+        }
+        .fb-dash-form-element__label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.9);
+            margin-bottom: 4px;
+        }
+        .fb-dash-form-element__label-title--is-required::after {
+            content: ' *';
+            color: #cc1016;
+        }
+        .fb-dash-form-element__select-dropdown,
+        .artdeco-text-input--input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid rgba(0, 0, 0, 0.6);
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+        }
+        .artdeco-text-input--input:focus,
+        .fb-dash-form-element__select-dropdown:focus {
+            outline: none;
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 1px #0a66c2;
+        }
+        .artdeco-text-input--label {
+            display: block;
+            font-size: 14px;
+            font-weight: 400;
+            color: rgba(0, 0, 0, 0.9);
+            margin-bottom: 4px;
+        }
+        /* Radio buttons */
+        .fb-form-element__checkbox {
+            margin-right: 8px;
+        }
+        /* Textarea */
+        textarea.artdeco-text-input--input {
+            min-height: 200px;
+            resize: vertical;
+        }
+        /* Buttons */
+        .artdeco-button {
+            padding: 10px 24px;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .artdeco-button--primary {
+            background: #0a66c2;
+            color: white;
+        }
+        .artdeco-button--primary:hover {
+            background: #004182;
+        }
+        .artdeco-button--tertiary {
+            background: transparent;
+            color: rgba(0, 0, 0, 0.6);
+        }
+        .artdeco-button--tertiary:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+        .justify-flex-end {
+            justify-content: flex-end;
+        }
+        /* Footer */
+        .jobs-easy-apply-footer__info {
+            padding: 16px 24px;
+            background: #f8f9fa;
+        }
+        /* Form step visibility */
+        .form-step {
+            display: none;
+        }
+        .form-step.active {
+            display: block;
+        }
+        /* Success message */
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 48px 24px;
+        }
+        .success-message.active {
+            display: block;
+        }
+        .success-icon {
+            width: 64px;
+            height: 64px;
+            background: #057642;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            color: white;
+            font-size: 32px;
+        }
+        /* Resume card */
+        .jobs-document-upload-redesign-card__container {
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .jobs-document-upload-redesign-card__container--selected {
+            border-color: #0a66c2;
+            background: #f0f7ff;
+        }
+        .jobs-document-upload__upload-button {
+            display: inline-block;
+            padding: 8px 16px;
+            border: 1px solid #0a66c2;
+            border-radius: 24px;
+            color: #0a66c2;
+            font-weight: 600;
+            cursor: pointer;
+            background: white;
+        }
+        .jobs-document-upload__upload-button:hover {
+            background: #f0f7ff;
+        }
+        /* Hide file input */
+        input[type="file"].hidden {
+            display: none;
+        }
+        /* Cover letter specific */
+        .cover-letter-section {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+        .cover-letter-tips {
+            background: #e8f4fc;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="modal-overlay">
+        <!-- LinkedIn Easy Apply Modal - Uses real LinkedIn selectors -->
+        <div data-test-modal="" role="dialog" tabindex="-1" class="artdeco-modal artdeco-modal--layer-default jobs-easy-apply-modal" size="large" aria-labelledby="jobs-apply-header">
+            <span class="a11y-text">Dialog content start.</span>
+            
+            <button aria-label="Dismiss" class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary ember-view artdeco-modal__dismiss" data-test-modal-close-btn="">
+                ✕
+            </button>
+            
+            <div class="artdeco-modal__header ember-view">
+                <h2 id="jobs-apply-header">Apply to FinTech Global</h2>
+            </div>
+            
+            <div class="artdeco-modal__content jobs-easy-apply-modal__content p0 ember-view">
+                <div tabindex="-1" aria-label="Your job application progress" role="region">
+                    <div class="display-flex ph5 pv2">
+                        <div class="flex-grow-1 artdeco-completeness-meter-linear ember-view" style="flex: 1;">
+                            <div class="artdeco-completeness-meter-linear__progress-container">
+                                <div class="artdeco-completeness-meter-linear__progress-element" id="progressBar" style="width: 0%;"></div>
+                            </div>
+                        </div>
+                        <span class="pl3 t-14 t-black--light" role="note" id="progressText">0%</span>
+                    </div>
+                    
+                    <div>
+                        <form id="easyApplyForm">
+                            <!-- ============================================ -->
+                            <!-- STEP 1: Contact Info (0%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step active" data-step="1">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Contact info</h3>
+                                        
+                                        <!-- Email Select -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-text-entity-list-form-component="">
+                                                    <label for="email-select" class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required" data-test-text-entity-list-form-title="">
+                                                        <span aria-hidden="true">Email address</span>
+                                                    </label>
+                                                    <select id="email-select" name="email" class="fb-dash-form-element__select-dropdown" aria-required="true" required="" data-test-text-entity-list-form-select="">
+                                                        <option value="Select an option">Select an option</option>
+                                                        <option value="applicant@example.com">applicant@example.com</option>
+                                                        <option value="work@example.com">work@example.com</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Phone Country Code Select -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-text-entity-list-form-component="">
+                                                    <label for="phone-country" class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required" data-test-text-entity-list-form-title="">
+                                                        <span aria-hidden="true">Phone country code</span>
+                                                    </label>
+                                                    <select id="phone-country" name="phoneCountry" class="fb-dash-form-element__select-dropdown" aria-required="true" required="" data-test-text-entity-list-form-select="">
+                                                        <option value="Select an option">Select an option</option>
+                                                        <option value="United States (+1)">United States (+1)</option>
+                                                        <option value="Canada (+1)">Canada (+1)</option>
+                                                        <option value="United Kingdom (+44)">United Kingdom (+44)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Phone Number Input -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                                                    <div class="artdeco-text-input artdeco-text-input--type-text artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="phone-number" class="artdeco-text-input--label">Mobile phone number</label>
+                                                            <input inputmode="text" class="artdeco-text-input--input" id="phone-number" name="phone" required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- ============================================ -->
+                            <!-- STEP 2: Resume (25%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="2">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Resume</h3>
+                                        
+                                        <div class="full-width mt1">
+                                            <span class="t-14 jobs-document-upload__title--is-required">
+                                                Be sure to include an updated resume
+                                            </span>
+                                            
+                                            <!-- Resume cards -->
+                                            <div class="mt3">
+                                                <div class="jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--selected" tabindex="0" aria-label="Selected">
+                                                    <h3 class="t-12 t-bold">Resume.pdf</h3>
+                                                    <p class="t-12 t-black--light">42 KB · Last used recently</p>
+                                                    <input type="radio" name="resumeSelection" value="existing" checked>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Upload button -->
+                                            <div class="mt3">
+                                                <label class="jobs-document-upload__upload-button" for="resume-upload">
+                                                    <span role="button">Upload resume</span>
+                                                </label>
+                                                <input name="resume" class="hidden" id="resume-upload" accept=".pdf,.doc,.docx" type="file">
+                                                <p class="t-12 t-black--light mt1">DOC, DOCX, PDF (2 MB)</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- ============================================ -->
+                            <!-- STEP 3: Cover Letter (50%) - LLM GENERATED -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="3">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Cover Letter</h3>
+                                        
+                                        <div class="cover-letter-tips mt3">
+                                            <p class="t-14"><strong>💡 Tip:</strong> A well-crafted cover letter can help you stand out from other applicants. Highlight your relevant experience and why you're excited about this role.</p>
+                                        </div>
+                                        
+                                        <div class="cover-letter-section">
+                                            <!-- Cover Letter Textarea (LLM GENERATED) -->
+                                            <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ">
+                                                <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                    <div data-test-multiline-text-form-component="" data-live-test-multiline-text-form-component="">
+                                                        <div class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                            <div class="artdeco-text-input--container ember-view">
+                                                                <label for="cover-letter" class="artdeco-text-input--label fb-dash-form-element__label-title--is-required">Cover Letter</label>
+                                                                <textarea class="artdeco-text-input--input" id="cover-letter" name="coverLetter" required="" rows="10" placeholder="Write a cover letter that highlights your relevant experience and explains why you're interested in this position at FinTech Global..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <p class="t-12 t-black--light mt3">Recommended: 200-400 words</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- ============================================ -->
+                            <!-- STEP 4: Additional Questions (75%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="4">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Additional Questions</h3>
+                                        
+                                        <!-- Work Authorization (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <fieldset data-test-form-builder-radio-button-form-component="true">
+                                                    <legend>
+                                                        <span class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                                                            <span aria-hidden="true">Are you legally authorized to work in the United States?</span>
+                                                        </span>
+                                                    </legend>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox" name="workAuth" aria-required="true" type="radio" value="Yes" id="workAuth-yes">
+                                                        <label data-test-text-selectable-option__label="Yes" for="workAuth-yes" class="t-14">Yes</label>
+                                                    </div>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="No" class="fb-form-element__checkbox" name="workAuth" aria-required="true" type="radio" value="No" id="workAuth-no">
+                                                        <label data-test-text-selectable-option__label="No" for="workAuth-no" class="t-14">No</label>
+                                                    </div>
+                                                </fieldset>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Years with FinTech experience (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                                                    <div class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="fintech-years" class="artdeco-text-input--label">How many years of experience do you have in the FinTech industry?</label>
+                                                            <input inputmode="numeric" class="artdeco-text-input--input" id="fintech-years" name="fintechYears" required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Available Start Date - Dropdown (LLM can figure out) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-text-entity-list-form-component="">
+                                                    <label for="start-date" class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required" data-test-text-entity-list-form-title="">
+                                                        <span aria-hidden="true">When are you available to start?</span>
+                                                    </label>
+                                                    <select id="start-date" name="startDate" class="fb-dash-form-element__select-dropdown" aria-required="true" required="" data-test-text-entity-list-form-select="">
+                                                        <option value="Select an option">Select an option</option>
+                                                        <option value="Immediately">Immediately</option>
+                                                        <option value="2 weeks">2 weeks</option>
+                                                        <option value="1 month">1 month</option>
+                                                        <option value="2+ months">2+ months</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- How did you hear about us? (LLM REQUIRED - unknown pattern) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM" style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                                                    <div class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="how-heard" class="artdeco-text-input--label">How did you hear about FinTech Global?</label>
+                                                            <input class="artdeco-text-input--input" id="how-heard" name="howHeard" required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- ============================================ -->
+                            <!-- STEP 5: Review (100%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="5">
+                                <div class="ph5">
+                                    <h3 class="t-16 t-bold">Review your application</h3>
+                                    <p class="t-14 t-black--light">The employer will also receive a copy of your profile.</p>
+                                    
+                                    <div id="reviewContent" style="margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                                        <!-- Populated by JavaScript -->
+                                    </div>
+                                    
+                                    <div class="mt4">
+                                        <label class="display-flex" style="align-items: center; gap: 8px;">
+                                            <input id="follow-company-checkbox" type="checkbox" checked>
+                                            <span class="t-14">Follow <strong>FinTech Global</strong> to stay up to date with their page.</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Success Message -->
+                            <div class="success-message" id="successMessage">
+                                <div class="success-icon">✓</div>
+                                <h2 style="font-size: 24px; margin-bottom: 8px;">Application submitted!</h2>
+                                <p class="t-14 t-black--light">Your application has been sent to FinTech Global.</p>
+                            </div>
+                            
+                            <!-- Footer -->
+                            <footer role="presentation" id="formFooter">
+                                <div class="jobs-easy-apply-footer__info">
+                                    <p class="t-12 t-black--light">Submitting this application won't change your LinkedIn profile.</p>
+                                </div>
+                                <div class="display-flex justify-flex-end ph5 pv4">
+                                    <button aria-label="Back to previous step" class="mr2 artdeco-button artdeco-button--2 artdeco-button--tertiary ember-view" type="button" id="backBtn" style="display: none;">
+                                        <span class="artdeco-button__text">Back</span>
+                                    </button>
+                                    
+                                    <!-- Next button - used on steps 1-3 -->
+                                    <button aria-label="Continue to next step" class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view" data-easy-apply-next-button="" data-live-test-easy-apply-next-button="" type="button" id="nextBtn">
+                                        <span class="artdeco-button__text">Next</span>
+                                    </button>
+                                    
+                                    <!-- Review button - used on step 4 -->
+                                    <button aria-label="Review your application" class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view" data-live-test-easy-apply-review-button="" type="button" id="reviewBtn" style="display: none;">
+                                        <span class="artdeco-button__text">Review</span>
+                                    </button>
+                                    
+                                    <!-- Submit button - used on step 5 -->
+                                    <button aria-label="Submit application" class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view" data-live-test-easy-apply-submit-button="" type="button" id="submitBtn" style="display: none;">
+                                        <span class="artdeco-button__text">Submit application</span>
+                                    </button>
+                                </div>
+                            </footer>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <span class="a11y-text">Dialog content end.</span>
+        </div>
+    </div>
+
+    <script>
+        // Step configuration
+        const STEPS = [
+            { id: 1, progress: 0, button: 'next' },
+            { id: 2, progress: 25, button: 'next' },
+            { id: 3, progress: 50, button: 'next' },
+            { id: 4, progress: 75, button: 'review' },
+            { id: 5, progress: 100, button: 'submit' }
+        ];
+        
+        let currentStep = 1;
+        
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+            }
+        }
+        
+        function updateUI() {
+            const stepConfig = STEPS.find(s => s.id === currentStep);
+            
+            // Update progress bar
+            document.getElementById('progressBar').style.width = stepConfig.progress + '%';
+            document.getElementById('progressText').textContent = stepConfig.progress + '%';
+            
+            // Update step visibility
+            document.querySelectorAll('.form-step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.querySelector(`[data-step="${currentStep}"]`).classList.add('active');
+            
+            // Update buttons
+            document.getElementById('backBtn').style.display = currentStep > 1 ? 'inline-block' : 'none';
+            document.getElementById('nextBtn').style.display = stepConfig.button === 'next' ? 'inline-block' : 'none';
+            document.getElementById('reviewBtn').style.display = stepConfig.button === 'review' ? 'inline-block' : 'none';
+            document.getElementById('submitBtn').style.display = stepConfig.button === 'submit' ? 'inline-block' : 'none';
+            
+            // Populate review if on step 5
+            if (currentStep === 5) {
+                populateReview();
+            }
+        }
+        
+        function populateReview() {
+            const form = document.getElementById('easyApplyForm');
+            const formData = new FormData(form);
+            
+            let html = '';
+            html += `<div class="mt3"><strong>Email:</strong> ${formData.get('email')}</div>`;
+            html += `<div class="mt3"><strong>Phone:</strong> ${formData.get('phoneCountry')} ${formData.get('phone')}</div>`;
+            
+            const coverLetter = formData.get('coverLetter') || '';
+            html += `<div class="mt3"><strong>Cover Letter:</strong></div>`;
+            html += `<div class="t-12 t-black--light" style="white-space: pre-wrap; background: #fff; padding: 8px; border-radius: 4px; margin-top: 4px; max-height: 150px; overflow-y: auto;">${coverLetter.substring(0, 500)}${coverLetter.length > 500 ? '...' : ''}</div>`;
+            
+            html += `<div class="mt3"><strong>Work Authorization:</strong> ${formData.get('workAuth') || 'Not answered'}</div>`;
+            html += `<div class="mt3"><strong>FinTech Experience:</strong> ${formData.get('fintechYears') || '0'} years</div>`;
+            html += `<div class="mt3"><strong>Start Date:</strong> ${formData.get('startDate') || 'Not selected'}</div>`;
+            html += `<div class="mt3"><strong>How Heard:</strong> ${formData.get('howHeard') || 'Not provided'}</div>`;
+            
+            document.getElementById('reviewContent').innerHTML = html;
+        }
+        
+        function goToNextStep() {
+            if (currentStep < 5) {
+                currentStep++;
+                updateUI();
+            }
+        }
+        
+        function goToPreviousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateUI();
+            }
+        }
+        
+        function submitApplication() {
+            const form = document.getElementById('easyApplyForm');
+            const formData = new FormData(form);
+            const answers = {};
+            
+            for (const [key, value] of formData.entries()) {
+                answers[key] = value;
+            }
+            
+            logMockSubmission({
+                atsType: 'linkedin_easy_apply_coverletter',
+                jobId: '123469',
+                company: 'FinTech Global',
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+                hasCoverLetter: !!answers.coverLetter,
+                coverLetterLength: answers.coverLetter?.length || 0,
+            });
+            
+            // Hide form, show success
+            document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('formFooter').style.display = 'none';
+            document.getElementById('successMessage').classList.add('active');
+            
+            console.log('[LinkedIn Easy Apply] Application submitted with cover letter:', answers);
+        }
+        
+        // Event listeners
+        document.getElementById('nextBtn').addEventListener('click', goToNextStep);
+        document.getElementById('reviewBtn').addEventListener('click', goToNextStep);
+        document.getElementById('submitBtn').addEventListener('click', submitApplication);
+        document.getElementById('backBtn').addEventListener('click', goToPreviousStep);
+        
+        // Close button
+        document.querySelector('.artdeco-modal__dismiss').addEventListener('click', () => {
+            window.close();
+        });
+        
+        // File upload handler
+        document.getElementById('resume-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                alert('File selected: ' + file.name);
+            }
+        });
+        
+        // Initialize
+        updateUI();
+    </script>
+</body>
+</html>
+

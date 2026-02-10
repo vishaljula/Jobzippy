@@ -227,6 +227,14 @@
             <div class="job-meta">
                 Anduril Industries • Lexington, MA (Hybrid) • Full-time
             </div>
+            <div class="job-description" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 4px; font-size: 14px; color: #555;">
+                <strong>About the role:</strong> We are seeking a Senior Front End Engineer to join our Imaging Interfaces team. 
+                You will be responsible for building intuitive, responsive web applications that help visualize complex data 
+                from our autonomous systems. The ideal candidate has 5+ years of experience with React, TypeScript, and 
+                modern frontend tooling. Experience with WebGL, data visualization libraries (D3.js, Three.js), or 
+                real-time streaming is a plus. You'll work closely with backend engineers and designers to deliver 
+                mission-critical interfaces used by defense operators worldwide.
+            </div>
         </div>
 
         <div class="form-container">
@@ -282,21 +290,12 @@
                     </div>
                 </div>
 
-                <!-- Cover Letter -->
+                <!-- Cover Letter (textarea for LLM-generated content) -->
                 <div class="form-group">
                     <label for="cover_letter">Cover Letter</label>
-                    <div class="file-upload-section">
-                        <div class="upload-buttons">
-                            <button type="button" class="btn"
-                                onclick="document.getElementById('cover_letter').click()">Attach</button>
-                            <button type="button" class="btn">Dropbox</button>
-                            <button type="button" class="btn">Google Drive</button>
-                            <button type="button" class="btn">Enter manually</button>
-                        </div>
-                        <input type="file" id="cover_letter" name="cover_letter" accept=".pdf,.doc,.docx,.txt,.rtf">
-                        <p class="file-types">Accepted file types: pdf, doc, docx, txt, rtf</p>
-                        <div class="file-name" id="cover-letter-file-name"></div>
-                    </div>
+                    <textarea id="cover_letter" name="cover_letter" rows="8" 
+                        placeholder="Enter your cover letter here or let the AI generate one..."></textarea>
+                    <p class="question-description">A personalized cover letter will be generated based on your resume and the job description.</p>
                 </div>
 
                 <hr>
@@ -435,13 +434,7 @@
             }
         });
 
-        document.getElementById('cover_letter').addEventListener('change', function (e) {
-            const fileName = e.target.files[0]?.name;
-            const fileNameDisplay = document.getElementById('cover-letter-file-name');
-            if (fileName) {
-                fileNameDisplay.textContent = `Selected: ${fileName}`;
-            }
-        });
+        // Cover letter is now a textarea - no file upload handler needed
 
         // Form submission
         document.getElementById('application-form').addEventListener('submit', function (e) {
@@ -460,10 +453,7 @@
             if (resumeFile && typeof resumeFile === 'object') {
                 answers.resume = resumeFile.name || 'uploaded-file';
             }
-            const coverFile = formData.get('cover_letter');
-            if (coverFile && typeof coverFile === 'object') {
-                answers.cover_letter = coverFile.name || 'uploaded-file';
-            }
+            // Cover letter is now a textarea, value is already captured by FormData
 
             const urlParams = new URLSearchParams(window.location.search);
             const jobId = urlParams.get('job') || null;

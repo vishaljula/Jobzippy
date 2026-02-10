@@ -127,7 +127,27 @@ export async function executeOrchestration(
     `[Orchestrator V2] Starting orchestration from step: ${initialStep} (runId: ${runId})`
   );
 
+  let stepCounter = 0;
+  const MAX_STEPS_PER_JOB = 50; // Reduced safety break (was 50)
+
   while (currentStep !== null) {
+    stepCounter++;
+    if (stepCounter > MAX_STEPS_PER_JOB) {
+      console.error(
+        `[Orchestrator V2] MAX_STEPS_PER_JOB (${MAX_STEPS_PER_JOB}) reached! Safety break triggered.`
+      );
+      // Log the error
+      await logStepResult(0, {
+        error: 'MAX_STEPS_PER_JOB reached - potential infinite loop detected',
+      });
+      currentStep = 'SKIP_TO_NEXT_JOB';
+      // Reset counter to allow skip logic to proceed cleanly (though skip usually cleans up fast)
+      stepCounter = 0;
+      // Force exit if we are already trying to skip? No, SKIP_TO_NEXT_JOB leads to cleanup then loop reset elsewhere?
+      // Actually SKIP_TO_NEXT_JOB leads to CLEANUP -> INCREMENT -> CHECK -> etc.
+      // So we just break the current job loop.
+    }
+
     // Check stop flag
     if (shouldStopOrchestration) {
       console.log('[Orchestrator V2] Stop requested, performing cleanup before pause');
@@ -237,6 +257,14 @@ export async function executeOrchestration(
         else if (currentStep === 'FILL_MODAL_FORM' || currentStep === 'FILL_ATS_FORM') {
           broadcastJobStatusOnly(state.currentJobId, 'ats_filling');
         }
+      }
+
+      // Reset step counter after moving to next job
+      if (step.name === 'INCREMENT_JOB_INDEX') {
+        console.log(
+          `[Orchestrator V2] Resetting stepCounter after INCREMENT_JOB_INDEX (was ${stepCounter})`
+        );
+        stepCounter = 0;
       }
 
       // 4. Check quota after successful application (PERSIST_COMPLETION)

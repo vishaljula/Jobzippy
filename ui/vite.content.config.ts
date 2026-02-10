@@ -22,8 +22,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist/content',
       emptyOutDir: false, // Don't delete other files
-      minify: isProduction ? 'esbuild' : false, // Disable minification in dev mode
-      sourcemap: !isProduction ? 'inline' : false, // Enable sourcemaps for debugging
+      minify: false, // isProduction ? 'esbuild' : false, // FORCE DISABLED FOR DEBUGGING
+      sourcemap: 'inline', // !isProduction ? 'inline' : false, // FORCE ENABLED FOR DEBUGGING
       lib: {
         entry: resolve(__dirname, entryPath),
         name: entryName.replace(/-/g, '_'), // Global variable name for IIFE (must be valid JS identifier)

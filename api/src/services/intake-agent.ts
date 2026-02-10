@@ -141,7 +141,7 @@ const RESPONSE_SCHEMA = {
       history: {
         type: 'object',
         additionalProperties: false,
-        required: ['employment', 'education'],
+        required: ['employment', 'education', 'skills'],
         properties: {
           employment: {
             type: 'array',
@@ -154,7 +154,7 @@ const RESPONSE_SCHEMA = {
                 title: { type: 'string' },
                 start: { type: 'string' },
                 end: { type: 'string' },
-                duties: { type: 'string' },
+                duties: { type: 'string', description: 'Key responsibilities, achievements, and tools/skills used in this role' },
                 city: { type: 'string' },
                 state: { type: 'string' },
               },
@@ -174,6 +174,11 @@ const RESPONSE_SCHEMA = {
                 end: { type: 'string' },
               },
             },
+          },
+          skills: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Skills, qualifications, certifications, and expertise extracted from the resume',
           },
         },
       },
@@ -404,6 +409,9 @@ function normaliseLLMResponse(payload: Partial<IntakeLLMResponse>): IntakeLLMRes
             end: school?.end ?? '',
           }))
         : [],
+      skills: Array.isArray(payload.history?.skills)
+        ? payload.history.skills.map(String).filter(Boolean)
+        : [],
     },
     policies: {
       eeo: (payload.policies?.eeo as IntakeLLMResponse['policies']['eeo']) ?? 'ask_if_required',
@@ -463,7 +471,7 @@ CRITICAL: Return ONLY valid JSON matching this EXACT schema:
 {
   "profile": { "identity": { "first_name": "", "last_name": "", "email": "", "phone": "", "address": "" }, "work_auth": { "visa_type": "", "sponsorship_required": false }, "preferences": { "remote": false, "locations": [], "salary_min": 0, "salary_currency": "USD", "start_date": "" } },
   "compliance": { "veteran_status": "prefer_not", "disability_status": "prefer_not", "criminal_history_policy": "ask_if_required" },
-  "history": { "employment": [], "education": [] },
+  "history": { "employment": [], "education": [], "skills": [] },
   "policies": { "eeo": "ask_if_required", "salary": "ask_if_required", "relocation": "ask_if_required", "work_shift": "ask_if_required" },
   "previewSections": [
     { "id": "contact", "title": "Contact Information", "confidence": 0.95, "fields": [{ "id": "name", "label": "Name", "value": "John Doe" }] }

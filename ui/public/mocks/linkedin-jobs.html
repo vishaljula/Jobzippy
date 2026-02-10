@@ -164,6 +164,43 @@
       font-size: 14px;
       font-family: inherit;
       box-sizing: border-box;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    /* Validation styles - red border for invalid fields */
+    input.invalid,
+    select.invalid,
+    textarea.invalid {
+      border-color: #d32f2f !important;
+      outline-color: #d32f2f;
+    }
+
+    /* Red border on focus for invalid */
+    input.invalid:focus,
+    select.invalid:focus,
+    textarea.invalid:focus {
+      box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.2);
+    }
+
+    /* Radio button fieldset validation */
+    fieldset.invalid {
+      border: 1px solid #d32f2f;
+      border-radius: 4px;
+      padding: 8px;
+      margin: -8px;
+    }
+
+    /* Select dropdown styling */
+    select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+      background: white;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
 
     .modal-footer {
@@ -194,6 +231,13 @@
   <div class="jobs-search-results">
     <h1>LinkedIn Jobs - Mock Page (Dev Mode)</h1>
 
+    <!-- Active Filters Display (like real LinkedIn) -->
+    <div id="activeFilters"
+      style="background: white; padding: 16px; border-radius: 8px; margin-bottom: 20px; display: none;">
+      <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #666;">Active Filters:</h3>
+      <div id="filterTags" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+    </div>
+
     <div style="display: flex; gap: 20px;">
       <div style="flex: 1;">
         <ul class="jobs-search-results__list" id="jobsList">
@@ -223,59 +267,756 @@
       </div>
     </div>
 
-    <!-- Easy Apply Modal -->
-    <div class="modal-overlay" id="easyApplyModal">
-      <div class="modal" role="dialog" aria-label="Easy Apply">
-        <div class="modal-header">
-          <div class="modal-title" id="modalCompanyName">Apply to Company</div>
-          <button class="close-button" aria-label="Close">&times;</button>
+    <!-- Easy Apply Modal - LinkedIn Style with Multiple Templates -->
+    <div class="modal-overlay" id="easyApplyModal" data-test-modal="" role="dialog">
+      <div class="modal artdeco-modal jobs-easy-apply-modal" role="dialog" aria-label="Easy Apply"
+        aria-labelledby="jobs-apply-header">
+        <div class="modal-header artdeco-modal__header">
+          <h2 id="jobs-apply-header" class="modal-title" id="modalCompanyName">Apply to Company</h2>
+          <button class="close-button artdeco-modal__dismiss" aria-label="Dismiss"
+            data-test-modal-close-btn="">&times;</button>
         </div>
 
-        <div class="modal-body">
-          <div class="form-group">
-            <label>First name <span style="color: #d32f2f;">*</span></label>
-            <input type="text" name="firstName" autocomplete="given-name" required>
-          </div>
-          <div class="form-group">
-            <label>Last name <span style="color: #d32f2f;">*</span></label>
-            <input type="text" name="lastName" autocomplete="family-name" required>
-          </div>
-          <div class="form-group">
-            <label>Email <span style="color: #d32f2f;">*</span></label>
-            <input type="email" name="email" autocomplete="email" required>
-          </div>
-          <div class="form-group">
-            <label>Phone <span style="color: #d32f2f;">*</span></label>
-            <input type="tel" name="phone" autocomplete="tel" required>
+        <!-- Progress Bar -->
+        <div class="modal-progress" id="modalProgress" style="padding: 8px 24px; display: none;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="flex: 1; height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden;">
+              <div id="progressBar" style="height: 100%; background: #0a66c2; width: 0%; transition: width 0.3s;"></div>
+            </div>
+            <span id="progressText" style="font-size: 14px; color: rgba(0,0,0,0.6);">0%</span>
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button class="btn btn-primary" id="submitApplication">Submit application</button>
+        <div class="modal-body" id="modalBody">
+          <!-- ========== TEMPLATE: Simple (single page) ========== -->
+          <div class="modal-template" id="template-simple" style="display: none;">
+            <form id="form-simple">
+              <div class="form-step active" data-step="1">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Contact info</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">First name <span style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="firstName" class="artdeco-text-input--input" autocomplete="given-name"
+                    required data-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Last name <span style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="lastName" class="artdeco-text-input--input" autocomplete="family-name"
+                    required data-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Email <span style="color: #d32f2f;">*</span></label>
+                  <input type="email" name="email" class="artdeco-text-input--input" autocomplete="email" required
+                    data-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Phone <span style="color: #d32f2f;">*</span></label>
+                  <input type="tel" name="phone" class="artdeco-text-input--input" autocomplete="tel" required
+                    data-test-single-line-text-form-component="">
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- ========== TEMPLATE: Multi-step with radio buttons ========== -->
+          <div class="modal-template" id="template-multistep" style="display: none;">
+            <form id="form-multistep">
+              <!-- Step 1: Contact Info -->
+              <div class="form-step active" data-step="1">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Contact info</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Email address <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="email" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="vishal.jula@gmail.com">vishal.jula@gmail.com</option>
+                    <option value="test@example.com">test@example.com</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Phone country code <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="phoneCountry" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="United States (+1)">United States (+1)</option>
+                    <option value="Canada (+1)">Canada (+1)</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Mobile phone number <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="tel" name="phone" class="artdeco-text-input--input" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 2: Additional Questions -->
+              <div class="form-step" data-step="2">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Additional Questions</h3>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Have you completed the following level of
+                      education: Bachelor's Degree? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="bachelors" value="Yes" id="bachelors-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="bachelors-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="bachelors" value="No" id="bachelors-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="bachelors-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">How many years of work experience do you have with React?
+                    <span style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="reactYears" class="artdeco-text-input--input" inputmode="numeric" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">How many years of Software Development experience do you
+                    currently have? <span style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="devYears" class="artdeco-text-input--input" inputmode="numeric" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 3: Work Authorization -->
+              <div class="form-step" data-step="3">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Work authorization</h3>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Are you legally authorized to work in the
+                      United States? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="Yes" id="workauth-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="workauth-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="No" id="workauth-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="workauth-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Will you now, or in the future, require
+                      sponsorship for employment visa status? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="sponsorship" value="Yes" id="sponsor-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="sponsor-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="sponsorship" value="No" id="sponsor-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="sponsor-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+              </div>
+
+              <!-- Step 4: Review -->
+              <div class="form-step" data-step="4">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Review your application</h3>
+                <p style="color: rgba(0,0,0,0.6); margin-bottom: 16px;">The employer will also receive a copy of your
+                  profile.</p>
+                <div id="review-multistep" style="background: #f8f9fa; padding: 16px; border-radius: 8px;"></div>
+              </div>
+            </form>
+          </div>
+
+          <!-- ========== TEMPLATE: Comprehensive (LLM questions) ========== -->
+          <div class="modal-template" id="template-comprehensive" style="display: none;">
+            <form id="form-comprehensive">
+              <!-- Step 1: Contact Info -->
+              <div class="form-step active" data-step="1">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Contact info</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Email address <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="email" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="vishal.jula@gmail.com">vishal.jula@gmail.com</option>
+                    <option value="test@example.com">test@example.com</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Phone country code <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="phoneCountry" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="United States (+1)">United States (+1)</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Mobile phone number <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="tel" name="phone" class="artdeco-text-input--input" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 2: Technical Questions -->
+              <div class="form-step" data-step="2">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Additional Questions</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">How many years of work experience do you have with React?
+                    <span style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="reactYears" class="artdeco-text-input--input" inputmode="numeric" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Have you completed the following level of
+                      education: Bachelor's Degree? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="bachelors" value="Yes" id="comp-bachelors-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="comp-bachelors-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="bachelors" value="No" id="comp-bachelors-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="comp-bachelors-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">This role may require occasional travel (up to
+                      25%). Is this acceptable to you? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="travelOk" value="Yes" id="travel-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="travel-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="travelOk" value="No" id="travel-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="travel-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+              </div>
+
+              <!-- Step 3: Work Auth + Salary -->
+              <div class="form-step" data-step="3">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Work authorization</h3>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Are you legally authorized to work in the
+                      United States? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="Yes" id="comp-workauth-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="comp-workauth-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="No" id="comp-workauth-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="comp-workauth-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Will you now, or in the future, require
+                      sponsorship for employment visa status? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="sponsorship" value="Yes" id="comp-sponsor-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="comp-sponsor-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="sponsorship" value="No" id="comp-sponsor-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="comp-sponsor-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">What is your expected annual base salary (USD)? <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="salaryExpectation" class="artdeco-text-input--input" inputmode="numeric"
+                    required data-test-single-line-text-form-component=""
+                    data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 4: Open-Ended (LLM Required) -->
+              <div class="form-step" data-step="4">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Tell Us More</h3>
+                <p style="color: rgba(0,0,0,0.6); margin-bottom: 16px;">Please provide thoughtful responses.</p>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Why are you interested in this position? <span
+                      style="color: #d32f2f;">*</span></label>
+                  <textarea name="whyInterested" class="artdeco-text-input--input" rows="4" required
+                    data-test-multiline-text-form-component="" data-live-test-multiline-text-form-component=""
+                    style="min-height: 100px; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Describe a challenging technical problem you solved in a
+                    recent project. <span style="color: #d32f2f;">*</span></label>
+                  <textarea name="challengingProject" class="artdeco-text-input--input" rows="4" required
+                    data-test-multiline-text-form-component="" data-live-test-multiline-text-form-component=""
+                    style="min-height: 100px; resize: vertical;"></textarea>
+                </div>
+              </div>
+
+              <!-- Step 5: Review -->
+              <div class="form-step" data-step="5">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Review your application</h3>
+                <p style="color: rgba(0,0,0,0.6); margin-bottom: 16px;">The employer will also receive a copy of your
+                  profile.</p>
+                <div id="review-comprehensive" style="background: #f8f9fa; padding: 16px; border-radius: 8px;"></div>
+              </div>
+            </form>
+          </div>
+
+          <!-- ========== TEMPLATE: Cover Letter ========== -->
+          <div class="modal-template" id="template-coverletter" style="display: none;">
+            <form id="form-coverletter">
+              <!-- Step 1: Contact Info -->
+              <div class="form-step active" data-step="1">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Contact info</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Email address <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="email" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="vishal.jula@gmail.com">vishal.jula@gmail.com</option>
+                    <option value="test@example.com">test@example.com</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Phone country code <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="phoneCountry" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="United States (+1)">United States (+1)</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Mobile phone number <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="tel" name="phone" class="artdeco-text-input--input" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 2: Cover Letter (LLM Generated) -->
+              <div class="form-step" data-step="2">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Cover Letter</h3>
+                <div style="background: #e8f4fc; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+                  <p style="font-size: 14px;"><strong>💡 Tip:</strong> A well-crafted cover letter can help you stand
+                    out from other applicants.</p>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Cover Letter <span style="color: #d32f2f;">*</span></label>
+                  <textarea name="coverLetter" class="artdeco-text-input--input" rows="10" required
+                    data-test-multiline-text-form-component="" data-live-test-multiline-text-form-component=""
+                    style="min-height: 200px; resize: vertical;"
+                    placeholder="Write a cover letter that highlights your relevant experience..."></textarea>
+                </div>
+                <p style="font-size: 12px; color: rgba(0,0,0,0.6);">Recommended: 200-400 words</p>
+              </div>
+
+              <!-- Step 3: Additional Questions -->
+              <div class="form-step" data-step="3">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Additional Questions</h3>
+                <div class="form-group" data-test-form-element="">
+                  <fieldset data-test-form-builder-radio-button-form-component="true">
+                    <legend style="font-weight: 600; margin-bottom: 8px;">Are you legally authorized to work in the
+                      United States? <span style="color: #d32f2f;">*</span></legend>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="Yes" id="cl-workauth-yes"
+                        data-test-text-selectable-option__input="Yes" class="fb-form-element__checkbox">
+                      <label for="cl-workauth-yes" data-test-text-selectable-option__label="Yes">Yes</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                      <input type="radio" name="workAuth" value="No" id="cl-workauth-no"
+                        data-test-text-selectable-option__input="No" class="fb-form-element__checkbox">
+                      <label for="cl-workauth-no" data-test-text-selectable-option__label="No">No</label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">How did you hear about this company? <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="text" name="howHeard" class="artdeco-text-input--input" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">When are you available to start? <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="startDate" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="Immediately">Immediately</option>
+                    <option value="2 weeks">2 weeks</option>
+                    <option value="1 month">1 month</option>
+                    <option value="2+ months">2+ months</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Step 4: Review -->
+              <div class="form-step" data-step="4">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Review your application</h3>
+                <p style="color: rgba(0,0,0,0.6); margin-bottom: 16px;">The employer will also receive a copy of your
+                  profile.</p>
+                <div id="review-coverletter" style="background: #f8f9fa; padding: 16px; border-radius: 8px;"></div>
+              </div>
+            </form>
+          </div>
+
+          <!-- ========== TEMPLATE: Radio Button Resume Selection ========== -->
+          <div class="modal-template" id="template-radioresume" style="display: none;">
+            <form id="form-radioresume">
+              <!-- Step 1: Contact Info -->
+              <div class="form-step active" data-step="1">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Contact info</h3>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Email address <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="email" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="vishal.jula@gmail.com">vishal.jula@gmail.com</option>
+                    <option value="test@example.com">test@example.com</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Phone country code <span
+                      style="color: #d32f2f;">*</span></label>
+                  <select name="phoneCountry" class="fb-dash-form-element__select-dropdown" required
+                    data-test-text-entity-list-form-select="">
+                    <option value="">Select an option</option>
+                    <option value="United States (+1)">United States (+1)</option>
+                  </select>
+                </div>
+                <div class="form-group" data-test-form-element="">
+                  <label class="fb-dash-form-element__label">Mobile phone number <span
+                      style="color: #d32f2f;">*</span></label>
+                  <input type="tel" name="phone" class="artdeco-text-input--input" required
+                    data-test-single-line-text-form-component="" data-live-test-single-line-text-form-component="">
+                </div>
+              </div>
+
+              <!-- Step 2: Resume Selection with Radio Buttons -->
+              <div class="form-step" data-step="2">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Resume</h3>
+                <div class="form-group" data-test-form-element="">
+                  <span class="t-14 jobs-document-upload__title--is-required"
+                    style="display: block; margin-bottom: 8px;">
+                    Be sure to include an updated resume
+                  </span>
+
+                  <!-- Resume Card 1 (Selected) -->
+                  <div
+                    class="ui-attachment jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--cursor-pointer jobs-document-upload-redesign-card__container--selected ui-attachment--pdf"
+                    style="border: 1px solid #0a66c2; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #f8f9fa;"
+                    tabindex="0" aria-label="Selected">
+                    <h3 class="t-12 t-bold jobs-document-upload-redesign-card__file-name truncate"
+                      style="margin: 0 0 4px 0;">
+                      AdityaVishalCV2026.pdf
+                    </h3>
+                    <p class="pt1 t-12 t-black--light" style="margin: 0 0 8px 0;">
+                      170 KB · Last used on 1/21/2026
+                    </p>
+                    <div class="display-flex flex-direction-row" style="display: flex; align-items: center; gap: 8px;">
+                      <div class="jobs-document-upload-redesign-card__divider"
+                        style="flex: 1; height: 1px; background: #ccc;"></div>
+                      <input id="jobsDocumentCardToggle-resume1" type="radio" name="resumeSelection"
+                        value="AdityaVishalCV2026.pdf" checked data-test-resume-radio="" style="margin: 0;">
+                      <label id="jobsDocumentCardToggleLabel-resume1"
+                        class="jobs-document-upload-redesign-card__toggle-label t-bold"
+                        for="jobsDocumentCardToggle-resume1" style="margin: 0; cursor: pointer;">
+                        <span class="a11y-text">Deselect resume AdityaVishalCV2026.pdf</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Resume Card 2 -->
+                  <div
+                    class="ui-attachment jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--cursor-pointer ui-attachment--pdf"
+                    style="border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: white;"
+                    tabindex="0" aria-label="Select this resume">
+                    <h3 class="t-12 t-bold jobs-document-upload-redesign-card__file-name truncate"
+                      style="margin: 0 0 4px 0;">
+                      AdityaVishal_CV_03:2022.pdf
+                    </h3>
+                    <p class="pt1 t-12 t-black--light" style="margin: 0 0 8px 0;">
+                      53 KB · Last used on 1/20/2026
+                    </p>
+                    <div class="display-flex flex-direction-row" style="display: flex; align-items: center; gap: 8px;">
+                      <div class="jobs-document-upload-redesign-card__divider"
+                        style="flex: 1; height: 1px; background: #ccc;"></div>
+                      <input id="jobsDocumentCardToggle-resume2" type="radio" name="resumeSelection"
+                        value="AdityaVishal_CV_03:2022.pdf" data-test-resume-radio="" style="margin: 0;">
+                      <label id="jobsDocumentCardToggleLabel-resume2"
+                        class="jobs-document-upload-redesign-card__toggle-label t-bold"
+                        for="jobsDocumentCardToggle-resume2" style="margin: 0; cursor: pointer;">
+                        <span class="a11y-text">Select resume AdityaVishal_CV_03:2022.pdf</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Upload Resume Button -->
+                  <div class="display-flex" style="margin-top: 16px;">
+                    <label
+                      class="jobs-document-upload__upload-button artdeco-button artdeco-button--secondary artdeco-button--2"
+                      for="jobs-document-upload-file-input-radioresume" tabindex="0" style="cursor: pointer;">
+                      <span role="button"
+                        aria-label="Upload resume button. Only, DOC, DOCX, PDF formats are supported. Max file size is (2 MB).">
+                        Upload resume
+                      </span>
+                    </label>
+                    <input name="file" class="hidden" id="jobs-document-upload-file-input-radioresume"
+                      accept="application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+                      type="file" style="display: none;">
+                    <p class="jobs-document-upload__format-text t-12 t-black--light"
+                      style="margin-left: 12px; align-self: center;">
+                      DOC, DOCX, PDF (2 MB)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3: Review -->
+              <div class="form-step" data-step="3">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Review your application</h3>
+                <p style="color: rgba(0,0,0,0.6); margin-bottom: 16px;">The employer will also receive a copy of your
+                  profile.</p>
+                <div id="review-radioresume" style="background: #f8f9fa; padding: 16px; border-radius: 8px;"></div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Success Message (shared) -->
+          <div id="successMessage" style="display: none; text-align: center; padding: 48px 24px;">
+            <div
+              style="width: 64px; height: 64px; background: #057642; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: white; font-size: 32px;">
+              ✓</div>
+            <h2 style="font-size: 24px; margin-bottom: 8px;">Application submitted!</h2>
+            <p style="color: rgba(0,0,0,0.6);">Your application has been sent.</p>
+          </div>
+        </div>
+
+        <div class="modal-footer" id="modalFooter">
+          <button type="button" class="btn" id="modalBackBtn" aria-label="Back to previous step"
+            style="display: none; background: transparent; color: rgba(0,0,0,0.6);">Back</button>
+          <button type="button" class="btn btn-primary" id="modalNextBtn" aria-label="Continue to next step"
+            data-easy-apply-next-button="" data-live-test-easy-apply-next-button="">Next</button>
+          <button type="button" class="btn btn-primary" id="modalReviewBtn" aria-label="Review your application"
+            data-live-test-easy-apply-review-button="" style="display: none;">Review</button>
+          <button type="button" class="btn btn-primary" id="modalSubmitBtn" aria-label="Submit application"
+            data-live-test-easy-apply-submit-button="" style="display: none;">Submit application</button>
         </div>
       </div>
     </div>
+
+    <!-- Discard Confirmation Modal (appears on top of Easy Apply modal) -->
+    <div class="modal-overlay" id="discardConfirmModal" data-test-modal-container=""
+      data-test-modal-id="data-test-easy-apply-discard-confirmation" data-test-is-confirm-dialog=""
+      style="z-index: 1001; display: none;">
+      <div data-test-modal="" role="alertdialog" tabindex="-1" aria-describedby="dialog-desc-discard"
+        class="artdeco-modal artdeco-modal--layer-confirmation" size="small" aria-labelledby="dialog-label-discard"
+        style="max-width: 480px; background: white; border-radius: 8px; padding: 0;">
+        <span class="a11y-text">Dialog content start.</span>
+
+        <div class="artdeco-modal__header"
+          style="padding: 20px 24px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+          <h2 data-test-dialog-title="" id="dialog-label-discard" style="margin: 0; font-size: 20px; font-weight: 600;">
+            Save this application?</h2>
+          <button aria-label="Dismiss"
+            class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary artdeco-modal__dismiss"
+            data-test-modal-close-btn="" onclick="closeDiscardModal()"
+            style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0;">
+            <svg role="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+              viewBox="0 0 24 24">
+              <path
+                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="artdeco-modal__content" style="padding: 24px;">
+          <p data-test-dialog-content="" id="dialog-desc-discard"
+            style="margin: 0; color: rgba(0,0,0,0.9); line-height: 1.5;">
+            Save to return to this application later. Any uploaded files will not be saved.<br><br>
+            If you choose to not save, your application will be discarded.
+          </p>
+        </div>
+
+        <div class="artdeco-modal__actionbar artdeco-modal__actionbar--confirm-dialog"
+          style="padding: 20px 24px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 12px;">
+          <button class="artdeco-button artdeco-button--2 artdeco-button--secondary artdeco-modal__confirm-dialog-btn"
+            data-control-name="discard_application_confirm_btn" data-test-dialog-secondary-btn=""
+            onclick="discardApplication()"
+            style="padding: 10px 20px; border-radius: 20px; font-size: 16px; font-weight: 600; cursor: pointer; background: transparent; color: rgba(0,0,0,0.6); border: none;">
+            <span class="artdeco-button__text">Discard</span>
+          </button>
+          <button class="artdeco-button artdeco-button--2 artdeco-button--primary artdeco-modal__confirm-dialog-btn"
+            data-control-name="save_application_btn" data-test-dialog-primary-btn="" onclick="saveApplication()"
+            style="padding: 10px 20px; border-radius: 20px; font-size: 16px; font-weight: 600; cursor: pointer; background: #0a66c2; color: white; border: none;">
+            <span class="artdeco-button__text">Save</span>
+          </button>
+        </div>
+
+        <span class="a11y-text">Dialog content end.</span>
+      </div>
+    </div>
     <script>
-      // All 9 jobs data (full mixed run)
-      const allJobs = [
-        // Shuffled order to vary testing sequence
-        { id: '123463', title: 'Frontend Developer', company: 'WebWorks', location: 'Portland, OR', type: 'Hybrid', salary: '$125,000 - $160,000', applyType: 'external', atsUrl: 'workday-apply.html' },            // Workday external form
-        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },          // Greenhouse
-        { id: '123456', title: 'Senior Software Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', atsUrl: null },        // LinkedIn modal
-        { id: '123464', title: 'ML Engineer', company: 'AI Innovations', location: 'San Jose, CA', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'modal_apply', atsUrl: null },    // LinkedIn Easy Apply (same-page modal like real LinkedIn)
-        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'motion-recruitment-apply.html' },    // Motion Recruitment
-        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html' },     // Greenhouse
-        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html' },    // Workday
-        { id: '123460', title: 'DevOps Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Hybrid', salary: '$145,000 - $185,000', applyType: 'modal_apply', atsUrl: null },                          // LinkedIn modal
-        { id: '123461', title: 'UX Designer', company: 'DesignHub', location: 'Los Angeles, CA', type: 'Remote', salary: '$120,000 - $150,000', applyType: 'external', atsUrl: 'indeed-apply.html' }               // Indeed-style ATS (manual_input_required)
+      // ========================================================================
+      // Parse URL Parameters (like real LinkedIn)
+      // ========================================================================
+      const urlParams = new URLSearchParams(window.location.search);
+      const filters = {
+        keywords: urlParams.get('keywords') || '',
+        location: urlParams.get('location') || '',
+        experienceLevel: urlParams.get('f_E') || '',    // 1=Intern, 2=Entry, 3=Associate, 4=Mid-Senior, 5=Director, 6=Exec
+        jobType: urlParams.get('f_JT') || '',           // F=Full-time, P=Part-time, C=Contract, T=Temporary, I=Internship
+        workArrangement: urlParams.get('f_WT') || '',   // 1=On-site, 2=Remote, 3=Hybrid
+        easyApplyOnly: urlParams.get('f_AL') === 'true',
+      };
+
+      console.log('[LinkedIn Mock] URL Parameters:', filters);
+      console.log('[LinkedIn Mock] Full URL:', window.location.href);
+
+      // Experience level mapping
+      const EXPERIENCE_LEVELS = { '1': 'Internship', '2': 'Entry level', '3': 'Associate', '4': 'Mid-Senior', '5': 'Director', '6': 'Executive' };
+      const JOB_TYPES = { 'F': 'Full-time', 'P': 'Part-time', 'C': 'Contract', 'T': 'Temporary', 'I': 'Internship' };
+      const WORK_ARRANGEMENTS = { '1': 'On-site', '2': 'Remote', '3': 'Hybrid' };
+
+      // Display active filters
+      function displayActiveFilters() {
+        const filtersContainer = document.getElementById('activeFilters');
+        const tagsContainer = document.getElementById('filterTags');
+        const tags = [];
+
+        if (filters.keywords) {
+          tags.push(`<span style="background: #e8f4fc; color: #0a66c2; padding: 4px 12px; border-radius: 16px; font-size: 13px;">🔍 ${filters.keywords}</span>`);
+        }
+        if (filters.location) {
+          tags.push(`<span style="background: #e8f4fc; color: #0a66c2; padding: 4px 12px; border-radius: 16px; font-size: 13px;">📍 ${filters.location}</span>`);
+        }
+        if (filters.experienceLevel && EXPERIENCE_LEVELS[filters.experienceLevel]) {
+          tags.push(`<span style="background: #e8f4fc; color: #0a66c2; padding: 4px 12px; border-radius: 16px; font-size: 13px;">💼 ${EXPERIENCE_LEVELS[filters.experienceLevel]}</span>`);
+        }
+        if (filters.jobType && JOB_TYPES[filters.jobType]) {
+          tags.push(`<span style="background: #e8f4fc; color: #0a66c2; padding: 4px 12px; border-radius: 16px; font-size: 13px;">📋 ${JOB_TYPES[filters.jobType]}</span>`);
+        }
+        if (filters.workArrangement && WORK_ARRANGEMENTS[filters.workArrangement]) {
+          tags.push(`<span style="background: #e8f4fc; color: #0a66c2; padding: 4px 12px; border-radius: 16px; font-size: 13px;">🏢 ${WORK_ARRANGEMENTS[filters.workArrangement]}</span>`);
+        }
+        if (filters.easyApplyOnly) {
+          tags.push(`<span style="background: #057642; color: white; padding: 4px 12px; border-radius: 16px; font-size: 13px;">⚡ Easy Apply Only</span>`);
+        }
+
+        if (tags.length > 0) {
+          filtersContainer.style.display = 'block';
+          tagsContainer.innerHTML = tags.join('');
+        }
+      }
+
+      // All mock jobs data - expanded with 12 jobs
+      // Easy Apply types use modalTemplate to specify form variant:
+      // - 'simple': Single page contact form
+      // - 'multistep': Multi-step with radio buttons (work auth, education)
+      // - 'comprehensive': All question types including LLM-required textareas
+      // - 'coverletter': With cover letter textarea
+      const allJobsBase = [
+        // Frontend/Senior roles (primary test targets) - EASY APPLY with various form types
+        { id: '123456', title: 'Senior Frontend Engineer', company: 'TechCorp Inc.', location: 'San Francisco, CA', type: 'Remote', salary: '$150,000 - $200,000', applyType: 'modal_apply', modalTemplate: 'multistep', level: 'senior', jobType: 'full_time' },
+        { id: '123463', title: 'Senior Frontend Engineer', company: 'WebWorks', location: 'Remote', type: 'Remote', salary: '$145,000 - $180,000', applyType: 'external', atsUrl: 'workday-apply.html', level: 'senior', jobType: 'full_time' },
+        { id: '123464', title: 'Senior React Engineer', company: 'AI Innovations', location: 'Remote', type: 'Remote', salary: '$170,000 - $220,000', applyType: 'modal_apply', modalTemplate: 'comprehensive', level: 'senior', jobType: 'full_time' },
+        { id: '123465', title: 'Lead Frontend Developer', company: 'StartupXYZ', location: 'Remote', type: 'Remote', salary: '$180,000 - $230,000', applyType: 'external', atsUrl: 'greenhouse-apply.html', level: 'senior', jobType: 'full_time' },
+        { id: '123468', title: 'Senior Frontend Engineer', company: 'Anduril Industries', location: 'Lexington, MA', type: 'Remote', salary: '$160,000 - $210,000', applyType: 'external', atsUrl: 'greenhouse-apply.html', level: 'senior', jobType: 'full_time' },
+        { id: '123469', title: 'Senior Frontend Developer', company: 'FinTech Global', location: 'Remote', type: 'Remote', salary: '$155,000 - $195,000', applyType: 'modal_apply', modalTemplate: 'coverletter', level: 'senior', jobType: 'full_time' },
+        { id: '123470', title: 'Staff Frontend Engineer', company: 'CloudScale', location: 'Remote', type: 'Remote', salary: '$190,000 - $250,000', applyType: 'external', atsUrl: 'greenhouse-apply.html', level: 'senior', jobType: 'full_time' },
+        { id: '123471', title: 'Senior Frontend Architect', company: 'Skyrocket Ventures', location: 'Remote', type: 'Remote', salary: '$200,000 - $260,000', applyType: 'modal_apply', modalTemplate: 'multistep', level: 'senior', jobType: 'full_time' },
+        { id: '123472', title: 'Principal Frontend Engineer', company: 'TechVentures LLC', location: 'Remote', type: 'Remote', salary: '$210,000 - $270,000', applyType: 'modal_apply', modalTemplate: 'radioresume', level: 'senior', jobType: 'full_time' },
+
+        // Mixed roles (to test filtering)
+        { id: '123457', title: 'Product Manager', company: 'StartupXYZ', location: 'New York, NY', type: 'Hybrid', salary: '$140,000 - $180,000', applyType: 'external', atsUrl: 'greenhouse-apply.html', level: 'mid', jobType: 'full_time' },
+        { id: '123459', title: 'Data Scientist', company: 'DataCorp', location: 'Seattle, WA', type: 'Remote', salary: '$160,000 - $200,000', applyType: 'external', atsUrl: 'workday-apply.html', level: 'mid', jobType: 'full_time' },
+        { id: '123462', title: 'Backend Engineer', company: 'ServerSide Inc.', location: 'Denver, CO', type: 'Remote', salary: '$140,000 - $175,000', applyType: 'external', atsUrl: 'greenhouse-apply.html', level: 'mid', jobType: 'full_time' },
+        { id: '123458', title: 'Full Stack Developer', company: 'DevSolutions LLC', location: 'Austin, TX', type: 'Remote', salary: '$130,000 - $170,000', applyType: 'external', atsUrl: 'workday-apply.html', level: 'mid', jobType: 'full_time' },
+        { id: '123460', title: 'Frontend Engineer', company: 'CloudTech', location: 'Boston, MA', type: 'Remote', salary: '$145,000 - $185,000', applyType: 'modal_apply', modalTemplate: 'simple', level: 'senior', jobType: 'full_time' },
       ];
+
+      // Filter jobs based on URL parameters
+      function filterJobs(jobs) {
+        return jobs.filter(job => {
+          // Filter by keywords (search in title)
+          if (filters.keywords) {
+            const keywords = filters.keywords.toLowerCase().split(/\s+or\s+|\s+/i);
+            const titleLower = job.title.toLowerCase();
+            const matchesKeyword = keywords.some(kw => titleLower.includes(kw.toLowerCase()));
+            if (!matchesKeyword) return false;
+          }
+
+          // Filter by location
+          if (filters.location && filters.location.toLowerCase() !== 'remote') {
+            const locationLower = job.location.toLowerCase();
+            const filterLocation = filters.location.toLowerCase();
+            if (!locationLower.includes(filterLocation) && job.type !== 'Remote') {
+              return false;
+            }
+          }
+
+          // Filter by work arrangement
+          if (filters.workArrangement) {
+            const arrangement = WORK_ARRANGEMENTS[filters.workArrangement]?.toLowerCase();
+            if (arrangement && job.type.toLowerCase() !== arrangement) {
+              return false;
+            }
+          }
+
+          // Filter by Easy Apply only
+          if (filters.easyApplyOnly && job.applyType !== 'modal_apply') {
+            return false;
+          }
+
+          return true;
+        });
+      }
+
+      // Apply filters
+      const allJobs = filterJobs(allJobsBase);
+      console.log('[LinkedIn Mock] Filtered jobs:', allJobs.length, 'of', allJobsBase.length);
 
       let currentPage = 1;
       const jobsPerPage = 3;
       let currentJob = null;
 
       // Helper to POST submission data back to the mock server
+      // Deduplication guard to prevent duplicate logging from parent + template handlers
+      const recentSubmissions = new Map();
       function logMockSubmission(payload) {
+        const key = `${payload.jobId}-${payload.atsType}`;
+        const now = Date.now();
+        const lastSubmit = recentSubmissions.get(key);
+
+        // Ignore if same job was submitted within last 100ms (duplicate handler)
+        if (lastSubmit && (now - lastSubmit) < 100) {
+          console.log('[Mock] Ignoring duplicate submission within 100ms:', key);
+          return;
+        }
+
+        recentSubmissions.set(key, now);
         try {
           fetch('/mock-submissions', {
             method: 'POST',
@@ -374,24 +1115,13 @@
 
             const actionsContainer = detailsContainer.querySelector('#job-actions');
             if (job.applyType === 'modal_apply') {
-              // Open modal on same page
-              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
+              // Easy Apply modal on same page - select template based on job config
+              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" id="jobs-apply-button-id" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
 
               const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
               if (easyApplyBtn) {
                 easyApplyBtn.addEventListener('click', () => {
-                  document.getElementById('modalCompanyName').textContent = `Apply to ${job.company}`;
-                  document.getElementById('easyApplyModal').classList.add('active');
-                });
-              }
-            } else if (job.applyType === 'easy_apply') {
-              // Open new tab
-              actionsContainer.innerHTML = '<button aria-label="Easy Apply" data-testid="easy-apply-button" style="background: #0a66c2; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 16px; cursor: pointer;">Easy Apply</button>';
-
-              const easyApplyBtn = actionsContainer.querySelector('button[aria-label="Easy Apply"]');
-              if (easyApplyBtn) {
-                easyApplyBtn.addEventListener('click', () => {
-                  window.open(`http://localhost:3000/mocks/${job.atsUrl}?job=${jobId}`, '_blank');
+                  openEasyApplyModal(job);
                 });
               }
             } else {
@@ -433,39 +1163,334 @@
       });
 
       // Initial render
+      displayActiveFilters();
       renderJobs();
+
+      // Log that mock page loaded with filters
+      console.log('[LinkedIn Mock] Page loaded with', allJobs.length, 'jobs matching filters');
+
+      // ========================================================================
+      // Easy Apply Modal Logic with Multi-Step Support
+      // ========================================================================
+
+      let currentTemplate = 'simple';
+      let currentFormStep = 1;
+      let totalSteps = 1;
+
+      // Template step configurations
+      const TEMPLATE_STEPS = {
+        'simple': 1,
+        'multistep': 4,
+        'comprehensive': 5,
+        'coverletter': 4,
+        'radioresume': 3
+      };
+
+      function openEasyApplyModal(job) {
+        currentJob = job;
+        currentTemplate = job.modalTemplate || 'simple';
+        currentFormStep = 1;
+        totalSteps = TEMPLATE_STEPS[currentTemplate] || 1;
+
+        // Update modal title
+        document.getElementById('jobs-apply-header').textContent = `Apply to ${job.company}`;
+
+        // Hide all templates, show selected one
+        document.querySelectorAll('.modal-template').forEach(t => t.style.display = 'none');
+        document.getElementById(`template-${currentTemplate}`).style.display = 'block';
+
+        // Reset form steps - show only step 1
+        const template = document.getElementById(`template-${currentTemplate}`);
+        template.querySelectorAll('.form-step').forEach(step => {
+          step.classList.remove('active');
+          step.style.display = 'none';
+        });
+        const firstStep = template.querySelector('[data-step="1"]');
+        if (firstStep) {
+          firstStep.classList.add('active');
+          firstStep.style.display = 'block';
+        }
+
+        // Show/hide progress bar based on template
+        document.getElementById('modalProgress').style.display = totalSteps > 1 ? 'block' : 'none';
+
+        // Hide success message, show footer
+        document.getElementById('successMessage').style.display = 'none';
+        document.getElementById('modalFooter').style.display = 'flex';
+
+        // Update buttons and progress
+        updateModalUI();
+
+        // Show modal
+        document.getElementById('easyApplyModal').classList.add('active');
+      }
+
+      function updateModalUI() {
+        const progress = totalSteps > 1 ? Math.round(((currentFormStep - 1) / (totalSteps - 1)) * 100) : 100;
+        document.getElementById('progressBar').style.width = progress + '%';
+        document.getElementById('progressText').textContent = progress + '%';
+
+        // Button visibility
+        document.getElementById('modalBackBtn').style.display = currentFormStep > 1 ? 'inline-block' : 'none';
+
+        const isLastStep = currentFormStep === totalSteps;
+        const isReviewStep = currentFormStep === totalSteps;
+        const isSecondToLast = currentFormStep === totalSteps - 1;
+
+        document.getElementById('modalNextBtn').style.display = (!isLastStep && !isSecondToLast) ? 'inline-block' : 'none';
+        document.getElementById('modalReviewBtn').style.display = isSecondToLast ? 'inline-block' : 'none';
+        document.getElementById('modalSubmitBtn').style.display = isLastStep ? 'inline-block' : 'none';
+
+        // Populate review content on last step
+        if (isLastStep) {
+          populateReview();
+        }
+      }
+
+      function goToStep(step) {
+        console.log('[Modal] goToStep:', step, 'template:', currentTemplate);
+        const template = document.getElementById(`template-${currentTemplate}`);
+
+        if (!template) {
+          console.error('[Modal] Template not found:', `template-${currentTemplate}`);
+          return;
+        }
+
+        // Hide current step
+        template.querySelectorAll('.form-step').forEach(s => {
+          s.classList.remove('active');
+          s.style.display = 'none';
+        });
+
+        // Show new step
+        const newStep = template.querySelector(`[data-step="${step}"]`);
+        console.log('[Modal] New step element:', newStep);
+        if (newStep) {
+          newStep.classList.add('active');
+          newStep.style.display = 'block';
+        } else {
+          console.error('[Modal] Step not found:', step);
+        }
+
+        currentFormStep = step;
+        updateModalUI();
+      }
+
+      function populateReview() {
+        const template = document.getElementById(`template-${currentTemplate}`);
+        const form = template.querySelector('form');
+        const formData = new FormData(form);
+
+        let html = '';
+        for (const [key, value] of formData.entries()) {
+          if (value && key !== 'resumeSelection') {
+            const displayValue = value.length > 100 ? value.substring(0, 100) + '...' : value;
+            html += `<div style="margin-bottom: 8px;"><strong>${key}:</strong> ${displayValue}</div>`;
+          }
+        }
+
+        const reviewEl = template.querySelector('[id^="review-"]');
+        if (reviewEl) {
+          reviewEl.innerHTML = html || '<p>No data to review</p>';
+        }
+      }
+
+      function submitApplication() {
+        const template = document.getElementById(`template-${currentTemplate}`);
+        const form = template.querySelector('form');
+        const formData = new FormData(form);
+        const answers = {};
+
+        for (const [key, value] of formData.entries()) {
+          answers[key] = value;
+        }
+
+        logMockSubmission({
+          atsType: `linkedin_easy_apply_${currentTemplate}`,
+          jobId: currentJob?.id || null,
+          url: window.location.href,
+          company: currentJob?.company || null,
+          title: currentJob?.title || null,
+          modalTemplate: currentTemplate,
+          submittedAt: new Date().toISOString(),
+          answers,
+        });
+
+        console.log('[LinkedIn Easy Apply] Application submitted', { template: currentTemplate, answers });
+
+        // Show success message
+        document.querySelectorAll('.modal-template').forEach(t => t.style.display = 'none');
+        document.getElementById('successMessage').style.display = 'block';
+        document.getElementById('modalFooter').style.display = 'none';
+      }
+
+      // Validate current step before proceeding
+      function validateCurrentStep() {
+        const template = document.getElementById(`template-${currentTemplate}`);
+        const currentStepEl = template.querySelector(`[data-step="${currentFormStep}"]`);
+        if (!currentStepEl) return true;
+
+        let isValid = true;
+
+        // Clear previous error states
+        currentStepEl.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+
+        // Check all required text inputs, emails, tel, and textareas in current step
+        currentStepEl.querySelectorAll('input[required]:not([type="radio"]), select[required], textarea[required]').forEach(input => {
+          if (!input.value || input.value.trim() === '' || input.value === 'Select an option') {
+            input.classList.add('invalid');
+            isValid = false;
+            console.log('[Modal] Invalid field:', input.name || input.id);
+          }
+        });
+
+        // Check select dropdowns with empty default option
+        currentStepEl.querySelectorAll('select[required]').forEach(select => {
+          if (!select.value || select.value === '') {
+            select.classList.add('invalid');
+            isValid = false;
+            console.log('[Modal] Invalid select:', select.name || select.id);
+          }
+        });
+
+        // Check radio button groups (need at least one selected)
+        currentStepEl.querySelectorAll('fieldset[data-test-form-builder-radio-button-form-component]').forEach(fieldset => {
+          const radios = fieldset.querySelectorAll('input[type="radio"]');
+          const hasSelection = Array.from(radios).some(r => r.checked);
+          if (radios.length > 0 && !hasSelection) {
+            fieldset.classList.add('invalid');
+            isValid = false;
+            console.log('[Modal] Invalid radio group:', fieldset.querySelector('legend')?.textContent?.substring(0, 50));
+          }
+        });
+
+        if (!isValid) {
+          console.log('[Modal] Validation failed - required fields empty');
+        }
+
+        return isValid;
+      }
+
+      // Clear validation state when user interacts with field
+      document.getElementById('easyApplyModal').addEventListener('input', (e) => {
+        if (e.target.classList.contains('invalid')) {
+          e.target.classList.remove('invalid');
+        }
+        // Also clear fieldset invalid state when radio is clicked
+        const fieldset = e.target.closest('fieldset');
+        if (fieldset && fieldset.classList.contains('invalid')) {
+          fieldset.classList.remove('invalid');
+        }
+      });
+
+      document.getElementById('easyApplyModal').addEventListener('change', (e) => {
+        if (e.target.classList.contains('invalid')) {
+          e.target.classList.remove('invalid');
+        }
+        const fieldset = e.target.closest('fieldset');
+        if (fieldset && fieldset.classList.contains('invalid')) {
+          fieldset.classList.remove('invalid');
+        }
+      });
 
       // Modal event listeners
       document.querySelector('.close-button').addEventListener('click', () => {
         document.getElementById('easyApplyModal').classList.remove('active');
       });
 
-      document.getElementById('submitApplication').addEventListener('click', () => {
-        const modal = document.getElementById('easyApplyModal');
-        const inputs = modal.querySelectorAll('input');
-        const answers = {};
+      document.getElementById('modalNextBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('[Modal] Next clicked, currentStep:', currentFormStep, 'totalSteps:', totalSteps);
 
-        inputs.forEach((input) => {
-          if (!input.name) return;
-          answers[input.name] = input.value;
-        });
+        if (!validateCurrentStep()) {
+          console.log('[Modal] Cannot proceed - validation failed');
+          return;
+        }
 
-        const jobId = currentJob?.id || null;
-
-        logMockSubmission({
-          atsType: 'linkedin_modal',
-          jobId,
-          url: window.location.href,
-          company: currentJob?.company || null,
-          title: currentJob?.title || null,
-          submittedAt: new Date().toISOString(),
-          answers,
-        });
-
-        console.log('[LinkedIn Easy Apply] Application submitted via modal', { jobId, answers });
-        alert('Application submitted successfully!');
-        document.getElementById('easyApplyModal').classList.remove('active');
+        if (currentFormStep < totalSteps) {
+          goToStep(currentFormStep + 1);
+        }
       });
+
+      document.getElementById('modalReviewBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('[Modal] Review clicked');
+
+        if (!validateCurrentStep()) {
+          console.log('[Modal] Cannot proceed - validation failed');
+          return;
+        }
+
+        if (currentFormStep < totalSteps) {
+          goToStep(currentFormStep + 1);
+        }
+      });
+
+      document.getElementById('modalBackBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('[Modal] Back clicked');
+        if (currentFormStep > 1) {
+          goToStep(currentFormStep - 1);
+        }
+      });
+
+      document.getElementById('modalSubmitBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('[Modal] Submit clicked');
+        submitApplication();
+      });
+
+      // Discard confirmation modal functions
+      function showDiscardModal() {
+        console.log('[Modal] Showing discard confirmation modal');
+        document.getElementById('discardConfirmModal').style.display = 'flex';
+      }
+
+      function closeDiscardModal() {
+        console.log('[Modal] Closing discard confirmation modal');
+        document.getElementById('discardConfirmModal').style.display = 'none';
+      }
+
+      function discardApplication() {
+        console.log('[Modal] Discarding application');
+        closeDiscardModal();
+        // Close the main Easy Apply modal
+        document.getElementById('easyApplyModal').classList.remove('active');
+        currentFormStep = 1;
+        goToStep(currentFormStep);
+      }
+
+      function saveApplication() {
+        console.log('[Modal] Saving application (not implemented - just closing)');
+        closeDiscardModal();
+        // Close the main Easy Apply modal
+        document.getElementById('easyApplyModal').classList.remove('active');
+        currentFormStep = 1;
+        goToStep(currentFormStep);
+      }
+
+      // Close modal listeners - show discard confirmation instead of closing directly
+      const closeModal = (e) => {
+        e?.preventDefault();
+        e?.stopPropagation();
+        console.log('[Modal] Close button clicked - showing discard confirmation');
+        showDiscardModal();
+      };
+
+      // X (dismiss) button - show discard confirmation
+      const modalCloseBtn = document.querySelector('#easyApplyModal [data-test-modal-close-btn]');
+      if (modalCloseBtn) {
+        modalCloseBtn.addEventListener('click', closeModal);
+      }
+
+      // Click outside modal overlay - show discard confirmation
+      document.getElementById('easyApplyModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'easyApplyModal') {
+          console.log('[Modal] Clicked outside modal - showing discard confirmation');
+          showDiscardModal();
+        }
+      });
+
     </script>
     <!-- Content scripts auto-inject via manifest.json for localhost URLs -->
 </body>

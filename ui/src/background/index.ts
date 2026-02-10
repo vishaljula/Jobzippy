@@ -6,6 +6,7 @@
 // import { vaultService } from '../lib/vault/service';
 // import { VAULT_STORES } from '../lib/vault/constants';
 import { deriveVaultPassword } from '../lib/vault/utils';
+import { API_CONFIG } from '../lib/config';
 import { backgroundVaultService, STORES } from './vault-service-worker';
 import {
   registerJobFromQueue,
@@ -1486,25 +1487,49 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           const password = deriveVaultPassword(user);
           console.log('[Jobzippy] Derived password (masked):', password.substring(0, 10) + '...');
 
+          // Load BOTH profile and history stores
           const profile = await backgroundVaultService.load(STORES.profile, password);
+          const history = await backgroundVaultService.load(STORES.history, password);
 
           if (profile) {
+            // Merge history into profile so employment/education data is accessible
+            const mergedProfile = {
+              ...profile,
+              history: history || { employment: [], education: [], skills: [] },
+            };
+
             console.log('[Jobzippy] Profile loaded from vault: SUCCESS');
             console.log('[Jobzippy] Profile data preview:', {
-              firstName: profile.identity?.first_name,
-              lastName: profile.identity?.last_name,
-              email: profile.identity?.email,
-              phone: profile.identity?.phone_number,
-              country: profile.identity?.country,
-              resumeFileName: profile.resume?.file_name,
-              coverLetterFileName: profile.cover_letter?.file_name,
+              firstName: mergedProfile.identity?.first_name,
+              lastName: mergedProfile.identity?.last_name,
+              email: mergedProfile.identity?.email,
+              phone: mergedProfile.identity?.phone_number,
+              country: mergedProfile.identity?.country,
+              resumeFileName: mergedProfile.resume?.file_name,
+              coverLetterFileName: mergedProfile.cover_letter?.file_name,
+              employmentCount: mergedProfile.history?.employment?.length || 0,
+              educationCount: mergedProfile.history?.education?.length || 0,
+              skillsCount: mergedProfile.history?.skills?.length || 0,
             });
+
+            // Log employment details for debugging
+            if (mergedProfile.history?.employment?.length > 0) {
+              console.log(
+                '[Jobzippy] Employment history:',
+                mergedProfile.history.employment.map((e: any) => ({
+                  title: e.title,
+                  company: e.company,
+                }))
+              );
+            }
+
+            sendResponse({ status: 'success', profile: mergedProfile });
           } else {
             console.warn(
               '[Jobzippy] Profile is null or empty, check password derivation or vault content'
             );
+            sendResponse({ status: 'success', profile: null });
           }
-          sendResponse({ status: 'success', profile });
         } catch (error) {
           console.error('[Jobzippy] Error loading profile:', error);
           // Log to console only to avoid Service Worker crash
@@ -1563,6 +1588,70 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
       })();
       return true; // Keep channel open for async response
+
+    // ========================================================================
+    // LLM FORM HELPER (Routed through background to avoid CORS)
+    // ========================================================================
+    case 'LLM_ANSWER_QUESTIONS':
+      (async () => {
+        try {
+          console.log('[Jobzippy] LLM_ANSWER_QUESTIONS: Proxying request to API...');
+          const response = await fetch(`${API_CONFIG.baseUrl}/form-helper/answer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(message.data),
+          });
+
+          if (!response.ok) {
+            const error = await response.text();
+            console.error('[Jobzippy] LLM API error:', error);
+            sendResponse({ status: 'error', error });
+            return;
+          }
+
+          const result = await response.json();
+          console.log(
+            '[Jobzippy] LLM_ANSWER_QUESTIONS: Got',
+            Object.keys(result.answers || {}).length,
+            'answers'
+          );
+          sendResponse({ status: 'success', answers: result.answers });
+        } catch (error) {
+          console.error('[Jobzippy] LLM_ANSWER_QUESTIONS error:', error);
+          sendResponse({ status: 'error', error: String(error) });
+        }
+      })();
+      return true;
+
+    case 'LLM_GENERATE_COVER_LETTER':
+      (async () => {
+        try {
+          console.log('[Jobzippy] LLM_GENERATE_COVER_LETTER: Proxying request to API...');
+          const response = await fetch(`${API_CONFIG.baseUrl}/form-helper/cover-letter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(message.data),
+          });
+
+          if (!response.ok) {
+            const error = await response.text();
+            console.error('[Jobzippy] Cover letter API error:', error);
+            sendResponse({ status: 'error', error });
+            return;
+          }
+
+          const result = await response.json();
+          console.log(
+            '[Jobzippy] LLM_GENERATE_COVER_LETTER: Generated letter, length:',
+            result.coverLetter?.length
+          );
+          sendResponse({ status: 'success', coverLetter: result.coverLetter });
+        } catch (error) {
+          console.error('[Jobzippy] LLM_GENERATE_COVER_LETTER error:', error);
+          sendResponse({ status: 'error', error: String(error) });
+        }
+      })();
+      return true;
 
     // ========================================================================
     // JOB QUEUE MANAGEMENT
@@ -2253,9 +2342,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
   }
 
-  // If no JobSession found and not tracked by orchestration V2, log warning and proactively close the stray ATS tab.
+  // If no JobSession found and not tracked by orchestration V2, check if agent is running.
+  // Only close stray ATS tabs when agent is active - otherwise it's just manual user navigation.
   // This can happen when the browser opens a duplicate tab (e.g., both window.open and target="_blank"),
   // leaving an extra ATS tab that isn't tied to any active JobSession.
+  if (engineState !== 'RUNNING') {
+    // Agent not running - this is manual user navigation, don't close the tab
+    console.log(
+      `[Jobzippy] External ATS tab loaded but agent not running - allowing manual navigation: tabId=${tabId}`
+    );
+    return;
+  }
+
   console.warn(`[Jobzippy] External ATS tab loaded but no JobSession found for tabId=${tabId}`);
   logToContentScripts('Background', `External ATS tab loaded but no JobSession found`, {
     tabId,

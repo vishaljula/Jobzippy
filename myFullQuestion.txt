@@ -1,0 +1,1253 @@
+Okay check my linkedin live run.. at the least I see modals properly not closing .. and I also see one scenario where a modal like such shows up: when that shows up, we need to close that too. its html x button as FYI:
+<div data-test-modal="" role="alertdialog" tabindex="-1" aria-describedby="dialog-desc-st8" class="artdeco-modal artdeco-modal--layer-confirmation " size="small" aria-labelledby="dialog-label-st8">
+        <span class="a11y-text">Dialog content start.</span>
+<!---->        
+  <div id="ember656" class="artdeco-modal__header ember-view">
+    <h2 data-test-dialog-title="" id="dialog-label-st8">Save this application?</h2>
+  
+    <button aria-label="Dismiss" id="ember657" class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary ember-view artdeco-modal__dismiss" data-test-modal-close-btn="">        <svg role="none" aria-hidden="true" class="artdeco-button__icon " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" data-supported-dps="24x24" data-test-icon="close-medium">
+<!---->    
+    <use href="#close-medium" width="24" height="24"></use>
+</svg>
+
+
+<span class="artdeco-button__text">
+    
+</span></button>
+</div>
+  <div id="ember658" class="artdeco-modal__content ember-view">
+    <p data-test-dialog-content="" id="dialog-desc-st8">Save to return to this application later. Any uploaded files will not be saved.<br><br>If you choose to not save, your application will be discarded.</p>
+  </div>
+  <div id="ember659" class="artdeco-modal__actionbar artdeco-modal__actionbar--confirm-dialog artdeco-modal__actionbar ember-view">
+    <button id="ember660" class="artdeco-button artdeco-button--2 artdeco-button--secondary ember-view artdeco-modal__confirm-dialog-btn" data-control-name="discard_application_confirm_btn" data-test-dialog-secondary-btn=""><!---->
+<span class="artdeco-button__text">
+    Discard
+</span></button>
+    <button id="ember661" class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view artdeco-modal__confirm-dialog-btn" data-control-name="save_application_btn" data-test-dialog-primary-btn=""><!---->
+<span class="artdeco-button__text">
+    Save
+</span></button>
+  </div>
+
+        <span class="a11y-text">Dialog content end.</span>
+      </div>
+
+check the logs and lmk what kind of quesitons or what were not getting filled? why there is a failure?
+
+Do you think our mocks should be re-written exactly per linkedin.. is there a way I could record full linkedin and its dom as I manually apply for easy apply jobs and create one such mock isnetad of we doing like how we did.. or is that not required and you already know from logs whats going on>> checxk agent-logs.txt. also check these:
+
+"[
+  {
+    "action": "startAgent",
+    "durationMs": 1,
+    "id": 1,
+    "jobId": null,
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": false,
+      "scrapedJobIds": []
+    },
+    "step": "START_AGENT",
+    "timestamp": 1769067813143,
+    "timestampISO": "2026-01-22T07:43:33.143Z"
+  },
+  {
+    "action": "scrapeJobs",
+    "durationMs": 12,
+    "id": 2,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": false,
+      "scrapedJobIds": []
+    },
+    "step": "SCRAPE_JOBS",
+    "timestamp": 1769067813155,
+    "timestampISO": "2026-01-22T07:43:33.155Z"
+  },
+  {
+    "action": "checkDuplicate",
+    "durationMs": 4,
+    "id": 3,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_DUPLICATE",
+    "timestamp": 1769067813169,
+    "timestampISO": "2026-01-22T07:43:33.169Z"
+  },
+  {
+    "action": "clickJobCard",
+    "durationMs": 947,
+    "id": 4,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_JOB_CARD",
+    "timestamp": 1769067813175,
+    "timestampISO": "2026-01-22T07:43:33.175Z"
+  },
+  {
+    "action": "verifyJobDetailsLoaded",
+    "durationMs": 1,
+    "id": 5,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "VERIFY_JOB_DETAILS_LOADED",
+    "timestamp": 1769067814122,
+    "timestampISO": "2026-01-22T07:43:34.122Z"
+  },
+  {
+    "action": "clickApplyButton",
+    "durationMs": 1612,
+    "id": 6,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_APPLY_BUTTON",
+    "timestamp": 1769067814123,
+    "timestampISO": "2026-01-22T07:43:34.123Z"
+  },
+  {
+    "action": "fillModalForm",
+    "durationMs": 44936,
+    "id": 7,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "FILL_MODAL_FORM",
+    "timestamp": 1769067815736,
+    "timestampISO": "2026-01-22T07:43:35.736Z"
+  },
+  {
+    "action": "persistCompletion",
+    "durationMs": 3,
+    "id": 8,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "PERSIST_COMPLETION",
+    "timestamp": 1769067860676,
+    "timestampISO": "2026-01-22T07:44:20.676Z"
+  },
+  {
+    "action": "cleanup",
+    "durationMs": 521,
+    "id": 9,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLEANUP",
+    "timestamp": 1769067860680,
+    "timestampISO": "2026-01-22T07:44:20.680Z"
+  },
+  {
+    "action": "incrementJobIndex",
+    "durationMs": 2,
+    "id": 10,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4364841734",
+    "jobIndex": 0,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 0,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "INCREMENT_JOB_INDEX",
+    "timestamp": 1769067861204,
+    "timestampISO": "2026-01-22T07:44:21.204Z"
+  },
+  {
+    "action": "checkMoreJobsOnPage",
+    "durationMs": 2,
+    "id": 11,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_MORE_JOBS_ON_PAGE",
+    "timestamp": 1769067861208,
+    "timestampISO": "2026-01-22T07:44:21.208Z"
+  },
+  {
+    "action": "checkDuplicate",
+    "durationMs": 2,
+    "id": 12,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_DUPLICATE",
+    "timestamp": 1769067861211,
+    "timestampISO": "2026-01-22T07:44:21.211Z"
+  },
+  {
+    "action": "clickJobCard",
+    "durationMs": 694,
+    "id": 13,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_JOB_CARD",
+    "timestamp": 1769067861216,
+    "timestampISO": "2026-01-22T07:44:21.216Z"
+  },
+  {
+    "action": "verifyJobDetailsLoaded",
+    "durationMs": 1,
+    "id": 14,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "VERIFY_JOB_DETAILS_LOADED",
+    "timestamp": 1769067861911,
+    "timestampISO": "2026-01-22T07:44:21.911Z"
+  },
+  {
+    "action": "clickApplyButton",
+    "durationMs": 1152,
+    "id": 15,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_APPLY_BUTTON",
+    "timestamp": 1769067861912,
+    "timestampISO": "2026-01-22T07:44:21.912Z"
+  },
+  {
+    "action": "fillModalForm",
+    "durationMs": 12088,
+    "id": 16,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "FILL_MODAL_FORM",
+    "timestamp": 1769067863066,
+    "timestampISO": "2026-01-22T07:44:23.066Z"
+  },
+  {
+    "action": "persistCompletion",
+    "durationMs": 1,
+    "id": 17,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "PERSIST_COMPLETION",
+    "timestamp": 1769067875161,
+    "timestampISO": "2026-01-22T07:44:35.161Z"
+  },
+  {
+    "action": "cleanup",
+    "durationMs": 509,
+    "id": 18,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLEANUP",
+    "timestamp": 1769067875163,
+    "timestampISO": "2026-01-22T07:44:35.163Z"
+  },
+  {
+    "action": "incrementJobIndex",
+    "durationMs": 2,
+    "id": 19,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362096707",
+    "jobIndex": 1,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 1,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "INCREMENT_JOB_INDEX",
+    "timestamp": 1769067875676,
+    "timestampISO": "2026-01-22T07:44:35.676Z"
+  },
+  {
+    "action": "checkMoreJobsOnPage",
+    "durationMs": 2,
+    "id": 20,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_MORE_JOBS_ON_PAGE",
+    "timestamp": 1769067875680,
+    "timestampISO": "2026-01-22T07:44:35.680Z"
+  },
+  {
+    "action": "checkDuplicate",
+    "durationMs": 3,
+    "id": 21,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_DUPLICATE",
+    "timestamp": 1769067875684,
+    "timestampISO": "2026-01-22T07:44:35.684Z"
+  },
+  {
+    "action": "clickJobCard",
+    "durationMs": 833,
+    "id": 22,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_JOB_CARD",
+    "timestamp": 1769067875690,
+    "timestampISO": "2026-01-22T07:44:35.690Z"
+  },
+  {
+    "action": "verifyJobDetailsLoaded",
+    "durationMs": 1,
+    "id": 23,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "VERIFY_JOB_DETAILS_LOADED",
+    "timestamp": 1769067876524,
+    "timestampISO": "2026-01-22T07:44:36.524Z"
+  },
+  {
+    "action": "clickApplyButton",
+    "durationMs": 1422,
+    "id": 24,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_APPLY_BUTTON",
+    "timestamp": 1769067876526,
+    "timestampISO": "2026-01-22T07:44:36.526Z"
+  },
+  {
+    "action": "fillModalForm",
+    "durationMs": 1155,
+    "id": 25,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "FILL_MODAL_FORM",
+    "timestamp": 1769067877950,
+    "timestampISO": "2026-01-22T07:44:37.950Z"
+  },
+  {
+    "action": "persistCompletion",
+    "durationMs": 1,
+    "id": 26,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "PERSIST_COMPLETION",
+    "timestamp": 1769067879107,
+    "timestampISO": "2026-01-22T07:44:39.107Z"
+  },
+  {
+    "action": "cleanup",
+    "durationMs": 508,
+    "id": 27,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLEANUP",
+    "timestamp": 1769067879110,
+    "timestampISO": "2026-01-22T07:44:39.110Z"
+  },
+  {
+    "action": "incrementJobIndex",
+    "durationMs": 4,
+    "id": 28,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4354780805",
+    "jobIndex": 2,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 2,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "INCREMENT_JOB_INDEX",
+    "timestamp": 1769067879623,
+    "timestampISO": "2026-01-22T07:44:39.623Z"
+  },
+  {
+    "action": "checkMoreJobsOnPage",
+    "durationMs": 3,
+    "id": 29,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_MORE_JOBS_ON_PAGE",
+    "timestamp": 1769067879629,
+    "timestampISO": "2026-01-22T07:44:39.629Z"
+  },
+  {
+    "action": "checkDuplicate",
+    "durationMs": 3,
+    "id": 30,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_DUPLICATE",
+    "timestamp": 1769067879635,
+    "timestampISO": "2026-01-22T07:44:39.635Z"
+  },
+  {
+    "action": "clickJobCard",
+    "durationMs": 1145,
+    "id": 31,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_JOB_CARD",
+    "timestamp": 1769067879641,
+    "timestampISO": "2026-01-22T07:44:39.641Z"
+  },
+  {
+    "action": "verifyJobDetailsLoaded",
+    "durationMs": 2,
+    "id": 32,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "VERIFY_JOB_DETAILS_LOADED",
+    "timestamp": 1769067880787,
+    "timestampISO": "2026-01-22T07:44:40.787Z"
+  },
+  {
+    "action": "clickApplyButton",
+    "durationMs": 1494,
+    "id": 33,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_APPLY_BUTTON",
+    "timestamp": 1769067880790,
+    "timestampISO": "2026-01-22T07:44:40.790Z"
+  },
+  {
+    "action": "fillModalForm",
+    "durationMs": 1135,
+    "id": 34,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "FILL_MODAL_FORM",
+    "timestamp": 1769067882287,
+    "timestampISO": "2026-01-22T07:44:42.287Z"
+  },
+  {
+    "action": "persistCompletion",
+    "durationMs": 1,
+    "id": 35,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "PERSIST_COMPLETION",
+    "timestamp": 1769067883425,
+    "timestampISO": "2026-01-22T07:44:43.425Z"
+  },
+  {
+    "action": "cleanup",
+    "durationMs": 530,
+    "id": 36,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLEANUP",
+    "timestamp": 1769067883428,
+    "timestampISO": "2026-01-22T07:44:43.428Z"
+  },
+  {
+    "action": "incrementJobIndex",
+    "durationMs": 3,
+    "id": 37,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4362012950",
+    "jobIndex": 3,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 3,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "INCREMENT_JOB_INDEX",
+    "timestamp": 1769067883964,
+    "timestampISO": "2026-01-22T07:44:43.964Z"
+  },
+  {
+    "action": "checkMoreJobsOnPage",
+    "durationMs": 5,
+    "id": 38,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_MORE_JOBS_ON_PAGE",
+    "timestamp": 1769067883970,
+    "timestampISO": "2026-01-22T07:44:43.970Z"
+  },
+  {
+    "action": "checkDuplicate",
+    "durationMs": 4,
+    "id": 39,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": null,
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CHECK_DUPLICATE",
+    "timestamp": 1769067883978,
+    "timestampISO": "2026-01-22T07:44:43.978Z"
+  },
+  {
+    "action": "clickJobCard",
+    "durationMs": 1046,
+    "id": 40,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4361385026",
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_JOB_CARD",
+    "timestamp": 1769067883985,
+    "timestampISO": "2026-01-22T07:44:43.985Z"
+  },
+  {
+    "action": "verifyJobDetailsLoaded",
+    "durationMs": 1,
+    "id": 41,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4361385026",
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "VERIFY_JOB_DETAILS_LOADED",
+    "timestamp": 1769067885033,
+    "timestampISO": "2026-01-22T07:44:45.033Z"
+  },
+  {
+    "action": "clickApplyButton",
+    "durationMs": 1339,
+    "id": 42,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4361385026",
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "CLICK_APPLY_BUTTON",
+    "timestamp": 1769067885037,
+    "timestampISO": "2026-01-22T07:44:45.037Z"
+  },
+  {
+    "action": "fillModalForm",
+    "durationMs": 12945,
+    "id": 43,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4361385026",
+    "jobIndex": 4,
+    "outputData": "[UNSERIALIZABLE]",
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "FILL_MODAL_FORM",
+    "timestamp": 1769067886380,
+    "timestampISO": "2026-01-22T07:44:46.380Z"
+  },
+  {
+    "action": "userStop",
+    "id": 44,
+    "inputData": "[UNSERIALIZABLE]",
+    "jobId": "4361385026",
+    "jobIndex": 4,
+    "runId": "run_1769067813143_5l5q1n",
+    "stateSnapshot": {
+      "atsTabId": null,
+      "currentJobIndex": 4,
+      "currentPage": 1,
+      "hasNextPage": true,
+      "scrapedJobIds": [
+        "4364841734",
+        "4362096707",
+        "4354780805",
+        "4362012950",
+        "4361385026",
+        "4360943829",
+        "4353902283"
+      ]
+    },
+    "step": "STOP_REQUESTED",
+    "timestamp": 1769067899332,
+    "timestampISO": "2026-01-22T07:44:59.332Z"
+  }
+]"

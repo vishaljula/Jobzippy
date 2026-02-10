@@ -5,32 +5,17 @@
 
 import { PageClassification, DetectedField } from './classifier';
 
-import { classifyPage, findBestAction, logClassification } from './page-classifier';
-import { fillAllFields } from './field-filler';
+import {
+  classifyPage,
+  findBestAction,
+  isSimpleCaptcha,
+  hasGuestOption,
+  logClassification,
+} from './page-classifier';
+import { createFormFillerFromVault } from './form-filler';
 import { logger } from '../../lib/logger';
 import { waitForNavigation, waitForDOMStable } from '../../lib/dom-events';
 import { humanClick, jitter, humanizeConfig, scrollIntoViewIfNeeded } from '../../lib/humanize';
-
-// ============================================================================
-// MODULE STATE
-// ============================================================================
-
-// Store validation errors from last submit attempt for retry
-let lastValidationErrors: Map<HTMLElement, string> = new Map();
-
-/**
- * Get validation errors from last submit attempt
- */
-export function getLastValidationErrors(): Map<HTMLElement, string> {
-  return lastValidationErrors;
-}
-
-/**
- * Clear validation errors
- */
-export function clearValidationErrors(): void {
-  lastValidationErrors.clear();
-}
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -47,11 +32,11 @@ function extractJobIdFromUrl(): string | null {
 
 /**
  * Check if an element is actually hidden via CSS properties.
- *
+ * 
  * NOTE: We intentionally do NOT check offsetWidth/offsetHeight because:
  * 1. In background tabs, Chrome doesn't compute layout dimensions (returns 0)
  * 2. This causes false positives (visible buttons marked as hidden)
- *
+ * 
  * CSS property checks are sufficient to detect truly hidden elements.
  */
 function isActuallyHiddenNav(element: HTMLElement): boolean {
@@ -64,223 +49,486 @@ function isActuallyHiddenNav(element: HTMLElement): boolean {
   }
 
   // Check computed styles
-  return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
-}
-
-/**
- * Check if an element is truly visible (top-most layer) using elementsFromPoint.
- * This prevents clicking buttons hidden behind modals.
- */
-function isTrulyVisible(el: HTMLElement): boolean {
-  if (!el) return false;
-
-  // First check basic visibility
-  if (isActuallyHiddenNav(el)) return false;
-
-  const rect = el.getBoundingClientRect();
-
-  // Check if element has size
-  if (rect.width === 0 || rect.height === 0) return false;
-
-  // Calculate center point
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-
-  // elementsFromPoint returns an array from TOP (z-index) to BOTTOM
-  const elementsAtPoint = document.elementsFromPoint(centerX, centerY);
-
-  if (elementsAtPoint.length === 0) return false;
-
-  // The first element in the array is the one the user actually sees.
-  // If it's not our element or a descendant/ancestor of it, it's obscured.
-  const topElement = elementsAtPoint[0];
-
-  return el.contains(topElement!) || topElement!.contains(el);
+  return (
+    style.display === 'none' ||
+    style.visibility === 'hidden' ||
+    style.opacity === '0'
+  );
 }
 
 // ============================================================================
 // NAVIGATION STATE
 // ============================================================================
 
-// ============================================================================
-// STATELESS PAGE ACTION EXECUTOR
-// ============================================================================
-
-export interface PageActionResult {
-  status: 'progressed' | 'completed' | 'blocked' | 'skipped' | 'account_required' | 'unknown_state';
-  reason?: string;
-  action?: string;
-  finalClassification?: PageClassification;
+interface NavigationState {
+  visitedUrls: Set<string>;
+  clickedElements: Set<string>;
+  attempts: number;
+  maxAttempts: number;
+  initialUrl?: string;
+  /**
+   * Whether we've already treated a "form" / "form_modal" page as an intermediate
+   * step (clicked an Apply-style button) on the current URL. This prevents us
+   * from getting stuck repeatedly treating the same form-modal as "intermediate"
+   * after the real form/modal has opened (e.g. Indeed-style Apply flows).
+   */
+  usedIntermediateOnFormPage: boolean;
+  history: Array<{
+    url: string;
+    classification: PageClassification;
+    action: string;
+    timestamp: number;
+  }>;
 }
 
+const navState: NavigationState = {
+  visitedUrls: new Set(),
+  clickedElements: new Set(),
+  attempts: 0,
+  maxAttempts: 5,
+  usedIntermediateOnFormPage: false,
+  history: [],
+};
+
+// ============================================================================
+// NAVIGATION RESULT
+// ============================================================================
+
+export interface NavigationResult {
+  success: boolean;
+  finalClassification?: PageClassification;
+  reason?:
+  | 'form_found'
+  | 'account_required'
+  | 'complex_captcha'
+  | 'manual_input_required'
+  | 'max_attempts'
+  | 'unknown_page'
+  | 'external_ats';
+  message?: string;
+}
+
+// ============================================================================
+// INTELLIGENT NAVIGATION LOOP
+// ============================================================================
+
 /**
- * Single Atomic Execution Step
- * Classifies the current page and takes exactly ONE action (Fill -> Click Next).
+ * Main intelligent navigation function
+ * Navigates through multi-step flows until reaching application form
  */
-export async function executePageAction(
+export async function intelligentNavigate(
   providedResume?: { data: string; fileName?: string; mimeType?: string },
-  providedProfile?: any
-): Promise<PageActionResult> {
-  logger.log('Navigator', 'Executing atomic page action...');
-  console.log('[Navigator] Validating context and executing page action...');
+  providedProfile?: any // Add profile parameter
+): Promise<NavigationResult> {
+  logger.log('Navigator', 'Starting intelligent navigation...');
+  console.log('[Navigator] Starting intelligent navigation...');
+  console.log('[Navigator] Current URL:', window.location.href);
 
-  // 1. Context Scoping: Check for modal first
-  let container: HTMLElement | undefined;
-  const potentialModal = document.querySelector(
-    '.jobs-easy-apply-modal, [role="dialog"], .modal-overlay.active, [data-automation-id="wd-popup-frame"]'
-  ) as HTMLElement;
+  navState.initialUrl = window.location.href;
+  navState.attempts = 0;
+  navState.visitedUrls.clear();
+  navState.clickedElements.clear();
+  navState.usedIntermediateOnFormPage = false;
+  navState.history = [];
 
-  if (potentialModal && isTrulyVisible(potentialModal)) {
-    container = potentialModal;
-    logger.log('Navigator', 'Scoped execution to visible modal container');
-  }
+  // ========================================================================
+  // STEP 1: Classification loop
+  // Note: External tab detection is handled by background script via webNavigation.onCreatedNavigationTarget
+  // This function is called AFTER the external tab is detected and content script is injected
+  // ========================================================================
+  while (navState.attempts < navState.maxAttempts) {
+    navState.attempts++;
+    logger.log('Navigator', `Navigation attempt ${navState.attempts}/${navState.maxAttempts}`);
+    console.log(`[Navigator] Navigation attempt ${navState.attempts}/${navState.maxAttempts}`);
 
-  // 2. Classification
-  const classification = classifyPage(container);
-  logClassification(classification);
-
-  if (container && (classification.type === 'form' || classification.type === 'unknown')) {
-    if (classification.fields.length > 0) {
-      classification.type = 'form_modal';
-    } else {
-      classification.type = 'modal';
+    // Check if URL changed - if so, clear clicked elements (new page = new elements)
+    const currentUrl = window.location.href;
+    if (currentUrl !== navState.initialUrl && navState.attempts > 1) {
+      logger.log(
+        'Navigator',
+        `URL changed from ${navState.initialUrl} to ${currentUrl}, clearing clicked elements`
+      );
+      console.log(`[Navigator] URL changed, clearing clicked elements`);
+      navState.clickedElements.clear();
+      navState.usedIntermediateOnFormPage = false;
+      navState.initialUrl = currentUrl; // Update initial URL for next check
     }
-  }
 
-  // 3. Handle Classification
-  try {
-    const result = await handlePageActionType(
-      classification,
-      providedResume,
-      providedProfile,
-      container
+    // Classify current page
+    logger.log('Navigator', 'Classifying current page...');
+    console.log('[Navigator] Classifying current page...');
+    const classification = classifyPage();
+    logClassification(classification);
+    logger.log(
+      'Navigator',
+      `Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`
     );
-    if (!result) {
-      return {
-        status: 'unknown_state',
-        reason: 'No action taken',
-        finalClassification: classification,
-      };
+    console.log(
+      `[Navigator] Classification result: ${classification.type} (confidence: ${(classification.confidence * 100).toFixed(1)}%)`
+    );
+
+    // Record in history
+    navState.history.push({
+      url: currentUrl,
+      classification,
+      action: '',
+      timestamp: Date.now(),
+    });
+
+    // Handle based on page type
+    logger.log('Navigator', `Handling page type: ${classification.type}`);
+    console.log(`[Navigator] Handling page type: ${classification.type}`);
+
+    let result: NavigationResult | null = null;
+    try {
+      result = await handlePageType(classification, providedResume, providedProfile);
+    } catch (error) {
+      logger.error('Navigator', `Error handling page type ${classification.type}:`, error);
+      console.error(`[Navigator] Error handling page type ${classification.type}:`, error);
+      const message = String(error);
+      // If we explicitly signaled manual input is required, exit early with that reason
+      if (typeof message === 'string' && message.startsWith('manual_input_required:')) {
+        const userMessage = message.replace('manual_input_required: ', '');
+        logger.warn('Navigator', 'Manual input required - stopping navigation', userMessage);
+        return {
+          success: false,
+          reason: 'manual_input_required',
+          finalClassification: classification,
+          message: userMessage,
+        };
+      }
+      // Otherwise, keep looping until maxAttempts, then fail as a generic error
+      navState.attempts++;
+      if (navState.attempts >= navState.maxAttempts) {
+        return {
+          success: false,
+          reason: 'unknown_page',
+          message: `Error handling page type ${classification.type}: ${message}`,
+          finalClassification: classification,
+        };
+      }
+      continue; // Retry with updated DOM/URL
     }
-    return result;
-  } catch (error) {
-    logger.error('Navigator', 'Error executing page action', error);
-    return { status: 'blocked', reason: error instanceof Error ? error.message : String(error) };
+
+    if (result) {
+      logger.log('Navigator', `Navigation complete: ${result.reason}`, result);
+      console.log('[Navigator] Navigation complete:', result);
+      return result;
+    }
+
+    // No terminal result yet. Do not assume URL changes; handlers (clickElement,
+    // waitForDOMStable, etc.) already wait for DOM or navigation events as needed.
+    // Simply continue the loop and re-classify the current DOM on the next iteration.
   }
+
+  logger.error('Navigator', 'Max attempts reached without finding application form');
+  console.log('[Navigator] Max attempts reached');
+  return {
+    success: false,
+    reason: 'max_attempts',
+    message: 'Maximum navigation attempts reached without finding application form',
+  };
 }
 
 /**
  * Handle page based on its classification
  */
-/**
- * Handle page based on its classification (Stateless Dispatcher)
- */
-async function handlePageActionType(
+async function handlePageType(
   classification: PageClassification,
   providedResume?: { data: string; fileName?: string; mimeType?: string },
-  providedProfile?: any,
-  container?: HTMLElement
-): Promise<PageActionResult> {
+  providedProfile?: any // Add profile parameter
+): Promise<NavigationResult | null> {
   switch (classification.type) {
     case 'form':
     case 'form_modal':
-      return handleFormAction(classification, providedResume, providedProfile, container);
+      // If we see a form classification but the actual submit control is not visible yet,
+      // prefer to treat this as an intermediate "open real form" step if there is a
+      // visible apply-style action (e.g. an "Apply now" button that opens a modal).
+      //
+      // NOTE: We only do this "intermediate hop" once per URL. After we've already
+      // clicked an Apply-style button on this form/modal page, we should treat it
+      // as a real form even if the submit button is off-screen (e.g. requires scroll),
+      // otherwise we can get stuck re-classifying the same page as "form_modal"
+      // and never advancing to filling/submitting the inner form.
+      if (
+        !hasVisibleSubmitAction(classification) &&
+        hasVisibleApplyAction(classification) &&
+        !navState.usedIntermediateOnFormPage
+      ) {
+        logger.log(
+          'Navigator',
+          'Form classified, but submit is not visible and a visible apply action exists – handling as intermediate step first'
+        );
+        console.log(
+          '[Navigator] Form classified but submit hidden; using apply action to advance to real form stage...'
+        );
+        navState.usedIntermediateOnFormPage = true;
+        return await handleIntermediate(classification);
+      }
+      return handleForm(classification, providedResume, providedProfile);
 
     case 'modal':
-      return await handleModalAction(classification, container);
+      return await handleModal(classification);
 
     case 'signup':
-      return { status: 'account_required', reason: 'signup_detected' };
+      return await handleSignup(classification);
 
     case 'intermediate':
-      return await handleIntermediateAction(classification);
+      return await handleIntermediate(classification);
 
     case 'captcha':
-      return { status: 'blocked', reason: 'captcha_detected' };
+      return await handleCaptcha(classification);
 
     case 'unknown':
-      return {
-        status: 'unknown_state',
-        reason: 'page_type_unknown',
-        finalClassification: classification,
-      };
+      return handleUnknown(classification);
 
     default:
-      return { status: 'blocked', reason: 'unhandled_type' };
+      return null;
   }
 }
 
 /**
- * Handle application form (fill and click next/submit)
- * Single pass - no looping.
+ * Determine if there is a visible submit action for the current classification.
  */
-async function handleFormAction(
+function hasVisibleSubmitAction(classification: PageClassification): boolean {
+  const submitAction = findBestAction(classification, 'submit');
+  if (!submitAction) return false;
+  const el = submitAction.element as HTMLElement | null;
+  if (!el) return false;
+  return isElementActuallyVisible(el) && isElementInViewport(el);
+}
+
+/**
+ * Determine if there is a visible apply-style action (e.g. "Apply now" button).
+ * Used to decide when to treat an early stage as "intermediate" even if the
+ * classifier labeled the page as a form/modal based on hidden DOM.
+ */
+function hasVisibleApplyAction(classification: PageClassification): boolean {
+  const applyAction = findBestAction(classification, 'apply');
+  if (!applyAction) return false;
+  const el = applyAction.element as HTMLElement | null;
+  if (!el) return false;
+  return isElementActuallyVisible(el) && isElementInViewport(el);
+}
+
+/**
+ * Handle application form (fill and submit!)
+ * Supports multi-step forms by looping until final submit
+ */
+async function handleForm(
   classification: PageClassification,
   providedResume?: { data: string; fileName?: string; mimeType?: string },
-  providedProfile?: any,
-  container?: HTMLElement
-): Promise<PageActionResult> {
-  logger.log('Navigator', 'Handling form action...');
+  providedProfile?: any // Add profile parameter
+): Promise<NavigationResult> {
+  logger.log('Navigator', '✓ Application form found!');
+  console.log('[Navigator] ✓ Application form found!');
 
-  // 1. Fill Fields
-  logger.log('Navigator', 'Calling consolidated field filler...');
-  const fillStats = await fillAllFields(classification, {
-    resume: providedResume,
-    profile: providedProfile,
-  });
+  const MAX_FORM_STEPS = 10; // Safety limit for multi-step forms
+  let currentClassification = classification;
+  let stepCount = 0;
 
-  if (!fillStats.success) {
-    logger.error('Navigator', 'Fill failed');
-    return { status: 'blocked', reason: 'fill_failed' };
-  }
-
-  logger.log(
-    'Navigator',
-    `Fill complete: ${fillStats.filled} filled, ${fillStats.skipped} skipped`
-  );
-
-  // 2. Submit / Next
-  logger.log('Navigator', 'Attempting to submit/progress form...');
+  // Track page signatures to detect infinite loops
+  let previousPageSignature = '';
+  let samePageCount = 0;
 
   try {
-    const result = await submitForm(classification, container);
-    if (result === 'success') {
-      return { status: 'completed', reason: 'submitted_successfully' };
-    } else if (result === 'progressed') {
-      return { status: 'progressed', reason: 'clicked_button' };
-    }
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    if (errorMessage.includes('manual_input_required')) {
-      logger.warn('Navigator', 'Manual input required:', errorMessage);
-      return { status: 'blocked', reason: 'manual_input_required' };
-    }
-    logger.error('Navigator', 'Error interacting with submit button', e);
-    return { status: 'blocked', reason: 'submit_interaction_error' };
-  }
+    // Loop for multi-step forms
+    while (stepCount < MAX_FORM_STEPS) {
+      stepCount++;
+      logger.log('Navigator', `Form step ${stepCount}/${MAX_FORM_STEPS}`, {
+        type: currentClassification.type,
+        confidence: `${(currentClassification.confidence * 100).toFixed(1)}%`,
+        fieldCount: currentClassification.fields.length,
+        actionCount: currentClassification.actions.length,
+      });
+      console.log(`[Navigator] Form step ${stepCount}/${MAX_FORM_STEPS}`);
 
-  return { status: 'blocked', reason: 'no_progression_button_found' };
+      // Detect if we're stuck on the same page (infinite loop detection)
+      const currentPageSignature = currentClassification.fields
+        .map(f => (f.labelText || f.selectors?.[0] || '').substring(0, 50))
+        .sort()
+        .join('|');
+
+      if (currentPageSignature === previousPageSignature && currentPageSignature.length > 0) {
+        samePageCount++;
+        logger.log('Navigator', `Same page detected (${samePageCount}/3)`, { signature: currentPageSignature.substring(0, 100) });
+        console.log(`[Navigator] Same page detected (${samePageCount}/3)`);
+
+        if (samePageCount >= 3) {
+          // We've seen the same page 3 times - we're stuck in a loop
+          logger.warn('Navigator', 'Infinite loop detected - same page seen 3 times, breaking loop');
+          console.warn('[Navigator] Infinite loop detected - same page seen 3 times');
+          break;
+        }
+      } else {
+        samePageCount = 0;
+      }
+      previousPageSignature = currentPageSignature;
+
+      // Create form filler from vault data WITH the provided resume
+      logger.log('Navigator', 'Creating form filler from vault...');
+      console.log('[Navigator] Creating form filler from vault...');
+      const filler = await createFormFillerFromVault(providedResume, providedProfile);
+      if (!filler) {
+        logger.error('Navigator', 'Could not create form filler');
+        console.error('[Navigator] Could not create form filler');
+        return {
+          success: false,
+          finalClassification: currentClassification,
+          reason: 'unknown_page',
+          message: 'Could not load user data from vault',
+        };
+      }
+
+      logger.log('Navigator', 'Form filler created, starting form fill...');
+      console.log('[Navigator] Form filler created, starting form fill...');
+
+      // Fill the form
+      await filler.fillForm(currentClassification);
+      logger.log('Navigator', '✓ Form filled successfully');
+      console.log('[Navigator] ✓ Form filled successfully');
+
+      // Wait for form validation to complete (event-driven)
+      logger.log('Navigator', 'Waiting for form validation...');
+      console.log('[Navigator] Waiting for form validation...');
+      await waitForDOMStable(500, 2000); // Wait for DOM to stabilize after filling
+
+      // Submit the form (or click Next/Continue)
+      logger.log('Navigator', 'Attempting to submit/progress form...');
+      console.log('[Navigator] Attempting to submit/progress form...');
+      const isFinalSubmit = await submitForm(currentClassification);
+
+      if (isFinalSubmit) {
+        // Final submit was clicked and succeeded
+        logger.log('Navigator', '✓ Form submitted successfully');
+        console.log('[Navigator] ✓ Form submitted successfully');
+        return {
+          success: true,
+          finalClassification: currentClassification,
+          reason: 'form_found',
+          message: 'Application form filled and submitted',
+        };
+      }
+
+      // submitForm returned false - either Next/Continue was clicked, or validation failed
+      // Check if we're still on a form page
+      logger.log('Navigator', 'Waiting for next form step to load...');
+      console.log('[Navigator] Waiting for next form step to load...');
+      await waitForDOMStable(1000, 5000);
+
+      // Re-classify the page for the next step
+      const newClassification = classifyPage();
+
+      // Check if we're still on a form
+      if (newClassification.type !== 'form' && newClassification.type !== 'form_modal') {
+        // We're no longer on a form - might be success page, intermediate, or unknown
+        // Check for success indicators in the DOM
+        const bodyText = document.body.innerText?.toLowerCase() || '';
+        const hasSuccessText =
+          bodyText.includes('application submitted') ||
+          bodyText.includes('thank you for applying') ||
+          bodyText.includes('application received') ||
+          bodyText.includes('successfully submitted');
+
+        if (hasSuccessText) {
+          logger.log('Navigator', '✓ Form submitted successfully (detected success text)');
+          console.log('[Navigator] ✓ Form submitted successfully (detected success text)');
+          return {
+            success: true,
+            finalClassification: newClassification,
+            reason: 'form_found',
+            message: 'Application form filled and submitted',
+          };
+        }
+
+        logger.log('Navigator', `Form step ended with page type: ${newClassification.type}`);
+        console.log(`[Navigator] Form step ended with page type: ${newClassification.type}`);
+        break;
+      }
+
+      // Still on a form - continue to next step
+      currentClassification = newClassification;
+      logger.log('Navigator', 'Proceeding to next form step...');
+      console.log('[Navigator] Proceeding to next form step...');
+    }
+
+    // If we get here, we exhausted max steps or validation failed
+    // Try force submit as last resort
+    logger.log('Navigator', 'Form loop ended without final submit, attempting force submit...');
+    console.warn('[Navigator] Form loop ended, attempting force submit...');
+
+    const submitAction = findBestAction(currentClassification, 'submit');
+    if (submitAction) {
+      logger.log('Navigator', 'Clicking submit button as last resort...');
+      console.log('[Navigator] Clicking submit button as last resort...');
+      await clickElement(submitAction, 'submit_button_force');
+
+      // Wait for potential success indicators to appear (event-driven)
+      await waitForDOMStable(500, 3000);
+
+      // Reuse the same strict success detection we use in submitForm.
+      const forcedHasSuccess = hasVisibleSuccessIndicator(
+        (document.querySelector('form') as HTMLFormElement | null) || null,
+        submitAction.element as HTMLElement | null
+      );
+
+      if (forcedHasSuccess) {
+        logger.log('Navigator', '✓ Form submitted successfully (force submit)');
+        console.log('[Navigator] ✓ Form submitted successfully (force submit)');
+
+        // Close any lingering success modal
+        await closeSuccessModal();
+        return {
+          success: true,
+          finalClassification: currentClassification,
+          reason: 'form_found',
+          message: 'Application form filled and submitted',
+        };
+      }
+    }
+
+    logger.log('Navigator', 'Form filled but not submitted');
+    console.warn('[Navigator] Form filled but not submitted');
+    return {
+      success: false,
+      finalClassification: currentClassification,
+      reason: 'manual_input_required',
+      message:
+        'Application form was filled but could not be auto-submitted. Please review and submit manually.',
+    };
+  } catch (error) {
+    logger.error('Navigator', 'Error handling form', error);
+    console.error('[Navigator] Error handling form:', error);
+    return {
+      success: false,
+      finalClassification: classification,
+      reason: 'unknown_page',
+      message: `Error filling form: ${error}`,
+    };
+  }
 }
 
 /**
  * Handle modal (close or select option)
  */
-async function handleModalAction(
-  classification: PageClassification,
-  container?: HTMLElement
-): Promise<PageActionResult> {
-  logger.log('Navigator', 'Handling modal action...');
-
-  // Check for SUBMIT / REVIEW (Final Step)
-  // Use findProgressionButton to leverage LinkedIn-specific selectors and avoid clicking settings links
-  const { action: submitAction, isFinalSubmit } = findProgressionButton(classification, container);
-  if (submitAction && isFinalSubmit) {
-    logger.log('Navigator', 'Found SUBMIT action in modal (Review/Submit page)');
-    console.log('[Navigator] Found SUBMIT action in modal');
-
-    await clickElement(submitAction, 'submit_modal');
-    return { status: 'completed', reason: 'submitted_modal' };
-  }
+async function handleModal(classification: PageClassification): Promise<NavigationResult | null> {
+  logger.log('Navigator', 'Handling modal...');
+  console.log('[Navigator] Handling modal...');
+  logger.log(
+    'Navigator',
+    `Modal has ${classification.actions.length} actions`,
+    classification.actions.map((a) => ({
+      purpose: a.purpose,
+      text: a.element.textContent?.substring(0, 50),
+    }))
+  );
+  console.log(
+    '[Navigator] Modal actions:',
+    classification.actions.map((a) => ({
+      purpose: a.purpose,
+      text: a.element.textContent?.substring(0, 50),
+    }))
+  );
 
   // Check if this is a Workday-style options modal
   const hasApplyOption = classification.actions.some((a) => a.purpose === 'apply');
@@ -288,20 +536,34 @@ async function handleModalAction(
   if (hasApplyOption) {
     // This is an options modal - select best option
     logger.log('Navigator', 'Detected options modal with apply buttons');
+    console.log('[Navigator] Detected options modal');
 
     // First, check if modal is visible - if not, we need to click a button to show it
-    const modalElement =
-      container ||
-      (document.querySelector(
-        '[role="dialog"], .modal-overlay, [data-automation-id="wd-popup-frame"]'
-      ) as HTMLElement);
+    const modalElement = document.querySelector(
+      '[role="dialog"], .modal-overlay, [data-automation-id="wd-popup-frame"]'
+    ) as HTMLElement;
+    const isModalVisible =
+      modalElement &&
+      window.getComputedStyle(modalElement).display !== 'none' &&
+      window.getComputedStyle(modalElement).visibility !== 'hidden' &&
+      window.getComputedStyle(modalElement).opacity !== '0';
 
-    // Check validation of the found element
-    const isModalVisible = modalElement && isTrulyVisible(modalElement);
+    logger.log('Navigator', `Modal visibility check:`, {
+      found: !!modalElement,
+      visible: isModalVisible,
+      display: modalElement ? window.getComputedStyle(modalElement).display : 'N/A',
+    });
+    console.log('[Navigator] Modal visibility:', {
+      found: !!modalElement,
+      visible: isModalVisible,
+    });
 
+    // If modal is not visible, find and click the button that shows it
     if (!isModalVisible) {
       logger.log('Navigator', 'Modal is hidden, looking for button to show modal...');
+      console.log('[Navigator] Modal is hidden, looking for button to show modal');
 
+      // Look for common buttons that show modals: "Apply", "Apply for this Position", etc.
       const allShowModalButtons = Array.from(document.querySelectorAll('button, a')).filter(
         (el) => {
           const text = el.textContent?.toLowerCase() || '';
@@ -314,15 +576,39 @@ async function handleModalAction(
         }
       ) as HTMLElement[];
 
-      // Filter to only visible buttons (check parent chain and z-index)
-      const visibleShowModalButtons = allShowModalButtons.filter((btn) => isTrulyVisible(btn));
+      logger.log(
+        'Navigator',
+        `Found ${allShowModalButtons.length} potential buttons to show modal`
+      );
+      console.log(
+        '[Navigator] Found buttons:',
+        allShowModalButtons.map((b) => b.textContent?.substring(0, 50))
+      );
+
+      // Filter to only visible buttons (check parent chain)
+      const visibleShowModalButtons = allShowModalButtons.filter((btn) => {
+        const isVisible = isElementActuallyVisible(btn);
+        logger.log('Navigator', `[MODAL] Show button visibility check:`, {
+          text: btn.textContent?.substring(0, 50),
+          visible: isVisible,
+        });
+        return isVisible;
+      });
+
+      logger.log(
+        'Navigator',
+        `[MODAL] Filtered to ${visibleShowModalButtons.length} visible show buttons`
+      );
+      console.log(`[Navigator] [MODAL] ${visibleShowModalButtons.length} visible show buttons`);
 
       if (visibleShowModalButtons.length > 0) {
+        // Click the first visible button that shows the modal
         const showButton = visibleShowModalButtons[0]!;
         logger.log(
           'Navigator',
           `Clicking button to show modal: ${showButton.textContent?.substring(0, 50)}`
         );
+        console.log('[Navigator] Clicking button to show modal:', showButton.textContent);
 
         await clickElement(
           {
@@ -334,6 +620,43 @@ async function handleModalAction(
           },
           'show_modal_button'
         );
+
+        // Wait for modal to become visible
+        logger.log('Navigator', 'Waiting for modal to become visible...');
+        console.log('[Navigator] Waiting for modal to become visible');
+
+        // Wait up to 3 seconds for modal to appear
+        const modalAppeared = await new Promise<boolean>((resolve) => {
+          const checkInterval = setInterval(() => {
+            const modal = document.querySelector(
+              '[role="dialog"], .modal-overlay.active, [data-automation-id="wd-popup-frame"]'
+            ) as HTMLElement;
+            if (
+              modal &&
+              window.getComputedStyle(modal).display !== 'none' &&
+              window.getComputedStyle(modal).visibility !== 'hidden' &&
+              window.getComputedStyle(modal).opacity !== '0'
+            ) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
+
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(false);
+          }, 3000);
+        });
+
+        if (!modalAppeared) {
+          logger.error('Navigator', 'Modal did not appear after clicking show button');
+          console.error('[Navigator] Modal did not appear');
+          return null; // Continue navigation loop
+        }
+
+        logger.log('Navigator', '✓ Modal is now visible');
+        console.log('[Navigator] ✓ Modal is now visible');
+
         // Re-classify the page now that modal is visible
         logger.log('Navigator', 'Re-classifying page with visible modal...');
         console.log('[Navigator] Re-classifying page');
@@ -342,7 +665,7 @@ async function handleModalAction(
       } else {
         logger.warn('Navigator', 'No button found to show modal');
         console.warn('[Navigator] No button found to show modal');
-        return { status: 'blocked', reason: 'no_modal_trigger_button' };
+        return null; // Continue navigation loop
       }
     }
 
@@ -375,7 +698,7 @@ async function handleModalAction(
     if (visibleApplyActions.length === 0) {
       logger.warn('Navigator', '[MODAL] No visible apply actions found - all are hidden');
       console.warn('[Navigator] [MODAL] No visible apply actions found');
-      return { status: 'blocked', reason: 'no_visible_apply_actions' };
+      return null; // Continue navigation loop
     }
 
     // Priority: Autofill > Manual > Last Application > Generic Apply
@@ -445,7 +768,7 @@ async function handleModalAction(
       // No need to wait for navigation events here - just return and let the page reload if needed
       logger.log('Navigator', '[MODAL] Modal action clicked, returning...');
       console.log('[Navigator] [MODAL] Modal action clicked, returning...');
-      return { status: 'progressed', reason: 'clicked_apply_option' };
+      return null; // Continue navigation - page may reload and intelligentNavigate() will restart on new page
     } else {
       logger.warn('Navigator', '[MODAL] No apply action found in modal');
       console.warn('[Navigator] [MODAL] No apply action found in modal');
@@ -459,7 +782,7 @@ async function handleModalAction(
     logger.log('Navigator', 'Closing modal');
     console.log('[Navigator] Closing modal');
     await clickElement(closeAction, 'close_modal');
-    return { status: 'progressed', reason: 'closed_modal' };
+    return null; // Continue navigation
   }
 
   // No close button - try clicking outside or pressing ESC
@@ -467,127 +790,105 @@ async function handleModalAction(
   console.log('[Navigator] No close button found, attempting to dismiss modal');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
-  return { status: 'progressed', reason: 'dismissed_modal_with_escape' };
+  return null;
 }
 
 /**
  * Handle signup/account page
  */
+async function handleSignup(classification: PageClassification): Promise<NavigationResult | null> {
+  console.log('[Navigator] Handling signup/account page...');
+
+  // Try to find guest option
+  if (hasGuestOption(classification)) {
+    const guestAction =
+      findBestAction(classification, 'guest') || findBestAction(classification, 'skip');
+
+    if (guestAction) {
+      console.log('[Navigator] Found guest/skip option');
+      await clickElement(guestAction, 'guest_option');
+      return null; // Continue navigation
+    }
+  }
+
+  // No guest option - account creation required
+  console.log('[Navigator] ✗ Account creation required');
+
+  return {
+    success: false,
+    finalClassification: classification,
+    reason: 'account_required',
+    message:
+      'This application requires account creation. Please create an account manually and try again.',
+  };
+}
 
 /**
  * Handle intermediate page (has Apply button)
  */
-/**
- * Handle intermediate page (has Apply button)
- */
-async function handleIntermediateAction(
+async function handleIntermediate(
   classification: PageClassification
-): Promise<PageActionResult> {
-  logger.log('Navigator', 'Handling intermediate page...');
+): Promise<NavigationResult | null> {
+  console.log('[Navigator] Handling intermediate page...');
 
   const applyAction = findBestAction(classification, 'apply');
 
   if (applyAction) {
-    logger.log('Navigator', 'Clicking Apply button');
+    console.log('[Navigator] Clicking Apply button');
     await clickElement(applyAction, 'apply_button');
-    return { status: 'progressed', reason: 'clicked_intermediate_apply' };
+    return null; // Continue navigation
   }
 
-  logger.log('Navigator', 'No Apply button found on intermediate page');
-  return { status: 'blocked', reason: 'no_intermediate_action' };
+  console.log('[Navigator] No Apply button found on intermediate page');
+  return null;
 }
 
-// ============================================================================
-// VALIDATION ERROR CAPTURE
-// ============================================================================
-
 /**
- * Capture validation errors and map them to their associated input fields
- * Returns a map of element -> error message
+ * Handle CAPTCHA page
  */
-function captureValidationErrors(container?: HTMLElement): Map<HTMLElement, string> {
-  const root = container || document;
-  const fieldErrors = new Map<HTMLElement, string>();
+async function handleCaptcha(classification: PageClassification): Promise<NavigationResult | null> {
+  console.log('[Navigator] Handling CAPTCHA...');
 
-  // Find all visible error messages
-  const errorSelectors = [
-    '.artdeco-inline-feedback--error', // LinkedIn
-    '[role="alert"]',
-    '.error-message',
-    '.field-error',
-    '.form-error',
-    '.invalid-feedback',
-  ];
+  if (isSimpleCaptcha(classification)) {
+    console.log('[Navigator] Simple checkbox CAPTCHA detected');
 
-  const errorElements = root.querySelectorAll(errorSelectors.join(', '));
-  const visibleErrors = Array.from(errorElements).filter((el) => {
-    const style = window.getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-  });
+    const captchaField = classification.fields.find((f) => f.purpose === 'captcha');
 
-  for (const errorEl of visibleErrors) {
-    const errorText = errorEl.textContent?.trim() || '';
-    if (!errorText) continue;
-
-    let associatedField: HTMLElement | null = null;
-
-    // Strategy 1: Check if error is inside a form element container
-    const container = errorEl.closest('.fb-dash-form-element, .form-group, fieldset, .form-field');
-    if (container) {
-      const input = container.querySelector('input, select, textarea');
-      if (input) {
-        associatedField = input as HTMLElement;
+    if (captchaField && captchaField.type === 'checkbox') {
+      const checkbox = captchaField.element as HTMLInputElement;
+      if (!checkbox.checked) {
+        // Use humanClick with jitter for CAPTCHA (important to look human here!)
+        await humanClick(checkbox, { jitterBefore: true, minJitter: 500, maxJitter: 1000 });
+        console.log('[Navigator] Checked CAPTCHA checkbox with humanized click');
       }
     }
 
-    // Strategy 2: Check if error has aria-describedby linking to field
-    if (!associatedField) {
-      const errorId = errorEl.id;
-      if (errorId) {
-        const field = root.querySelector(`[aria-describedby*="${errorId}"]`);
-        if (field) {
-          associatedField = field as HTMLElement;
-        }
-      }
-    }
-
-    // Strategy 3: Check previous sibling (error might be after the input)
-    if (!associatedField) {
-      let sibling = errorEl.previousElementSibling;
-      while (sibling) {
-        if (
-          sibling.tagName === 'INPUT' ||
-          sibling.tagName === 'SELECT' ||
-          sibling.tagName === 'TEXTAREA'
-        ) {
-          associatedField = sibling as HTMLElement;
-          break;
-        }
-        // Check inside sibling
-        const input = sibling.querySelector('input, select, textarea');
-        if (input) {
-          associatedField = input as HTMLElement;
-          break;
-        }
-        sibling = sibling.previousElementSibling;
-      }
-    }
-
-    if (associatedField) {
-      fieldErrors.set(associatedField, errorText);
-      logger.log('Navigator', `Captured validation error for field`, {
-        fieldId: associatedField.id || 'unknown',
-        error: errorText.substring(0, 50),
-      });
-    } else {
-      logger.log(
-        'Navigator',
-        `Could not associate error with field: ${errorText.substring(0, 50)}`
-      );
-    }
+    return null; // Continue navigation
   }
 
-  return fieldErrors;
+  // Complex CAPTCHA
+  console.log('[Navigator] ✗ Complex CAPTCHA detected');
+
+  return {
+    success: false,
+    finalClassification: classification,
+    reason: 'complex_captcha',
+    message: 'This application requires solving a complex CAPTCHA. Please solve it manually.',
+  };
+}
+
+/**
+ * Handle unknown page type
+ */
+function handleUnknown(classification: PageClassification): NavigationResult {
+  console.log('[Navigator] ✗ Unknown page type');
+
+  return {
+    success: false,
+    finalClassification: classification,
+    reason: 'unknown_page',
+    message: 'Unable to classify this page. It may not be a supported ATS platform.',
+  };
 }
 
 // ============================================================================
@@ -597,25 +898,22 @@ function captureValidationErrors(container?: HTMLElement): Map<HTMLElement, stri
 /**
  * Find the best progression button (Submit > Review > Next > Continue)
  * Returns the action and whether it's a final submit
- *
+ * 
  * LinkedIn Easy Apply specific selectors:
  * - Submit: [data-live-test-easy-apply-submit-button]
  * - Review: [data-live-test-easy-apply-review-button]
  * - Next:   [data-easy-apply-next-button]
  */
 function findProgressionButton(
-  classification: PageClassification,
-  container?: HTMLElement
+  classification: PageClassification
 ): { action: DetectedField | null; isFinalSubmit: boolean } {
-  // Use container or fallback to document
-  const root = container || document;
 
   // =========================================================================
   // PRIORITY 0: LinkedIn Easy Apply specific selectors (most reliable)
   // =========================================================================
 
   // LinkedIn Submit button
-  const linkedInSubmit = root.querySelector(
+  const linkedInSubmit = document.querySelector(
     '[data-live-test-easy-apply-submit-button]:not(:disabled)'
   ) as HTMLElement;
   if (linkedInSubmit && !isActuallyHiddenNav(linkedInSubmit)) {
@@ -633,7 +931,7 @@ function findProgressionButton(
   }
 
   // LinkedIn Review button (last step before submit)
-  const linkedInReview = root.querySelector(
+  const linkedInReview = document.querySelector(
     '[data-live-test-easy-apply-review-button]:not(:disabled)'
   ) as HTMLElement;
   if (linkedInReview && !isActuallyHiddenNav(linkedInReview)) {
@@ -651,7 +949,7 @@ function findProgressionButton(
   }
 
   // LinkedIn Next button
-  const linkedInNext = root.querySelector(
+  const linkedInNext = document.querySelector(
     '[data-easy-apply-next-button]:not(:disabled), [data-live-test-easy-apply-next-button]:not(:disabled)'
   ) as HTMLElement;
   if (linkedInNext && !isActuallyHiddenNav(linkedInNext)) {
@@ -683,9 +981,7 @@ function findProgressionButton(
   // PRIORITY 2: Generic Review/Next/Continue buttons by text
   // =========================================================================
   const progressionKeywords = ['review', 'next', 'continue'];
-  const buttons = root.querySelectorAll(
-    'button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
-  );
+  const buttons = document.querySelectorAll('button:not(:disabled), [role="button"]:not([aria-disabled="true"])');
 
   for (const btn of Array.from(buttons)) {
     const htmlBtn = btn as HTMLElement;
@@ -693,8 +989,8 @@ function findProgressionButton(
     const ariaLabel = (btn.getAttribute('aria-label')?.toLowerCase() || '').trim();
 
     // Check if this is a progression button
-    const isProgressionButton = progressionKeywords.some(
-      (kw) => text.includes(kw) || ariaLabel.includes(kw)
+    const isProgressionButton = progressionKeywords.some(kw =>
+      text.includes(kw) || ariaLabel.includes(kw)
     );
 
     if (isProgressionButton && !isActuallyHiddenNav(htmlBtn)) {
@@ -721,10 +1017,7 @@ function findProgressionButton(
  * Submit the form (or click Next/Continue for multi-step forms)
  * Returns: true if final submit, false if progressed to next step, throws if no button found
  */
-async function submitForm(
-  classification: PageClassification,
-  container?: HTMLElement
-): Promise<'success' | 'progressed' | 'failed'> {
+async function submitForm(classification: PageClassification): Promise<boolean> {
   logger.log('Navigator', 'Looking for progression button (Submit/Review/Next/Continue)...');
   console.log('[Navigator] Looking for progression button...');
 
@@ -741,10 +1034,10 @@ async function submitForm(
   if (!submitAction) {
     logger.log('Navigator', 'No submit/next button found');
     console.warn('[Navigator] No submit/next button found');
-    return 'failed';
+    return false;
   }
 
-  const buttonType = isFinalSubmit ? 'Submit' : progressionAction ? 'Next/Continue' : 'Submit';
+  const buttonType = isFinalSubmit ? 'Submit' : (progressionAction ? 'Next/Continue' : 'Submit');
   logger.log('Navigator', `${buttonType} button found`, {
     purpose: submitAction.purpose,
     confidence: submitAction.confidence,
@@ -753,9 +1046,9 @@ async function submitForm(
   });
   console.log(`[Navigator] ${buttonType} button found:`, submitAction.selectors?.[0] || 'dynamic');
 
-  // For Next/Continue buttons, click and then check for validation errors
+  // For Next/Continue buttons, skip validation and just click
   if (!isFinalSubmit && progressionAction) {
-    logger.log('Navigator', 'Clicking Next/Continue button...');
+    logger.log('Navigator', 'Clicking Next/Continue button (skipping validation for multi-step form)...');
     console.log('[Navigator] Clicking Next/Continue button...');
 
     await humanClick(submitAction.element as HTMLElement, {
@@ -764,34 +1057,9 @@ async function submitForm(
       maxJitter: 1000,
     });
 
-    // Wait for DOM to stabilize after click
-    await waitForDOMStable(500, 2000);
-
-    // Check for validation errors even on Next/Continue
-    const fieldErrors = captureValidationErrors(container);
-
-    if (fieldErrors.size > 0) {
-      logger.log('Navigator', `Validation errors detected after Next click: ${fieldErrors.size}`, {
-        errors: Array.from(fieldErrors.values()).map((e) => e.substring(0, 50)),
-      });
-      console.warn('[Navigator] Validation errors after Next click:', fieldErrors.size);
-
-      // Store errors for retry attempt
-      lastValidationErrors = fieldErrors;
-
-      // Return 'progressed' to trigger retry with error context
-      return 'progressed';
-    }
-
-    // Clear errors if no validation errors found
-    lastValidationErrors.clear();
-
-    logger.log(
-      'Navigator',
-      'Next/Continue clicked successfully, form will re-classify for next step'
-    );
+    logger.log('Navigator', 'Next/Continue clicked, form will re-classify for next step');
     console.log('[Navigator] Next/Continue clicked, waiting for next step...');
-    return 'progressed'; // Indicate more steps needed
+    return false; // Indicate more steps needed
   }
 
   // Check if form is valid (if it's in a form element)
@@ -809,8 +1077,8 @@ async function submitForm(
 
   // Strategy 2: Find visible form in active modal/content area
   if (!formElement) {
-    const visibleForms = Array.from(document.querySelectorAll('form')).filter((form) =>
-      isElementActuallyVisible(form as HTMLElement)
+    const visibleForms = Array.from(document.querySelectorAll('form')).filter(
+      (form) => isElementActuallyVisible(form as HTMLElement)
     );
     if (visibleForms.length > 0) {
       formElement = visibleForms[0] as HTMLFormElement;
@@ -834,8 +1102,8 @@ async function submitForm(
       const htmlInput = input as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
       // Skip fields that are not visible (hidden previous steps in multi-step forms)
-      const isVisible =
-        htmlInput.offsetParent !== null && !isActuallyHiddenNav(htmlInput as HTMLElement);
+      const isVisible = htmlInput.offsetParent !== null &&
+        !isActuallyHiddenNav(htmlInput as HTMLElement);
 
       if (htmlInput.required && !htmlInput.validity.valid && isVisible) {
         invalidFields.push({
@@ -885,8 +1153,8 @@ async function submitForm(
         const htmlInput = input as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
         // Skip fields that are not visible
-        const isVisible =
-          htmlInput.offsetParent !== null && !isActuallyHiddenNav(htmlInput as HTMLElement);
+        const isVisible = htmlInput.offsetParent !== null &&
+          !isActuallyHiddenNav(htmlInput as HTMLElement);
 
         if (htmlInput.required && !htmlInput.validity.valid && isVisible) {
           invalidFields.push({
@@ -914,7 +1182,7 @@ async function submitForm(
       }
 
       formElement.reportValidity();
-      return 'failed';
+      return false;
     }
     logger.log('Navigator', 'Form validation passed');
     console.log('[Navigator] Form validation passed');
@@ -966,72 +1234,6 @@ async function submitForm(
       }, 5000);
     });
 
-    // Setup MutationObserver for transient success DOM elements (e.g. modals that appear and disappear quickly)
-    // This catches "blink and you miss it" success states that aren't window.alerts
-    const domSuccessPromise = new Promise<boolean>((resolve) => {
-      const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-          for (const node of Array.from(mutation.addedNodes)) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              const el = node as HTMLElement;
-              const text = (el.textContent || '').toLowerCase();
-              if (
-                (text.includes('success') ||
-                  text.includes('submitted') ||
-                  text.includes('thank you')) &&
-                !text.includes('error') &&
-                !text.includes('failed')
-              ) {
-                // Verify visibility just in case
-                if (window.getComputedStyle(el).display !== 'none') {
-                  console.log(
-                    '[Navigator] Transient DOM success element detected:',
-                    text.substring(0, 100)
-                  );
-                  observer.disconnect();
-                  resolve(true);
-                  return;
-                }
-              }
-            }
-          }
-        }
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      // Timeout slightly longer than alert timeout
-      setTimeout(() => {
-        observer.disconnect();
-        resolve(false);
-      }, 6000);
-    });
-
-    // Race logic: if either detects success, return true immediately.
-    const combinedSuccessPromise = new Promise<boolean>((resolve) => {
-      let resolved = false;
-      const onSuccess = () => {
-        if (!resolved) {
-          resolved = true;
-          resolve(true);
-        }
-      };
-
-      alertPromise.then((res) => {
-        if (res) onSuccess();
-      });
-      domSuccessPromise.then((res) => {
-        if (res) onSuccess();
-      });
-
-      // If both complete without success, resolve false
-      Promise.all([alertPromise, domSuccessPromise]).then((results) => {
-        if (!resolved) {
-          resolve(results.includes(true));
-        }
-      });
-    });
-
     // Use humanClick for submit button (proper event sequence)
     await humanClick(submitAction.element as HTMLElement, {
       jitterBefore: true,
@@ -1042,7 +1244,7 @@ async function submitForm(
     console.log('[Navigator] Submit button clicked with humanized click, waiting for response...');
 
     // Wait for submission or alert
-    const alertSuccess = await combinedSuccessPromise;
+    const alertSuccess = await alertPromise;
 
     if (alertSuccess) {
       logger.log('Navigator', 'Success alert detected!');
@@ -1050,7 +1252,7 @@ async function submitForm(
 
       // Close any lingering success modal
       await closeSuccessModal();
-      return 'success';
+      return true;
     }
 
     // No alert detected - check for success indicators in DOM
@@ -1058,26 +1260,6 @@ async function submitForm(
     console.log('[Navigator] No alert detected, checking DOM for success indicators...');
     // Wait for DOM to update (event-driven)
     await waitForDOMStable(500, 3000);
-
-    // CRITICAL: Check for post-submit validation errors (e.g. LinkedIn custom errors)
-    // If errors appeared after clicking, capture them for retry.
-    const fieldErrors = captureValidationErrors(container);
-
-    if (fieldErrors.size > 0) {
-      logger.log('Navigator', `Post-submit validation errors detected: ${fieldErrors.size}`, {
-        errors: Array.from(fieldErrors.values()).map((e) => e.substring(0, 50)),
-      });
-      console.warn('[Navigator] Post-submit validation errors detected:', fieldErrors.size);
-
-      // Store errors for retry attempt
-      lastValidationErrors = fieldErrors;
-
-      // Return 'progressed' to trigger WAIT_AND_RETRY_FILL loop (not 'failed' which skips job)
-      return 'progressed';
-    }
-
-    // Clear errors if no validation errors found
-    lastValidationErrors.clear();
 
     // 1) Structural / visual checks (preferred)
     // IMPORTANT: We only treat this as success if we see a *visible* success state,
@@ -1091,9 +1273,9 @@ async function submitForm(
       logger.log('Navigator', 'Success indicator found in DOM');
       console.log('[Navigator] Success indicator found in DOM');
 
-      // Close success modal to prevent stale modals during job processing
+      // Close success modal to prevent stale modals during batch job processing
       await closeSuccessModal();
-      return 'success';
+      return true;
     }
 
     // 2) Lightweight before/after heuristic based on URL + page text,
@@ -1144,7 +1326,7 @@ async function submitForm(
 
       // Close any lingering success modal
       await closeSuccessModal();
-      return 'success';
+      return true;
     }
 
     // Text-based success: page text changed and now clearly contains success language,
@@ -1162,39 +1344,10 @@ async function submitForm(
 
       // Close any lingering success modal
       await closeSuccessModal();
-      return 'success';
+      return true;
     }
 
-    // 3) Fallback: If it was a final submit and the button is gone/disabled, assume success
-    // This handles cases where the modal simply closes or changes state without a prominent success message
-    if (isFinalSubmit) {
-      // Check if the original submit button is still in the DOM and visible/enabled
-      const buttonStillActive =
-        submitAction.element &&
-        document.body.contains(submitAction.element) &&
-        isElementActuallyVisible(submitAction.element) &&
-        !(submitAction.element as HTMLButtonElement).disabled;
-
-      // If the button is gone/hidden/disabled, and we didn't see an error...
-      if (!buttonStillActive && !containsAny(afterText, errorTextPatterns)) {
-        logger.log(
-          'Navigator',
-          'Submit button disappeared/disabled after click - assuming success'
-        );
-        console.log('[Navigator] Submit button disappeared/disabled - assuming success');
-        await closeSuccessModal();
-        return 'success';
-      }
-    }
-
-    // No success detected - return 'progressed' if we are unsure, but if it was final submit and failed checks, maybe 'failed'?
-    // User complaint: "progressed" shouldn't happen after submit.
-    // If we've reached here after a FINAL submit, and we didn't detect success or error, it's ambiguous.
-    // But returning 'failed' stops the process. Returning 'progressed' continues but might be wrong state.
-    // Let's bias towards 'success' if we are fairly sure, otherwise 'failed' to trigger retry?
-    // Actually, if we simply return 'progressed', the next loop will try to classify again.
-    // If the modal is gone, it might classify as 'unknown'.
-
+    // No success detected - return false to indicate failure
     logger.log(
       'Navigator',
       'WARNING: No success alert or DOM/heuristic indicator detected - form submission may have failed'
@@ -1202,11 +1355,11 @@ async function submitForm(
     console.warn(
       '[Navigator] No success alert or DOM/heuristic indicator detected - form submission may have failed'
     );
-    return 'failed';
+    return false;
   } catch (error) {
     logger.error('Navigator', 'Error submitting form', error);
     console.error('[Navigator] Error submitting form:', error);
-    return 'failed';
+    return false;
   }
 }
 
@@ -1217,7 +1370,7 @@ async function submitForm(
 /**
  * Close any visible success/post-apply modal to prevent stale modals during job processing.
  * Uses LinkedIn-specific selectors first, then falls back to generic dismiss patterns.
- *
+ * 
  * Strategy:
  * 1. LinkedIn data-test attribute (most stable)
  * 2. LinkedIn aria-label patterns (accessibility-stable)
@@ -1292,7 +1445,7 @@ function hasVisibleSuccessIndicator(
       '.success-message',
       '.success-message.active',
       '#success-message',
-      '#successMessage', // Mock uses camelCase ID
+      '#successMessage',  // Mock uses camelCase ID
     ];
     for (const selector of explicitSelectors) {
       const el = document.querySelector(selector) as HTMLElement | null;
@@ -1359,7 +1512,7 @@ function hasVisibleSuccessIndicator(
 /**
  * Check if an element is actually rendered and not hidden by styles.
  * This does NOT enforce being in the viewport; viewport checks are done separately.
- *
+ * 
  * NOTE: We do NOT check getBoundingClientRect() dimensions because:
  * 1. In background tabs, Chrome doesn't compute layout (returns 0)
  * 2. CSS property checks are sufficient to detect truly hidden elements
@@ -1388,7 +1541,7 @@ function isElementActuallyVisible(element: HTMLElement): boolean {
   }
 
   // Check 3: aria-hidden attribute on the element itself
-  // Note: We only check the element itself, NOT parents. LinkedIn uses aria-hidden="true"
+  // Note: We only check the element itself, NOT parents. LinkedIn uses aria-hidden="true" 
   // on background content when modals are open (for screen readers), but elements are still
   // visually clickable. Our CSS checks (display, visibility, opacity, dimensions) are sufficient
   // to detect truly hidden elements.
@@ -1402,7 +1555,7 @@ function isElementActuallyVisible(element: HTMLElement): boolean {
 
 /**
  * Check if an element is within the viewport (at least partially visible).
- *
+ * 
  * NOTE: In background tabs, getBoundingClientRect() returns zeros.
  * We assume elements are "in viewport" if we can't determine otherwise,
  * since the CSS visibility checks are more reliable.
@@ -1438,9 +1591,15 @@ function isElementInViewport(element: HTMLElement): boolean {
  * Click an element and track it
  */
 async function clickElement(field: DetectedField, actionType: string): Promise<void> {
+  const elementId = getElementId(field.element);
   const element = field.element;
 
   // Check if already clicked
+  if (navState.clickedElements.has(elementId)) {
+    logger.log('Navigator', `Already clicked ${actionType}, skipping`);
+    console.log(`[Navigator] Already clicked ${actionType}, skipping`);
+    return;
+  }
 
   // Verify element is visible (rendered) and determine viewport status before attempting click
   const isRenderable = isElementActuallyVisible(element);
@@ -1481,8 +1640,13 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
   }
 
   // Mark as clicked BEFORE clicking (to prevent double-clicks)
+  navState.clickedElements.add(elementId);
 
   // Update history
+  const lastHistoryItem = navState.history[navState.history.length - 1];
+  if (lastHistoryItem) {
+    lastHistoryItem.action = actionType;
+  }
 
   // Store current URL before click (for navigation detection)
   const currentUrl = window.location.href;
@@ -1812,4 +1976,30 @@ async function clickElement(field: DetectedField, actionType: string): Promise<v
   throw lastError || new Error(`Failed to click ${actionType} after ${maxRetries} attempts`);
 }
 
+/**
+ * Generate unique ID for an element
+ */
+function getElementId(element: HTMLElement): string {
+  if (element.id) return `id:${element.id} `;
+  if (element.className) return `class:${element.className} `;
+
+  const tagName = element.tagName.toLowerCase();
+  const text = element.textContent?.slice(0, 20) || '';
+
+  return `${tagName}:${text} `;
+}
+
 // DEPRECATED: waitForPageChange() removed - use waitForNavigation(0) instead (event-driven)
+
+/**
+ * Get navigation history for debugging
+ */
+export function getNavigationHistory() {
+  return navState.history.map((h) => ({
+    url: h.url,
+    type: h.classification.type,
+    confidence: h.classification.confidence,
+    action: h.action || 'none',
+    timestamp: new Date(h.timestamp).toISOString(),
+  }));
+}

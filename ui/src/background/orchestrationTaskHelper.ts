@@ -224,6 +224,18 @@ async function clickJobCard(
   }
 
   try {
+    // Dismiss any lingering modals before clicking next job
+    // This prevents "Save this application?" or other modals from blocking the UI
+    console.log('[Orchestrator V2] Dismissing any lingering modals before clicking job card');
+    try {
+      await sendMessageToExecutor(state.tabId, { type: 'CLOSE_MODAL' });
+      // Wait for modal close animation to complete
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } catch (error) {
+      console.warn('[Orchestrator V2] Failed to close modal (non-fatal):', error);
+      // Continue anyway - modal might not exist
+    }
+
     // Send CLICK_JOB_BY_ID command to executor
     const response = await sendMessageToExecutor(state.tabId, {
       type: 'CLICK_JOB_BY_ID',
@@ -817,12 +829,24 @@ async function cleanup(
     }
   }
 
-  // Close ATS tab if it exists
+  // Close ATS tab if it exists (external ATS like Greenhouse, Workday)
   if (atsTabIdToClose) {
     console.log(`[Orchestrator V2] Closing ATS tab ${atsTabIdToClose}`);
     chrome.tabs.remove(atsTabIdToClose).catch((error) => {
       console.warn(`[Orchestrator V2] Failed to close ATS tab ${atsTabIdToClose}:`, error);
     });
+  }
+
+  // Close any open modal on the LinkedIn tab
+  // This prevents stale modals when moving to the next job after errors/skips
+  if (state.tabId) {
+    console.log(`[Orchestrator V2] Closing modal on tab ${state.tabId}`);
+    try {
+      await sendMessageToExecutor(state.tabId, { type: 'CLOSE_MODAL' });
+    } catch (error) {
+      console.warn('[Orchestrator V2] Failed to close modal:', error);
+      // Non-fatal - modal might already be closed or tab might be gone
+    }
   }
 
   // Clean up tab detection mappings
@@ -1014,8 +1038,9 @@ export async function loadVaultData(_state: SequentialJobState): Promise<Partial
       password.substring(0, 10) + '...'
     );
 
-    // Load profile from vault
+    // Load BOTH profile and history stores from vault
     const profile = await backgroundVaultService.load(STORES.profile, password);
+    const history = await backgroundVaultService.load(STORES.history, password);
 
     // Load resume from vault
     const resume = await backgroundVaultService.loadResume(password);
@@ -1030,12 +1055,22 @@ export async function loadVaultData(_state: SequentialJobState): Promise<Partial
       };
     }
 
-    console.log('[Orchestrator V2] Vault data loaded successfully');
+    // Merge history into profile so employment/education/skills data is accessible
+    const mergedProfile = {
+      ...profile,
+      history: history || { employment: [], education: [], skills: [] },
+    };
+
+    console.log('[Orchestrator V2] Vault data loaded successfully', {
+      hasHistory: !!history,
+      employmentCount: mergedProfile.history?.employment?.length || 0,
+      skillsCount: mergedProfile.history?.skills?.length || 0,
+    });
 
     return {
       // NOTE: Do NOT update state with vault data - it should never be stored in state
       data: {
-        vaultProfile: profile,
+        vaultProfile: mergedProfile,
         vaultResume: resume,
       },
     };
@@ -1061,6 +1096,99 @@ export const taskActionParamHandlers: Record<
 // ============================================================================
 // EXPORT SINGLE OBJECT
 // ============================================================================
+/**
+ * Step: FILL_MODAL_PAGE (Recursive)
+ * Execute strictly ONE page action (stateless)
+ * Returns status: 'progressed' | 'completed' | 'blocked'
+ */
+async function executePageAction(
+  state: SequentialJobState,
+  data?: StepOutput | undefined
+): Promise<StepOutput> {
+  console.log('[Orchestrator V2] Step: EXECUTE_PAGE_ACTION');
+
+  if (!state.currentJobId || !state.tabId) {
+    console.error('[Orchestrator V2] Missing currentJobId or tabId');
+    return { data: { actionResult: 'error' } };
+  }
+
+  const vaultProfile = data?.data?.vaultProfile;
+  const vaultResume = data?.data?.vaultResume;
+
+  if (!vaultProfile) {
+    console.error('[Orchestrator V2] Missing vault profile data');
+    return { data: { actionResult: 'error' } };
+  }
+
+  try {
+    console.log('[Orchestrator V2] Sending EXECUTE_PAGE_ACTION to content script');
+    const response = await sendMessageToExecutor(state.tabId, {
+      type: 'EXECUTE_PAGE_ACTION',
+      data: {
+        jobId: state.currentJobId,
+        vaultProfile,
+        vaultResume,
+      },
+    });
+
+    console.log('[Orchestrator V2] Page action response:', response);
+
+    // Map content script result to orchestrator state
+    // Response: { status: 'progressed' | 'completed' | 'blocked', reason?: string }
+    return {
+      state: {
+        fillFormResult: {
+          success: response?.status === 'completed' || response?.status === 'progressed',
+          reason: response?.status,
+          message: response?.reason,
+        },
+      },
+      data: {
+        actionResult: response?.status || 'error',
+        message: response?.reason,
+      },
+    };
+  } catch (error) {
+    console.error('[Orchestrator V2] Error executing page action:', error);
+    return { data: { actionResult: 'error' } };
+  }
+}
+
+/**
+ * Step: WAIT_AND_RETRY_FILL
+ * Wait for page load/transition before looping back
+ */
+async function waitForPageLoad(
+  _state: SequentialJobState,
+  _data?: StepOutput | undefined
+): Promise<StepOutput> {
+  console.log('[Orchestrator V2] Step: WAIT_AND_RETRY_FILL (Sleeping 1s)');
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  return {};
+}
+
+/**
+ * Step: CLEANUP_AND_SKIP
+ * Close modal and advance to next job
+ */
+async function closeModalAndSkip(
+  state: SequentialJobState,
+  _data?: StepOutput | undefined
+): Promise<StepOutput> {
+  console.log('[Orchestrator V2] Step: CLEANUP_AND_SKIP');
+
+  if (state.tabId) {
+    try {
+      // Attempt to close modal
+      await sendMessageToExecutor(state.tabId, { type: 'CLOSE_MODAL' });
+    } catch (e) {
+      console.warn('[Orchestrator V2] Failed to close modal during cleanup:', e);
+    }
+  }
+
+  return { data: { status: 'skipped' } };
+}
+
 export const orchestrationTasks: Record<
   string,
   (state: SequentialJobState, data?: StepOutput | undefined) => Promise<StepOutput>
@@ -1071,7 +1199,10 @@ export const orchestrationTasks: Record<
   clickJobCard,
   verifyJobDetailsLoaded,
   clickApplyButton,
-  fillModalForm,
+  executePageAction, // New
+  waitForPageLoad, // New
+  closeModalAndSkip, // New
+  fillModalForm, // Keep for backward compatibility if needed, or delete? Lets keep but not use.
   openAtsTab,
   waitForAtsReady,
   fillAtsForm,

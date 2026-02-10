@@ -178,10 +178,14 @@ function PreviewMessage({
     message.previewSections = editedSections;
     setIsEditing(false);
     // Pass edited sections to save to draft/vault
+    // Convert string[] values to comma-separated strings for the callback
     onApply?.(
       editedSections.map((section) => ({
         id: section.id,
-        fields: section.fields.map((f) => ({ id: f.id, value: f.value })),
+        fields: section.fields.map((f) => ({
+          id: f.id,
+          value: Array.isArray(f.value) ? f.value.join(', ') : f.value,
+        })),
       }))
     );
   };

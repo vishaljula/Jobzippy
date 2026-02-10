@@ -46,8 +46,8 @@
     {
       "matches": [
         "https://www.linkedin.com/*",
-        "http://localhost:*/mocks/linkedin-jobs.html",
-        "http://localhost:*/mocks/linkedin-easy-apply.html"
+        "http://localhost:*/mocks/linkedin-jobs.html*",
+        "http://localhost:*/mocks/linkedin-easy-apply*.html*"
       ],
       "js": ["content/executor-v2.js"],
       "run_at": "document_idle"
@@ -69,7 +69,8 @@
         "https://*.icims.com/*",
         "https://*.taleo.net/*",
         "http://localhost:*/mocks/greenhouse-apply.html",
-        "http://localhost:*/mocks/*-apply.html"
+        "http://localhost:*/mocks/*-apply.html",
+        "http://localhost:*/mocks/*-form.html"
       ],
       "js": ["content/executor-v2.js"],
       "run_at": "document_idle"

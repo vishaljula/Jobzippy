@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Easy Apply - Multi-Page Flow | LinkedIn Mock</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f3f2ef;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal {
+      background: white;
+      border-radius: 8px;
+      width: 600px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .dismiss-btn {
+      background: none;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .dismiss-btn:hover { background: #f3f2ef; }
+    .progress-bar {
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .progress-bar progress {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      appearance: none;
+    }
+    .progress-bar progress::-webkit-progress-bar {
+      background: #e0e0e0;
+      border-radius: 2px;
+    }
+    .progress-bar progress::-webkit-progress-value {
+      background: #0a66c2;
+      border-radius: 2px;
+    }
+    .progress-text {
+      font-size: 14px;
+      color: #666;
+    }
+    .modal-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #333;
+    }
+    .form-group label.required::after {
+      content: ' *';
+      color: #cc1016;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #0a66c2;
+      box-shadow: 0 0 0 1px #0a66c2;
+    }
+    .contact-card {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background: #f8f8f8;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .contact-card img {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #ddd;
+    }
+    .contact-info h4 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .contact-info p {
+      font-size: 13px;
+      color: #666;
+    }
+    .resume-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .resume-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .resume-card.selected {
+      border-color: #0a66c2;
+      background: #f0f7ff;
+    }
+    .resume-card input[type="radio"] {
+      width: auto;
+      margin-right: 8px;
+    }
+    .resume-meta {
+      flex: 1;
+    }
+    .resume-meta h5 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .resume-meta p {
+      font-size: 12px;
+      color: #666;
+    }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer-info {
+      font-size: 12px;
+      color: #666;
+    }
+    .footer-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-secondary {
+      background: white;
+      color: #666;
+      border: 1px solid #666;
+    }
+    .btn-secondary:hover {
+      background: #f3f2ef;
+    }
+    .btn-primary {
+      background: #0a66c2;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #004182;
+    }
+    .page { display: none; }
+    .page.active { display: block; }
+    .review-section {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: #f8f8f8;
+      border-radius: 8px;
+    }
+    .review-section h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    .review-section p {
+      font-size: 14px;
+      color: #666;
+    }
+    .file-upload {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+    .file-upload:hover {
+      border-color: #0a66c2;
+      background: #f0f7ff;
+    }
+    .file-upload input {
+      display: none;
+    }
+    .job-description {
+      background: #f8f8f8;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .job-description h3 {
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="job-description" id="jobDescriptionSection">
+    <h3 class="jobs-unified-top-card__job-title">Senior Frontend Developer</h3>
+    <div class="job-meta">Skyrocket Ventures • San Francisco, CA • Full-time</div>
+    <p style="margin-top: 12px;">
+      We are looking for an experienced Senior Frontend Developer to join our growing team.
+      You will be responsible for building modern, scalable web applications using Angular, React, and TypeScript.
+      The ideal candidate has 5+ years of experience in frontend development and strong problem-solving skills.
+      Experience with state management (Redux, NgRx), unit testing, and CI/CD pipelines is highly valued.
+    </p>
+  </div>
+
+  <div class="modal-overlay" data-test-modal="" role="dialog">
+    <div class="modal jobs-easy-apply-modal" data-test-easy-apply-modal="">
+      <div class="modal-header artdeco-modal__header">
+        <h2 id="jobs-apply-header">Apply to Skyrocket Ventures</h2>
+        <button class="dismiss-btn" aria-label="Dismiss" data-test-modal-close-btn="">×</button>
+      </div>
+
+      <div class="progress-bar">
+        <progress id="progressBar" max="100" value="0"></progress>
+        <span class="progress-text" id="progressText">0%</span>
+      </div>
+
+      <div class="modal-content jobs-easy-apply-modal__content">
+        <!-- Page 1: Contact Info -->
+        <div class="page active" id="page1">
+          <h3 class="section-title">Contact info</h3>
+          <div class="contact-card">
+            <img src="" alt="Profile" id="profileImg">
+            <div class="contact-info">
+              <h4 id="displayName">Applicant Name</h4>
+              <p id="displayTitle">Job Title at Company</p>
+              <p id="displayLocation">Location</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="required fb-dash-form-element__label" data-test-text-entity-list-form-title="">Email</label>
+            <input type="email" name="email" required placeholder="your.email@example.com" class="artdeco-text-input--input">
+          </div>
+
+          <div class="form-group">
+            <label class="required fb-dash-form-element__label" data-test-text-entity-list-form-title="">Phone country code</label>
+            <select name="phoneCountryCode" required data-test-text-entity-list-form-select="">
+              <option value="">Select an option</option>
+              <option value="United States (+1)">United States (+1)</option>
+              <option value="United Kingdom (+44)">United Kingdom (+44)</option>
+              <option value="Canada (+1)">Canada (+1)</option>
+              <option value="Australia (+61)">Australia (+61)</option>
+              <option value="India (+91)">India (+91)</option>
+              <option value="Germany (+49)">Germany (+49)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="required" data-test-single-line-text-form-title="">Mobile phone number</label>
+            <input type="tel" name="phone" required placeholder="(555) 123-4567" data-test-single-line-text-input="">
+          </div>
+        </div>
+
+        <!-- Page 2: Resume -->
+        <div class="page" id="page2">
+          <h3 class="section-title">Resume</h3>
+          <p style="margin-bottom: 16px; font-size: 14px; color: #666;">Be sure to include an updated resume *</p>
+          
+          <div class="resume-cards">
+            <label class="resume-card selected">
+              <input type="radio" name="resumeSelection" value="existing" checked>
+              <div class="resume-meta">
+                <h5>My_Resume.pdf</h5>
+                <p>Last used recently</p>
+              </div>
+            </label>
+          </div>
+
+          <div class="file-upload" onclick="document.getElementById('resumeUpload').click()">
+            <p>📄 Upload resume</p>
+            <p style="font-size: 12px; color: #666;">PDF, DOC, DOCX (5MB max)</p>
+            <input type="file" id="resumeUpload" name="resume" accept=".pdf,.doc,.docx">
+          </div>
+        </div>
+
+        <!-- Page 3: Additional Questions -->
+        <div class="page" id="page3">
+          <h3 class="section-title">Additional Questions</h3>
+
+          <div class="form-group">
+            <label class="required artdeco-text-input--label" for="yearsExperience">
+              How many years of professional experience do you have as a front end engineer using Angular?
+            </label>
+            <input type="text" id="yearsExperience" name="yearsExperience" required placeholder="e.g., 5" class="artdeco-text-input--input">
+          </div>
+
+          <div class="form-group">
+            <label class="required artdeco-text-input--label" for="salary">
+              How much annual cash compensation do you require?
+            </label>
+            <input type="text" id="salary" name="salary" required placeholder="e.g., 150000" class="artdeco-text-input--input">
+          </div>
+
+          <div class="form-group">
+            <label class="required" for="workAuth">
+              Are you legally authorized to work in the United States?
+            </label>
+            <select id="workAuth" name="workAuth" required>
+              <option value="">Select an option</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="required" for="sponsorship">
+              Will you now or in the future require sponsorship for employment visa status?
+            </label>
+            <select id="sponsorship" name="sponsorship" required>
+              <option value="">Select an option</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Page 4: Review -->
+        <div class="page" id="page4">
+          <h3 class="section-title">Review your application</h3>
+
+          <div class="review-section">
+            <h4>Contact info</h4>
+            <p id="reviewContact">Loading...</p>
+          </div>
+
+          <div class="review-section">
+            <h4>Resume</h4>
+            <p id="reviewResume">Loading...</p>
+          </div>
+
+          <div class="review-section">
+            <h4>Additional Questions</h4>
+            <div id="reviewQuestions"></div>
+          </div>
+
+          <p style="font-size: 12px; color: #666; margin-top: 20px;">
+            By clicking Submit application, you agree to LinkedIn's User Agreement and Privacy Policy.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="footer-info">
+          <p>Submitting this application won't change your LinkedIn profile.</p>
+        </div>
+        <div class="footer-buttons">
+          <button class="btn btn-secondary" id="backBtn" style="display: none;">Back</button>
+          <button class="btn btn-primary" id="nextBtn" data-easy-apply-next-button="">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPage = 1;
+    const totalPages = 4;
+    const progressPerPage = [0, 33, 67, 100];
+
+    // Initialize page
+    function init() {
+      updateProgress();
+      updateButtons();
+    }
+
+    function updateProgress() {
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      const progress = progressPerPage[currentPage - 1];
+      progressBar.value = progress;
+      progressText.textContent = progress + '%';
+    }
+
+    function updateButtons() {
+      const backBtn = document.getElementById('backBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      
+      backBtn.style.display = currentPage > 1 ? 'inline-block' : 'none';
+      
+      if (currentPage === 3) {
+        nextBtn.textContent = 'Review';
+        nextBtn.setAttribute('data-live-test-easy-apply-review-button', '');
+        nextBtn.removeAttribute('data-easy-apply-next-button');
+      } else if (currentPage === 4) {
+        nextBtn.textContent = 'Submit application';
+        nextBtn.setAttribute('data-live-test-easy-apply-submit-button', '');
+        nextBtn.removeAttribute('data-live-test-easy-apply-review-button');
+      } else {
+        nextBtn.textContent = 'Next';
+        nextBtn.setAttribute('data-easy-apply-next-button', '');
+        nextBtn.removeAttribute('data-live-test-easy-apply-review-button');
+        nextBtn.removeAttribute('data-live-test-easy-apply-submit-button');
+      }
+    }
+
+    function showPage(pageNum) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page' + pageNum).classList.add('active');
+      currentPage = pageNum;
+      updateProgress();
+      updateButtons();
+      
+      if (pageNum === 4) {
+        populateReview();
+      }
+    }
+
+    function populateReview() {
+      // Contact info
+      const email = document.querySelector('input[name="email"]').value;
+      const phone = document.querySelector('input[name="phone"]').value;
+      document.getElementById('reviewContact').textContent = `${email} • ${phone}`;
+      
+      // Resume
+      document.getElementById('reviewResume').textContent = 'My_Resume.pdf';
+      
+      // Questions
+      const yearsExp = document.getElementById('yearsExperience').value;
+      const salary = document.getElementById('salary').value;
+      const workAuth = document.getElementById('workAuth').value;
+      const sponsorship = document.getElementById('sponsorship').value;
+      
+      document.getElementById('reviewQuestions').innerHTML = `
+        <p style="margin: 4px 0;">Years of Angular experience: ${yearsExp}</p>
+        <p style="margin: 4px 0;">Annual compensation: $${salary}</p>
+        <p style="margin: 4px 0;">Work authorization: ${workAuth}</p>
+        <p style="margin: 4px 0;">Requires sponsorship: ${sponsorship}</p>
+      `;
+    }
+
+    function validatePage() {
+      const page = document.getElementById('page' + currentPage);
+      const requiredFields = page.querySelectorAll('[required]');
+      let valid = true;
+      
+      requiredFields.forEach(field => {
+        if (!field.value || field.value === '') {
+          valid = false;
+          field.style.borderColor = '#cc1016';
+        } else {
+          field.style.borderColor = '#ccc';
+        }
+      });
+      
+      return valid;
+    }
+
+    function submitApplication() {
+      // Capture ALL inputs from ALL pages dynamically (they're all in DOM, just hidden)
+      const answers = {};
+      document.querySelectorAll('input, select, textarea').forEach(el => {
+        const key = el.name || el.id;
+        if (key && el.value !== undefined && el.value !== '') {
+          answers[key] = el.value;
+        }
+      });
+
+      const formData = {
+        atsType: 'linkedin_modal_multipage',
+        jobId: new URLSearchParams(window.location.search).get('job') || 'unknown',
+        url: window.location.href,
+        company: 'Skyrocket Ventures',
+        title: 'Senior Frontend Developer',
+        submittedAt: new Date().toISOString(),
+        answers: answers
+      };
+
+      // Post to mock server
+      fetch('/mocks/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log('Mock submission recorded:', data);
+        // Show success message
+        document.querySelector('.modal-content').innerHTML = `
+          <div style="text-align: center; padding: 40px;">
+            <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+            <h2 style="margin-bottom: 12px;">Application submitted!</h2>
+            <p style="color: #666;">Your application for Senior Frontend Developer at Skyrocket Ventures has been submitted.</p>
+          </div>
+        `;
+        document.querySelector('.modal-footer').innerHTML = `
+          <div class="footer-buttons" style="width: 100%; justify-content: center;">
+            <button class="btn btn-primary" onclick="window.close()">Done</button>
+          </div>
+        `;
+      })
+      .catch(err => {
+        console.error('Submit error:', err);
+        alert('Application submitted (mock)');
+      });
+    }
+
+    // Event listeners
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (!validatePage()) {
+        return;
+      }
+      
+      if (currentPage < totalPages) {
+        showPage(currentPage + 1);
+      } else {
+        submitApplication();
+      }
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      if (currentPage > 1) {
+        showPage(currentPage - 1);
+      }
+    });
+
+    // Dismiss button
+    document.querySelector('.dismiss-btn').addEventListener('click', () => {
+      if (confirm('Are you sure you want to discard your progress?')) {
+        window.close();
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
+

@@ -68,9 +68,46 @@ export const taskOrchestrationMapper: Record<
   },
   FILL_MODAL_FORM: {
     name: 'FILL_MODAL_FORM',
-    nextStep: 'PERSIST_COMPLETION',
-    action: 'fillModalForm',
-    customActionParams: 'loadVaultData', // Pull vault data before filling form
+    nextStep: {
+      conditions: [
+        {
+          prop: 'data.actionResult',
+          val: 'progressed',
+          step: 'WAIT_AND_RETRY_FILL', // Loop back via wait step
+        },
+        {
+          prop: 'data.actionResult',
+          val: 'completed',
+          step: 'PERSIST_COMPLETION', // Exit loop
+        },
+        {
+          prop: 'data.actionResult',
+          val: 'manual_intervention',
+          step: 'PAUSE_FOR_USER', // Or cleanup/skip
+        },
+        {
+          prop: 'data.actionResult',
+          val: 'failed',
+          step: 'CLEANUP_AND_SKIP', // Explicit failure should fast-fail
+        },
+      ],
+      // If we didn't find an action (e.g. page loading, or review page not fully ready),
+      // don't give up immediately. Retry a few times.
+      // The Orchestrator maxStepLimit will prevent infinite loops.
+      defaultStep: 'WAIT_AND_RETRY_FILL',
+    },
+    action: 'executePageAction', // New atomic action (stateless)
+    customActionParams: 'loadVaultData', // Pull vault data before filling
+  },
+  WAIT_AND_RETRY_FILL: {
+    name: 'WAIT_AND_RETRY_FILL',
+    nextStep: 'FILL_MODAL_FORM', // Recursive loop
+    action: 'waitForPageLoad', // Wait for DOM stability/navigation
+  },
+  CLEANUP_AND_SKIP: {
+    name: 'CLEANUP_AND_SKIP',
+    nextStep: 'SKIP_TO_NEXT_JOB',
+    action: 'closeModalAndSkip', // Explicit cleanup
   },
   WAIT_FOR_ATS_READY: {
     name: 'WAIT_FOR_ATS_READY',

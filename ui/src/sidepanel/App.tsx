@@ -797,22 +797,24 @@ function App() {
     const results = { linkedin: false, indeed: false };
     const openedTabIds: number[] = [];
 
-    // Build search URLs first
+    // Build search URLs first using onboarding preferences
     let urls: { linkedin?: string; indeed?: string } = {};
     try {
-      const [{ deriveVaultPassword }, { vaultService }, { VAULT_STORES }, { buildSearchUrls }] =
-        await Promise.all([
-          import('@/lib/vault/utils'),
-          import('@/lib/vault/service'),
-          import('@/lib/vault/constants'),
-          import('@/lib/jobs/search'),
-        ]);
-      const password = deriveVaultPassword(user);
-      const [profile, history] = await Promise.all([
-        vaultService.load(VAULT_STORES.profile, password).catch(() => null),
-        vaultService.load(VAULT_STORES.history, password).catch(() => null),
+      const [
+        { deriveVaultPassword },
+        { vaultService },
+        { VAULT_STORES },
+        { buildLinkedInUrlWithFilters },
+      ] = await Promise.all([
+        import('@/lib/vault/utils'),
+        import('@/lib/vault/service'),
+        import('@/lib/vault/constants'),
+        import('@/lib/jobs/search'),
       ]);
-      urls = buildSearchUrls(profile, history);
+      const password = deriveVaultPassword(user);
+      const profile = await vaultService.load(VAULT_STORES.profile, password).catch(() => null);
+      // Use the new filter-based URL builder that uses onboarding preferences
+      urls = { linkedin: buildLinkedInUrlWithFilters(profile) };
     } catch {
       // ignore URL build errors; we'll still check auth
     }
@@ -1162,7 +1164,11 @@ function App() {
     return (
       <>
         {neonToaster}
-        <PricingWelcome onStartTrial={handleStartTrial} loading={checkoutLoading} />
+        <PricingWelcome
+          onStartTrial={handleStartTrial}
+          onSignIn={() => setShowPricing(false)}
+          loading={checkoutLoading}
+        />
       </>
     );
   }

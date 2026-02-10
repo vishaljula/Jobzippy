@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Easy Apply - Comprehensive (AI Innovations)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f2ef;
+        }
+
+        .a11y-text,
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+
+        /* Modal overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        /* LinkedIn Modal Styles */
+        .artdeco-modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .artdeco-modal__header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .artdeco-modal__header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.9);
+        }
+
+        .artdeco-modal__dismiss {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: rgba(0, 0, 0, 0.6);
+            padding: 8px;
+            border-radius: 50%;
+        }
+
+        .artdeco-modal__dismiss:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .artdeco-modal__content {
+            overflow-y: auto;
+            max-height: calc(90vh - 140px);
+        }
+
+        /* Progress bar */
+        .artdeco-completeness-meter-linear__progress-container {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .artdeco-completeness-meter-linear__progress-element {
+            height: 100%;
+            background: #0a66c2;
+            transition: width 0.3s;
+        }
+
+        .display-flex {
+            display: flex;
+        }
+
+        .ph5 {
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+
+        .pv2 {
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+
+        .pv4 {
+            padding-top: 16px;
+            padding-bottom: 16px;
+        }
+
+        .pl3 {
+            padding-left: 12px;
+        }
+
+        .mt1 {
+            margin-top: 4px;
+        }
+
+        .mt3 {
+            margin-top: 12px;
+        }
+
+        .mt4 {
+            margin-top: 16px;
+        }
+
+        .mr2 {
+            margin-right: 8px;
+        }
+
+        .t-12 {
+            font-size: 12px;
+        }
+
+        .t-14 {
+            font-size: 14px;
+        }
+
+        .t-16 {
+            font-size: 16px;
+        }
+
+        .t-bold {
+            font-weight: 600;
+        }
+
+        .t-black--light {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        /* Form elements */
+        .fb-dash-form-element {
+            margin-bottom: 0;
+        }
+
+        .fb-dash-form-element__label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.9);
+            margin-bottom: 4px;
+        }
+
+        .fb-dash-form-element__label-title--is-required::after {
+            content: ' *';
+            color: #cc1016;
+        }
+
+        .fb-dash-form-element__select-dropdown,
+        .artdeco-text-input--input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid rgba(0, 0, 0, 0.6);
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+        }
+
+        .artdeco-text-input--input:focus,
+        .fb-dash-form-element__select-dropdown:focus {
+            outline: none;
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 1px #0a66c2;
+        }
+
+        .artdeco-text-input--label {
+            display: block;
+            font-size: 14px;
+            font-weight: 400;
+            color: rgba(0, 0, 0, 0.9);
+            margin-bottom: 4px;
+        }
+
+        /* Radio buttons */
+        .fb-form-element__checkbox {
+            margin-right: 8px;
+        }
+
+        /* Textarea */
+        textarea.artdeco-text-input--input {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        /* Buttons */
+        .artdeco-button {
+            padding: 10px 24px;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+
+        .artdeco-button--primary {
+            background: #0a66c2;
+            color: white;
+        }
+
+        .artdeco-button--primary:hover {
+            background: #004182;
+        }
+
+        .artdeco-button--tertiary {
+            background: transparent;
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .artdeco-button--tertiary:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .justify-flex-end {
+            justify-content: flex-end;
+        }
+
+        /* Footer */
+        .jobs-easy-apply-footer__info {
+            padding: 16px 24px;
+            background: #f8f9fa;
+        }
+
+        /* Form step visibility */
+        .form-step {
+            display: none;
+        }
+
+        .form-step.active {
+            display: block;
+        }
+
+        /* Success message */
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 48px 24px;
+        }
+
+        .success-message.active {
+            display: block;
+        }
+
+        .success-icon {
+            width: 64px;
+            height: 64px;
+            background: #057642;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            color: white;
+            font-size: 32px;
+        }
+
+        /* Resume card */
+        .jobs-document-upload-redesign-card__container {
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .jobs-document-upload-redesign-card__container--selected {
+            border-color: #0a66c2;
+            background: #f0f7ff;
+        }
+
+        .jobs-document-upload__upload-button {
+            display: inline-block;
+            padding: 8px 16px;
+            border: 1px solid #0a66c2;
+            border-radius: 24px;
+            color: #0a66c2;
+            font-weight: 600;
+            cursor: pointer;
+            background: white;
+        }
+
+        .jobs-document-upload__upload-button:hover {
+            background: #f0f7ff;
+        }
+
+        /* Hide file input */
+        input[type="file"].hidden {
+            display: none;
+        }
+
+        /* Resume Selection Cards */
+        .jobs-document-upload-redesign-card__container {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            background: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .jobs-document-upload-redesign-card__container--cursor-pointer {
+            cursor: pointer;
+        }
+
+        .jobs-document-upload-redesign-card__container--cursor-pointer:hover {
+            background: #f3f2ef;
+            border-color: #0a66c2;
+        }
+
+        .jobs-document-upload-redesign-card__container--selected {
+            border-color: #0a66c2;
+            background: #eef3f8;
+        }
+
+        .jobs-document-upload-redesign-card__header {
+            flex: 1;
+        }
+
+        .jobs-document-upload-redesign-card__file-name {
+            margin-bottom: 4px;
+        }
+
+        .jobs-document-upload-redesign-card__divider {
+            width: 1px;
+            height: 24px;
+            background: #e0e0e0;
+            margin: 0 8px;
+        }
+
+        .jobs-document-upload-redesign-card__toggle-label {
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+        }
+
+        .jobs-document-upload-redesign-card__toggle-label:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .jobs-document-upload-redesign-card__download-button,
+        .jobs-document-upload-redesign-card__action-button {
+            padding: 8px;
+            min-width: 32px;
+            height: 32px;
+        }
+
+        /* Confirmation Dialog Overlay */
+        .artdeco-modal-overlay--layer-confirmation {
+            z-index: 2000 !important;
+        }
+
+        .artdeco-modal--layer-confirmation {
+            max-width: 400px;
+        }
+
+        .artdeco-modal__actionbar--confirm-dialog {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .artdeco-button--secondary {
+            background: transparent;
+            color: #0a66c2;
+            border: 1px solid #0a66c2;
+        }
+
+        .artdeco-button--secondary:hover {
+            background: #eef3f8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="modal-overlay">
+        <!-- LinkedIn Easy Apply Modal - Uses real LinkedIn selectors -->
+        <div data-test-modal="" role="dialog" tabindex="-1"
+            class="artdeco-modal artdeco-modal--layer-default jobs-easy-apply-modal" size="large"
+            aria-labelledby="jobs-apply-header">
+            <span class="a11y-text">Dialog content start.</span>
+
+            <button aria-label="Dismiss"
+                class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary ember-view artdeco-modal__dismiss"
+                data-test-modal-close-btn="">
+                ✕
+            </button>
+
+            <div class="artdeco-modal__header ember-view">
+                <h2 id="jobs-apply-header">Apply to AI Innovations</h2>
+            </div>
+
+            <div class="artdeco-modal__content jobs-easy-apply-modal__content p0 ember-view">
+                <div tabindex="-1" aria-label="Your job application progress" role="region">
+                    <div class="display-flex ph5 pv2">
+                        <div class="flex-grow-1 artdeco-completeness-meter-linear ember-view" style="flex: 1;">
+                            <div class="artdeco-completeness-meter-linear__progress-container">
+                                <div class="artdeco-completeness-meter-linear__progress-element" id="progressBar"
+                                    style="width: 0%;"></div>
+                            </div>
+                        </div>
+                        <span class="pl3 t-14 t-black--light" role="note" id="progressText">0%</span>
+                    </div>
+
+                    <div>
+                        <form id="easyApplyForm">
+                            <!-- ============================================ -->
+                            <!-- STEP 1: Contact Info (0%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step active" data-step="1">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Contact info</h3>
+
+                                        <!-- Email Select -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-text-entity-list-form-component="">
+                                                    <label for="email-select"
+                                                        class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required"
+                                                        data-test-text-entity-list-form-title="">
+                                                        <span aria-hidden="true">Email address</span>
+                                                    </label>
+                                                    <select id="email-select" name="email"
+                                                        class="fb-dash-form-element__select-dropdown"
+                                                        aria-required="true" required=""
+                                                        data-test-text-entity-list-form-select="">
+                                                        <option value="Select an option">Select an option</option>
+                                                        <option value="test@example.com">test@example.com</option>
+                                                        <option value="another@email.com">another@email.com</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Phone Country Code Select -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-text-entity-list-form-component="">
+                                                    <label for="phone-country"
+                                                        class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required"
+                                                        data-test-text-entity-list-form-title="">
+                                                        <span aria-hidden="true">Phone country code</span>
+                                                    </label>
+                                                    <select id="phone-country" name="phoneCountry"
+                                                        class="fb-dash-form-element__select-dropdown"
+                                                        aria-required="true" required=""
+                                                        data-test-text-entity-list-form-select="">
+                                                        <option value="Select an option">Select an option</option>
+                                                        <option value="United States (+1)">United States (+1)</option>
+                                                        <option value="Canada (+1)">Canada (+1)</option>
+                                                        <option value="United Kingdom (+44)">United Kingdom (+44)
+                                                        </option>
+                                                        <option value="India (+91)">India (+91)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Phone Number Input -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component=""
+                                                    data-live-test-single-line-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--type-text artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="phone-number"
+                                                                class="artdeco-text-input--label">Mobile phone
+                                                                number</label>
+                                                            <input inputmode="text" class="artdeco-text-input--input"
+                                                                id="phone-number" name="phone" required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ============================================ -->
+                            <!-- STEP 2: Resume (16%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="2">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Resume</h3>
+
+                                        <div class="full-width mt1 full-width display-flex flex-column">
+                                            <span class="t-14 jobs-document-upload__title--is-required">
+                                                Be sure to include an updated resume
+                                            </span>
+                                            <div class="mt2">
+                                                <!-- Resume Card 1 - Selected -->
+                                                <div class="ui-attachment jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--cursor-pointer jobs-document-upload-redesign-card__container--selected ui-attachment--pdf"
+                                                    tabindex="0" aria-label="Selected">
+                                                    <p class="jobs-document-upload-redesign-card__header truncate"
+                                                        aria-labelledby="jobsDocumentCardToggleLabel-ember444">
+                                                    <h3
+                                                        class="t-12 t-bold jobs-document-upload-redesign-card__file-name truncate">
+                                                        AdityaVishalCV2026.pdf
+                                                    </h3>
+                                                    <p class="pt1 t-12 t-black--light">
+                                                        170 KB · Last used on 1/21/2026
+                                                    </p>
+                                                    </p>
+                                                    <div class="display-flex flex-direction-row">
+                                                        <button aria-label="Download resume AdityaVishalCV2026.pdf"
+                                                            class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary jobs-document-upload-redesign-card__download-button jobs-document-upload-redesign-card__action-button"
+                                                            type="button">
+                                                            <span class="artdeco-button__text">⬇</span>
+                                                        </button>
+                                                        <div class="jobs-document-upload-redesign-card__divider"></div>
+                                                        <input id="jobsDocumentCardToggle-ember444" type="radio"
+                                                            name="resume" value="resume1" checked
+                                                            style="position: absolute; opacity: 0;">
+                                                        <label id="jobsDocumentCardToggleLabel-ember444"
+                                                            class="jobs-document-upload-redesign-card__toggle-label t-bold"
+                                                            for="jobsDocumentCardToggle-ember444">
+                                                            <span class="a11y-text">Deselect resume
+                                                                AdityaVishalCV2026.pdf</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Resume Card 2 - Not Selected -->
+                                                <div class="ui-attachment jobs-document-upload-redesign-card__container jobs-document-upload-redesign-card__container--cursor-pointer ui-attachment--pdf mt2"
+                                                    tabindex="0" aria-label="Select this resume">
+                                                    <p class="jobs-document-upload-redesign-card__header truncate"
+                                                        aria-labelledby="jobsDocumentCardToggleLabel-ember446">
+                                                    <h3
+                                                        class="t-12 t-bold jobs-document-upload-redesign-card__file-name truncate">
+                                                        AdityaVishal_CV_03:2022.pdf
+                                                    </h3>
+                                                    <p class="pt1 t-12 t-black--light">
+                                                        53 KB · Last used on 1/20/2026
+                                                    </p>
+                                                    </p>
+                                                    <div class="display-flex flex-direction-row">
+                                                        <button aria-label="Download resume AdityaVishal_CV_03:2022.pdf"
+                                                            class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary jobs-document-upload-redesign-card__download-button jobs-document-upload-redesign-card__action-button"
+                                                            type="button">
+                                                            <span class="artdeco-button__text">⬇</span>
+                                                        </button>
+                                                        <div class="jobs-document-upload-redesign-card__divider"></div>
+                                                        <input id="jobsDocumentCardToggle-ember446" type="radio"
+                                                            name="resume" value="resume2"
+                                                            style="position: absolute; opacity: 0;">
+                                                        <label id="jobsDocumentCardToggleLabel-ember446"
+                                                            class="jobs-document-upload-redesign-card__toggle-label t-bold"
+                                                            for="jobsDocumentCardToggle-ember446">
+                                                            <span class="a11y-text">Select resume
+                                                                AdityaVishal_CV_03:2022.pdf</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Upload button -->
+                                            <div class="display-flex mt3">
+                                                <div class="js-jobs-document-upload__container display-flex flex-wrap"
+                                                    tabindex="-1">
+                                                    <label
+                                                        class="jobs-document-upload__upload-button artdeco-button artdeco-button--secondary artdeco-button--2 mt2"
+                                                        for="resume-upload" tabindex="0">
+                                                        <span role="button"
+                                                            aria-label="Upload resume button. Only, DOC, DOCX, PDF formats are supported. Max file size is (2 MB).">
+                                                            Upload resume
+                                                        </span>
+                                                    </label>
+                                                    <input name="file" class="hidden" id="resume-upload"
+                                                        accept="application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+                                                        type="file">
+                                                    <p class="jobs-document-upload__format-text t-12 t-black--light full-width"
+                                                        aria-hidden="true">
+                                                        DOC, DOCX, PDF (2 MB)
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ============================================ -->
+                            <!-- STEP 3: Additional Questions - Technical (32%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="3">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Additional Questions</h3>
+
+                                        <!-- Years with React (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component=""
+                                                    data-live-test-single-line-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="react-years"
+                                                                class="artdeco-text-input--label">How many years of work
+                                                                experience do you have with React?</label>
+                                                            <input inputmode="numeric" class="artdeco-text-input--input"
+                                                                id="react-years" name="reactYears" required=""
+                                                                type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Years with TypeScript (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component=""
+                                                    data-live-test-single-line-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="typescript-years"
+                                                                class="artdeco-text-input--label">How many years of work
+                                                                experience do you have with TypeScript?</label>
+                                                            <input inputmode="numeric" class="artdeco-text-input--input"
+                                                                id="typescript-years" name="typescriptYears" required=""
+                                                                type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bachelor's Degree Question (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <fieldset data-test-form-builder-radio-button-form-component="true">
+                                                    <legend>
+                                                        <span
+                                                            class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                                                            <span aria-hidden="true">Have you completed the following
+                                                                level of education: Bachelor's Degree?</span>
+                                                        </span>
+                                                    </legend>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="Yes"
+                                                            class="fb-form-element__checkbox" name="bachelors"
+                                                            aria-required="true" type="radio" value="Yes"
+                                                            id="bachelors-yes">
+                                                        <label data-test-text-selectable-option__label="Yes"
+                                                            for="bachelors-yes" class="t-14">Yes</label>
+                                                    </div>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="No"
+                                                            class="fb-form-element__checkbox" name="bachelors"
+                                                            aria-required="true" type="radio" value="No"
+                                                            id="bachelors-no">
+                                                        <label data-test-text-selectable-option__label="No"
+                                                            for="bachelors-no" class="t-14">No</label>
+                                                    </div>
+                                                </fieldset>
+                                            </div>
+                                        </div>
+
+                                        <!-- Comfortable with Travel (LLM REQUIRED - unknown pattern) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <fieldset data-test-form-builder-radio-button-form-component="true">
+                                                    <legend>
+                                                        <span
+                                                            class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                                                            <span aria-hidden="true">This role may require occasional
+                                                                travel (up to 25%). Is this acceptable to you?</span>
+                                                        </span>
+                                                    </legend>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="Yes"
+                                                            class="fb-form-element__checkbox" name="travelOk"
+                                                            aria-required="true" type="radio" value="Yes"
+                                                            id="travel-yes">
+                                                        <label data-test-text-selectable-option__label="Yes"
+                                                            for="travel-yes" class="t-14">Yes</label>
+                                                    </div>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="No"
+                                                            class="fb-form-element__checkbox" name="travelOk"
+                                                            aria-required="true" type="radio" value="No" id="travel-no">
+                                                        <label data-test-text-selectable-option__label="No"
+                                                            for="travel-no" class="t-14">No</label>
+                                                    </div>
+                                                </fieldset>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ============================================ -->
+                            <!-- STEP 4: Work Authorization (48%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="4">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Work authorization</h3>
+                                        <p class="t-14 t-black--light mt1">
+                                            Not sure how to answer the following questions? <a href="#">Learn More.</a>
+                                        </p>
+
+                                        <!-- Work Authorization (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <fieldset data-test-form-builder-radio-button-form-component="true">
+                                                    <legend>
+                                                        <span
+                                                            class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                                                            <span aria-hidden="true">Are you legally authorized to work
+                                                                in the United States?</span>
+                                                        </span>
+                                                    </legend>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="Yes"
+                                                            class="fb-form-element__checkbox" name="workAuth"
+                                                            aria-required="true" type="radio" value="Yes"
+                                                            id="workAuth-yes">
+                                                        <label data-test-text-selectable-option__label="Yes"
+                                                            for="workAuth-yes" class="t-14">Yes</label>
+                                                    </div>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="No"
+                                                            class="fb-form-element__checkbox" name="workAuth"
+                                                            aria-required="true" type="radio" value="No"
+                                                            id="workAuth-no">
+                                                        <label data-test-text-selectable-option__label="No"
+                                                            for="workAuth-no" class="t-14">No</label>
+                                                    </div>
+                                                </fieldset>
+                                            </div>
+                                        </div>
+
+                                        <!-- Sponsorship (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <fieldset data-test-form-builder-radio-button-form-component="true">
+                                                    <legend>
+                                                        <span
+                                                            class="fb-dash-form-element__label fb-dash-form-element__label-title--is-required">
+                                                            <span aria-hidden="true">Will you now, or in the future,
+                                                                require sponsorship for employment visa status (e.g.
+                                                                H-1B visa status)?</span>
+                                                        </span>
+                                                    </legend>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="Yes"
+                                                            class="fb-form-element__checkbox" name="sponsorship"
+                                                            aria-required="true" type="radio" value="Yes"
+                                                            id="sponsor-yes">
+                                                        <label data-test-text-selectable-option__label="Yes"
+                                                            for="sponsor-yes" class="t-14">Yes</label>
+                                                    </div>
+                                                    <div class="display-flex mt1">
+                                                        <input data-test-text-selectable-option__input="No"
+                                                            class="fb-form-element__checkbox" name="sponsorship"
+                                                            aria-required="true" type="radio" value="No"
+                                                            id="sponsor-no">
+                                                        <label data-test-text-selectable-option__label="No"
+                                                            for="sponsor-no" class="t-14">No</label>
+                                                    </div>
+                                                </fieldset>
+                                            </div>
+                                        </div>
+
+                                        <!-- Salary Expectation (LOCAL answerable) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component=""
+                                                    data-live-test-single-line-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="salary-expectation"
+                                                                class="artdeco-text-input--label">What is your expected
+                                                                annual base salary (USD)?</label>
+                                                            <input inputmode="numeric" class="artdeco-text-input--input"
+                                                                id="salary-expectation" name="salaryExpectation"
+                                                                required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ============================================ -->
+                            <!-- STEP 5: Open-Ended Questions (64%) - LLM REQUIRED -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="5">
+                                <div class="ph5">
+                                    <div class="zzijRTWTBxoqIkKryXARGkXMSVkWLFlnFHMTY">
+                                        <h3 class="t-16 t-bold">Tell Us More</h3>
+                                        <p class="t-14 t-black--light mt1">
+                                            Please provide thoughtful responses to help us understand your background
+                                            better.
+                                        </p>
+
+                                        <!-- Why interested? (LLM REQUIRED) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-multiline-text-form-component=""
+                                                    data-live-test-multiline-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="why-interested"
+                                                                class="artdeco-text-input--label">Why are you interested
+                                                                in this position at AI Innovations?</label>
+                                                            <textarea class="artdeco-text-input--input"
+                                                                id="why-interested" name="whyInterested" required=""
+                                                                rows="4"></textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Challenging project (LLM REQUIRED) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-multiline-text-form-component=""
+                                                    data-live-test-multiline-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="challenging-project"
+                                                                class="artdeco-text-input--label">Describe a challenging
+                                                                technical problem you solved in a recent
+                                                                project.</label>
+                                                            <textarea class="artdeco-text-input--input"
+                                                                id="challenging-project" name="challengingProject"
+                                                                required="" rows="4"></textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Preferred CI/CD tools (LLM REQUIRED - free text) -->
+                                        <div class="mZppnZYxlUmEqqHwtzjMzbxdNVCQqOvRFJXSQ mt4">
+                                            <div class="fb-dash-form-element dlaatnyzAqZsAMUmjmKAofFvwYuORbYyM"
+                                                style="width:100%" tabindex="-1" data-test-form-element="">
+                                                <div data-test-single-line-text-form-component=""
+                                                    data-live-test-single-line-text-form-component="">
+                                                    <div
+                                                        class="artdeco-text-input artdeco-text-input--state-required ember-view">
+                                                        <div class="artdeco-text-input--container ember-view">
+                                                            <label for="cicd-tools"
+                                                                class="artdeco-text-input--label">What CI/CD tools and
+                                                                practices do you prefer to use in your development
+                                                                workflow?</label>
+                                                            <input class="artdeco-text-input--input" id="cicd-tools"
+                                                                name="cicdTools" required="" type="text">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ============================================ -->
+                            <!-- STEP 6: Review (80%) -->
+                            <!-- ============================================ -->
+                            <div class="form-step" data-step="6">
+                                <div class="ph5">
+                                    <h3 class="t-16 t-bold">Review your application</h3>
+                                    <p class="t-14 t-black--light">The employer will also receive a copy of your
+                                        profile.</p>
+
+                                    <div id="reviewContent"
+                                        style="margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                                        <!-- Populated by JavaScript -->
+                                    </div>
+
+                                    <div class="mt4">
+                                        <label class="display-flex" style="align-items: center; gap: 8px;">
+                                            <input id="follow-company-checkbox" type="checkbox" checked>
+                                            <span class="t-14">Follow <strong>AI Innovations</strong> to stay up to date
+                                                with their page.</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Success Message -->
+                            <div class="success-message" id="successMessage">
+                                <div class="success-icon">✓</div>
+                                <h2 style="font-size: 24px; margin-bottom: 8px;">Application submitted!</h2>
+                                <p class="t-14 t-black--light">Your application has been sent to AI Innovations.</p>
+                            </div>
+
+                            <!-- Footer -->
+                            <footer role="presentation" id="formFooter">
+                                <div class="jobs-easy-apply-footer__info">
+                                    <p class="t-12 t-black--light">Submitting this application won't change your
+                                        LinkedIn profile.</p>
+                                </div>
+                                <div class="display-flex justify-flex-end ph5 pv4">
+                                    <button aria-label="Back to previous step"
+                                        class="mr2 artdeco-button artdeco-button--2 artdeco-button--tertiary ember-view"
+                                        type="button" id="backBtn" style="display: none;">
+                                        <span class="artdeco-button__text">Back</span>
+                                    </button>
+
+                                    <!-- Next button - used on steps 1-5 -->
+                                    <button aria-label="Continue to next step"
+                                        class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view"
+                                        data-easy-apply-next-button="" data-live-test-easy-apply-next-button=""
+                                        type="button" id="nextBtn">
+                                        <span class="artdeco-button__text">Next</span>
+                                    </button>
+
+                                    <!-- Review button - used on step 5 -->
+                                    <button aria-label="Review your application"
+                                        class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view"
+                                        data-live-test-easy-apply-review-button="" type="button" id="reviewBtn"
+                                        style="display: none;">
+                                        <span class="artdeco-button__text">Review</span>
+                                    </button>
+
+                                    <!-- Submit button - used on step 6 -->
+                                    <button aria-label="Submit application"
+                                        class="artdeco-button artdeco-button--2 artdeco-button--primary ember-view"
+                                        data-live-test-easy-apply-submit-button="" type="button" id="submitBtn"
+                                        style="display: none;">
+                                        <span class="artdeco-button__text">Submit application</span>
+                                    </button>
+                                </div>
+                            </footer>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <span class="a11y-text">Dialog content end.</span>
+        </div>
+    </div>
+
+    <script>
+        // Step configuration
+        const STEPS = [
+            { id: 1, progress: 0, button: 'next' },
+            { id: 2, progress: 16, button: 'next' },
+            { id: 3, progress: 32, button: 'next' },
+            { id: 4, progress: 48, button: 'next' },
+            { id: 5, progress: 64, button: 'review' },
+            { id: 6, progress: 80, button: 'submit' }
+        ];
+
+        let currentStep = 1;
+
+        // Helper to POST submission data back to the mock server
+        function logMockSubmission(payload) {
+            try {
+                fetch('/mock-submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch((err) => {
+                    console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+                });
+            } catch (err) {
+                console.error('[LinkedIn Easy Apply Mock] Failed to log submission', err);
+            }
+        }
+
+        function updateUI() {
+            const stepConfig = STEPS.find(s => s.id === currentStep);
+
+            // Update progress bar
+            document.getElementById('progressBar').style.width = stepConfig.progress + '%';
+            document.getElementById('progressText').textContent = stepConfig.progress + '%';
+
+            // Update step visibility
+            document.querySelectorAll('.form-step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.querySelector(`[data-step="${currentStep}"]`).classList.add('active');
+
+            // Update buttons
+            document.getElementById('backBtn').style.display = currentStep > 1 ? 'inline-block' : 'none';
+            document.getElementById('nextBtn').style.display = stepConfig.button === 'next' ? 'inline-block' : 'none';
+            document.getElementById('reviewBtn').style.display = stepConfig.button === 'review' ? 'inline-block' : 'none';
+            document.getElementById('submitBtn').style.display = stepConfig.button === 'submit' ? 'inline-block' : 'none';
+
+            // Populate review if on step 6
+            if (currentStep === 6) {
+                populateReview();
+            }
+        }
+
+        function populateReview() {
+            const form = document.getElementById('easyApplyForm');
+            const formData = new FormData(form);
+
+            let html = '';
+            html += `<div class="mt3"><strong>Email:</strong> ${formData.get('email')}</div>`;
+            html += `<div class="mt3"><strong>Phone:</strong> ${formData.get('phoneCountry')} ${formData.get('phone')}</div>`;
+            html += `<div class="mt3"><strong>React Years:</strong> ${formData.get('reactYears') || '0'}</div>`;
+            html += `<div class="mt3"><strong>TypeScript Years:</strong> ${formData.get('typescriptYears') || '0'}</div>`;
+            html += `<div class="mt3"><strong>Bachelor's Degree:</strong> ${formData.get('bachelors') || 'Not answered'}</div>`;
+            html += `<div class="mt3"><strong>Travel OK:</strong> ${formData.get('travelOk') || 'Not answered'}</div>`;
+            html += `<div class="mt3"><strong>Work Authorization:</strong> ${formData.get('workAuth') || 'Not answered'}</div>`;
+            html += `<div class="mt3"><strong>Sponsorship:</strong> ${formData.get('sponsorship') || 'Not answered'}</div>`;
+            html += `<div class="mt3"><strong>Salary:</strong> ${formData.get('salaryExpectation') || 'Not provided'}</div>`;
+            html += `<div class="mt3"><strong>Why Interested:</strong> ${(formData.get('whyInterested') || '').substring(0, 100)}...</div>`;
+            html += `<div class="mt3"><strong>CI/CD Tools:</strong> ${formData.get('cicdTools') || 'Not provided'}</div>`;
+
+            document.getElementById('reviewContent').innerHTML = html;
+        }
+
+        function goToNextStep() {
+            if (currentStep < 6) {
+                currentStep++;
+                updateUI();
+            }
+        }
+
+        function goToPreviousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateUI();
+            }
+        }
+
+        function submitApplication() {
+            const form = document.getElementById('easyApplyForm');
+            const formData = new FormData(form);
+            const answers = {};
+
+            for (const [key, value] of formData.entries()) {
+                answers[key] = value;
+            }
+
+            logMockSubmission({
+                atsType: 'linkedin_easy_apply_comprehensive',
+                jobId: '123464',
+                company: 'AI Innovations',
+                url: window.location.href,
+                submittedAt: new Date().toISOString(),
+                answers,
+            });
+
+            // Hide form, show success
+            document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('formFooter').style.display = 'none';
+            document.getElementById('successMessage').classList.add('active');
+
+            console.log('[LinkedIn Easy Apply] Application submitted:', answers);
+        }
+
+        // Event listeners
+        document.getElementById('nextBtn').addEventListener('click', goToNextStep);
+        document.getElementById('reviewBtn').addEventListener('click', goToNextStep);
+        document.getElementById('submitBtn').addEventListener('click', submitApplication);
+        document.getElementById('backBtn').addEventListener('click', goToPreviousStep);
+
+        // Close button - show confirmation dialog
+        document.querySelector('.artdeco-modal__dismiss').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('confirmDialog').style.display = 'flex';
+            document.getElementById('confirmDialog').setAttribute('aria-hidden', 'false');
+        });
+
+        // Click outside modal - show confirmation dialog
+        document.querySelector('.modal-overlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                e.preventDefault();
+                document.getElementById('confirmDialog').style.display = 'flex';
+                document.getElementById('confirmDialog').setAttribute('aria-hidden', 'false');
+            }
+        });
+
+        // File upload handler
+        document.getElementById('resume-upload').addEventListener('click', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                alert('File selected: ' + file.name);
+            }
+        });
+
+        // Initialize
+        updateUI();
+    </script>
+
+    <!-- Confirmation Dialog (Save this application?) -->
+    <div data-test-modal-container="" data-test-modal-id="data-test-easy-apply-discard-confirmation"
+        data-test-is-confirm-dialog="" aria-hidden="true" id="confirmDialog"
+        class="artdeco-modal-overlay artdeco-modal-overlay--layer-confirmation artdeco-modal-overlay--is-top-layer"
+        style="display: none;">
+        <div data-test-modal="" role="alertdialog" tabindex="-1" aria-describedby="dialog-desc-confirm"
+            class="artdeco-modal artdeco-modal--layer-confirmation" size="small" aria-labelledby="dialog-label-confirm">
+            <span class="a11y-text">Dialog content start.</span>
+
+            <div class="artdeco-modal__header">
+                <h2 data-test-dialog-title="" id="dialog-label-confirm">Save this application?</h2>
+
+                <button aria-label="Dismiss" id="confirmDismissBtn"
+                    class="artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--2 artdeco-button--tertiary artdeco-modal__dismiss"
+                    data-test-modal-close-btn="">
+                    <span class="artdeco-button__text">×</span>
+                </button>
+            </div>
+
+            <div class="artdeco-modal__content" style="padding: 24px;">
+                <p data-test-dialog-content="" id="dialog-desc-confirm">
+                    Save to return to this application later. Any uploaded files will not be saved.<br><br>
+                    If you choose to not save, your application will be discarded.
+                </p>
+            </div>
+
+            <div class="artdeco-modal__actionbar artdeco-modal__actionbar--confirm-dialog artdeco-modal__actionbar"
+                style="padding: 16px 24px;">
+                <button id="discardBtn"
+                    class="artdeco-button artdeco-button--2 artdeco-button--secondary artdeco-modal__confirm-dialog-btn"
+                    data-control-name="discard_application_confirm_btn" data-test-dialog-secondary-btn="">
+                    <span class="artdeco-button__text">Discard</span>
+                </button>
+                <button id="saveBtn"
+                    class="artdeco-button artdeco-button--2 artdeco-button--primary artdeco-modal__confirm-dialog-btn"
+                    data-control-name="save_application_btn" data-test-dialog-primary-btn="">
+                    <span class="artdeco-button__text">Save</span>
+                </button>
+            </div>
+
+            <span class="a11y-text">Dialog content end.</span>
+        </div>
+    </div>
+
+    <script>
+        // Confirmation dialog handlers
+        const confirmDialog = document.getElementById('confirmDialog');
+
+        // Discard button - close both dialogs
+        document.getElementById('discardBtn').addEventListener('click', () => {
+            confirmDialog.style.display = 'none';
+            confirmDialog.setAttribute('aria-hidden', 'true');
+            window.close();
+        });
+
+        // Save button - close confirmation, keep main modal
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            confirmDialog.style.display = 'none';
+            confirmDialog.setAttribute('aria-hidden', 'true');
+            alert('Application saved (mock)');
+        });
+
+        // X button on confirmation dialog
+        document.getElementById('confirmDismissBtn').addEventListener('click', () => {
+            confirmDialog.style.display = 'none';
+            confirmDialog.setAttribute('aria-hidden', 'true');
+        });
+    </script>
+</body>
+
+</html>

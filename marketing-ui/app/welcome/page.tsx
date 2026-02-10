@@ -47,7 +47,7 @@ function WelcomeContent() {
           <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-neon-green to-neon-purple bg-clip-text text-transparent">
             Welcome to JobZippy
           </h1>
-
+          
           <p className="text-xl text-slate-300 mb-6 max-w-2xl mx-auto">
             Your personal AI assistant that applies to jobs while you sleep.
             <br />
@@ -80,7 +80,7 @@ function WelcomeContent() {
             <div className="relative group">
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-neon-green to-neon-blue rounded-3xl blur opacity-25 group-hover:opacity-50 transition duration-500" />
-
+              
               <div className="relative glass p-8 rounded-3xl h-full flex flex-col border-2 border-neon-green/30">
                 {/* Header */}
                 <div className="mb-6">
@@ -140,7 +140,7 @@ function WelcomeContent() {
             <div className="relative group opacity-60">
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-neon-purple to-neon-green rounded-3xl blur opacity-10 transition duration-500" />
-
+              
               <div className="relative glass p-8 rounded-3xl h-full flex flex-col border-2 border-white/10">
                 {/* Coming Soon Badge */}
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">

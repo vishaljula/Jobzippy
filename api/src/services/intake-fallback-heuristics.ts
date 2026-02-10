@@ -345,6 +345,7 @@ export async function runHeuristicIntakeLLM(
     history: {
       employment,
       education,
+      skills,
     },
     policies: {
       eeo: 'ask_if_required',
@@ -380,7 +381,7 @@ export async function runHeuristicIntakeLLM(
         fields: [
           {
             id: 'skills-list',
-            label: 'Stack',
+            label: 'Key Skills',
             value: skills,
             highlight: true,
           },
