@@ -52,9 +52,10 @@ export async function deriveKey(password: string, salt: Uint8Array): Promise<Cry
 export function encodeBase64(bytes: ArrayBuffer | Uint8Array): string {
   const buffer = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let binary = '';
-  buffer.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
+  // Use for loop instead of forEach to ensure all bytes are processed correctly
+  for (let i = 0; i < buffer.length; i++) {
+    binary += String.fromCharCode(buffer[i]!);
+  }
   return btoa(binary);
 }
 

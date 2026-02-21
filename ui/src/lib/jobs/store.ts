@@ -46,6 +46,7 @@ export async function upsertJob(
     atsTabId?: number;
     applyType?: 'easy_apply' | 'external' | 'unknown';
     errorMessage?: string;
+    needsConfirmation?: boolean;
   }
 ): Promise<JobRecord> {
   const id = generateJobId(platform, jobId);
@@ -69,6 +70,7 @@ export async function upsertJob(
       atsTabId: data.atsTabId ?? existing.atsTabId,
       applyType: data.applyType ?? existing.applyType,
       url: data.url ?? existing.url,
+      needsConfirmation: data.needsConfirmation ?? existing.needsConfirmation,
     };
     await db.putJob(updated);
 
@@ -95,6 +97,7 @@ export async function upsertJob(
       sourceTabId: data.sourceTabId,
       atsTabId: data.atsTabId,
       applyType: data.applyType,
+      needsConfirmation: data.needsConfirmation,
     };
     await db.putJob(newRecord);
 
@@ -133,6 +136,41 @@ export async function updateJobStatus(
   // Schedule backup after status update (e.g., Gmail replies)
   triggerBackup();
 
+  return updated;
+}
+
+/**
+ * Update job metadata (title, company, location)
+ * Used when user edits job details in dashboard
+ */
+export async function updateJobMetadata(
+  id: string,
+  updates: {
+    title?: string;
+    company?: string;
+    location?: string;
+  }
+): Promise<JobRecord | null> {
+  const existing = await db.getJob(id);
+  if (!existing) {
+    logger.error('JobStore', `Cannot update metadata: job ${id} not found`);
+    return null;
+  }
+
+  const now = Date.now();
+  const updated: JobRecord = {
+    ...existing,
+    ...updates,
+    updatedAt: now,
+    needsConfirmation: false, // User has confirmed the metadata
+  };
+
+  await db.putJob(updated);
+
+  // Schedule backup after metadata update
+  triggerBackup();
+
+  logger.log('JobStore', `Updated metadata for job ${id}`);
   return updated;
 }
 

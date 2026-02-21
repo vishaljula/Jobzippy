@@ -35,6 +35,7 @@ export interface ResumeData {
   education: { degree: string; field: string; school: string }[];
   recentJobTitle: string;
   recentCompany: string;
+  email?: string; // NEW: Email for local answering
   // Employment history with duties for skill-year calculation
   employment?: {
     company: string;
@@ -275,10 +276,22 @@ export function extractResumeData(
  * Classify a question to see if it can be answered without LLM
  */
 export function classifyQuestion(questionText: string): {
-  type: 'years_experience' | 'yes_no' | 'work_auth' | 'salary' | 'simple_pattern' | 'unknown';
+  type:
+    | 'years_experience'
+    | 'yes_no'
+    | 'work_auth'
+    | 'salary'
+    | 'email'
+    | 'simple_pattern'
+    | 'unknown';
   pattern?: RegExp;
 } {
   const text = questionText.toLowerCase();
+
+  // Email questions
+  if (text.includes('email') || text.includes('e-mail')) {
+    return { type: 'email' };
+  }
 
   // Years of experience patterns
   if (text.includes('years') && (text.includes('experience') || text.includes('exp'))) {
@@ -442,6 +455,15 @@ export function tryAnswerLocally(
     case 'salary': {
       // Don't estimate salary - varies wildly by industry/role/location
       // Let the LLM handle this or user can fill manually
+      return null;
+    }
+
+    case 'email': {
+      // Return email from resume data if available
+      if (resumeData.email) {
+        console.log(`[tryAnswerLocally] Answering email locally: ${resumeData.email}`);
+        return resumeData.email;
+      }
       return null;
     }
 

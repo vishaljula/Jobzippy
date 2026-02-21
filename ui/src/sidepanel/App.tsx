@@ -234,8 +234,10 @@ function App() {
       onboardingInitRef.current = true;
       void begin();
     }
+    // Set both states together to avoid race conditions
     setManualWizardOpen(true);
-    setIsWizardOpen(true);
+    // Use setTimeout to ensure state update happens after manualWizardOpen is set
+    setTimeout(() => setIsWizardOpen(true), 0);
   }, [begin, snapshot.status]);
 
   const handleCompleteOnboarding = useCallback(async () => {
@@ -1177,9 +1179,6 @@ function App() {
     <div className="space-y-6">
       {snapshot.status === 'skipped' && <ResumeOnboardingCard onResume={handleResumeOnboarding} />}
 
-      {/* Subscription Status - Shows trial/active status */}
-      <SubscriptionStatus />
-
       <DashboardOverview
         user={user}
         onEditProfile={handleResumeOnboarding}
@@ -1188,6 +1187,9 @@ function App() {
         onStartAgent={startAgent}
         onStopAgent={stopAgent}
       />
+
+      {/* Subscription Status - Shows trial/active status */}
+      <SubscriptionStatus />
     </div>
   );
 

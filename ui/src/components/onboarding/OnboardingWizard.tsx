@@ -359,7 +359,7 @@ export function OnboardingWizard({
                 onSubmit={() => {
                   void handleSubmit();
                 }}
-                disabled={isLoading || showCompletionCard}
+                disabled={isLoading}
                 placeholder="Share the next detail, or drop your resume PDF/DOCX…"
                 attachment={attachmentPreview}
                 onAttachClick={() => fileInputRef.current?.click()}

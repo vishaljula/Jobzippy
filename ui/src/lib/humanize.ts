@@ -19,6 +19,9 @@ export const humanizeConfig = {
   /** Enable/disable all humanization (for testing) */
   enabled: true, // <-- SET TO false FOR TESTING
 
+  /** Autofill mode - disables ALL humanization for instant form filling */
+  autofillMode: false, // <-- Set to true in autofill mode
+
   /** Default jitter range */
   defaultJitterMin: 1500, // Increased for testing observation
   defaultJitterMax: 2500, // Increased for testing observation
@@ -41,7 +44,7 @@ export const humanizeConfig = {
  * @param max Maximum delay in ms (default 1500)
  */
 export async function jitter(min = 800, max = 1500): Promise<void> {
-  if (!humanizeConfig.enabled) return; // Skip delay if humanize disabled
+  if (!humanizeConfig.enabled || humanizeConfig.autofillMode) return; // Skip delay if humanize disabled or autofill mode
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
 }
@@ -50,7 +53,7 @@ export async function jitter(min = 800, max = 1500): Promise<void> {
  * Short jitter for between-keystroke pauses
  */
 export async function microJitter(min = 30, max = 120): Promise<void> {
-  if (!humanizeConfig.enabled) return; // Skip delay if humanize disabled
+  if (!humanizeConfig.enabled || humanizeConfig.autofillMode) return; // Skip delay if humanize disabled or autofill mode
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   await new Promise((resolve) => setTimeout(resolve, delay));
 }
@@ -85,6 +88,26 @@ export async function humanType(
   } = {}
 ): Promise<void> {
   const { clearFirst = true, blurAfter = true, minDelay = 30, maxDelay = 120 } = options;
+
+  // In autofill mode, use instant setValue instead of character-by-character typing
+  if (humanizeConfig.autofillMode) {
+    element.focus();
+    element.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+
+    if (clearFirst) {
+      element.value = '';
+    }
+
+    element.value = text;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (blurAfter) {
+      element.blur();
+      element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    }
+    return;
+  }
 
   // Focus the element
   element.focus();
@@ -373,6 +396,16 @@ export async function humanToggle(input: HTMLInputElement, checked: boolean): Pr
  * This still uses DataTransfer API but adds appropriate events
  */
 export async function attachFile(input: HTMLInputElement, file: File): Promise<void> {
+  // Log file details for debugging
+  console.log('[Humanize] Attaching file to input:', {
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type,
+    lastModified: file.lastModified,
+    inputName: input.name,
+    inputId: input.id,
+  });
+
   // Focus
   input.focus();
   await microJitter(100, 200);
@@ -381,6 +414,14 @@ export async function attachFile(input: HTMLInputElement, file: File): Promise<v
   const dataTransfer = new DataTransfer();
   dataTransfer.items.add(file);
   input.files = dataTransfer.files;
+
+  // Log what was actually set
+  console.log('[Humanize] File attached, input.files:', {
+    filesLength: input.files?.length,
+    firstFileName: input.files?.[0]?.name,
+    firstFileSize: input.files?.[0]?.size,
+    firstFileType: input.files?.[0]?.type,
+  });
 
   // Dispatch events
   input.dispatchEvent(new Event('input', { bubbles: true }));

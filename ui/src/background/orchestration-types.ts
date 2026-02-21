@@ -7,6 +7,7 @@ export interface SequentialJobState {
   platform: 'LinkedIn' | 'Indeed';
   tabId: number | null;
   atsTabId: number | null; // Temporary storage during ATS flow
+  atsFrameId?: number | null; // Frame ID within atsTabId that has the actual form (for iframe-embedded ATS like Greenhouse)
 
   // Sequential processing state (NOT a queue - just pointer-based)
   scrapedJobIds: string[]; // List of job IDs on current page

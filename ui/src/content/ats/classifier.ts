@@ -55,6 +55,7 @@ export interface DetectedField {
   confidence: number;
   selectors: string[]; // How we found it
   labelText?: string; // Question/label text for unknown fields (used by LLM)
+  errorText?: string; // Validation error message from help text (used by LLM for retry)
   value?: string; // Optional value hint (e.g. for resume radios)
 }
 

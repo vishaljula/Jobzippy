@@ -26,7 +26,8 @@
     "identity",
     "cookies",
     "tabs",
-    "scripting"
+    "scripting",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -40,6 +41,7 @@
     "https://*.greenhouse.io/*",
     "https://*.myworkdayjobs.com/*",
     "https://*.lever.co/*",
+    "https://*/*",
     "http://localhost:*/*"
   ],
   "content_scripts": [
@@ -73,7 +75,8 @@
         "http://localhost:*/mocks/*-form.html"
       ],
       "js": ["content/executor-v2.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [

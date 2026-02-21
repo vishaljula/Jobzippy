@@ -119,7 +119,8 @@ export interface PageActionResult {
  */
 export async function executePageAction(
   providedResume?: { data: string; fileName?: string; mimeType?: string },
-  providedProfile?: any
+  providedProfile?: any,
+  mode?: 'autonomous' | 'autofill'
 ): Promise<PageActionResult> {
   logger.log('Navigator', 'Executing atomic page action...');
   console.log('[Navigator] Validating context and executing page action...');
@@ -130,6 +131,16 @@ export async function executePageAction(
     '.jobs-easy-apply-modal, [role="dialog"], .modal-overlay.active, [data-automation-id="wd-popup-frame"]'
   ) as HTMLElement;
 
+  logger.log(
+    'Navigator',
+    `Modal detection: found=${!!potentialModal}, visible=${potentialModal ? isTrulyVisible(potentialModal) : false}, mode=${mode}`
+  );
+  console.log('[Navigator] Modal detection:', {
+    found: !!potentialModal,
+    visible: potentialModal ? isTrulyVisible(potentialModal) : false,
+    mode,
+  });
+
   if (potentialModal && isTrulyVisible(potentialModal)) {
     container = potentialModal;
     logger.log('Navigator', 'Scoped execution to visible modal container');
@@ -139,9 +150,36 @@ export async function executePageAction(
   const classification = classifyPage(container);
   logClassification(classification);
 
-  if (container && (classification.type === 'form' || classification.type === 'unknown')) {
+  logger.log(
+    'Navigator',
+    `Before reclassification: type=${classification.type}, fields=${classification.fields.length}, container=${!!container}, mode=${mode}`
+  );
+  console.log('[Navigator] Before reclassification:', {
+    type: classification.type,
+    fields: classification.fields.length,
+    container: !!container,
+    mode,
+  });
+
+  // Reclassify modal/form/unknown pages with fields as form_modal
+  // In autofill mode, also reclassify even without container (user opened modal manually)
+  if (
+    (container || mode === 'autofill') &&
+    (classification.type === 'form' ||
+      classification.type === 'unknown' ||
+      classification.type === 'modal')
+  ) {
     if (classification.fields.length > 0) {
       classification.type = 'form_modal';
+      logger.log(
+        'Navigator',
+        `Reclassified as form_modal (${classification.fields.length} fields)`
+      );
+      console.log(
+        '[Navigator] ✅ Reclassified as form_modal:',
+        classification.fields.length,
+        'fields'
+      );
     } else {
       classification.type = 'modal';
     }
@@ -153,7 +191,8 @@ export async function executePageAction(
       classification,
       providedResume,
       providedProfile,
-      container
+      container,
+      mode
     );
     if (!result) {
       return {
@@ -179,15 +218,16 @@ async function handlePageActionType(
   classification: PageClassification,
   providedResume?: { data: string; fileName?: string; mimeType?: string },
   providedProfile?: any,
-  container?: HTMLElement
+  container?: HTMLElement,
+  mode?: 'autonomous' | 'autofill'
 ): Promise<PageActionResult> {
   switch (classification.type) {
     case 'form':
     case 'form_modal':
-      return handleFormAction(classification, providedResume, providedProfile, container);
+      return handleFormAction(classification, providedResume, providedProfile, container, mode);
 
     case 'modal':
-      return await handleModalAction(classification, container);
+      return await handleModalAction(classification, container, mode);
 
     case 'signup':
       return { status: 'account_required', reason: 'signup_detected' };
@@ -199,6 +239,12 @@ async function handlePageActionType(
       return { status: 'blocked', reason: 'captcha_detected' };
 
     case 'unknown':
+      // If we have fields detected, treat it as a form and try to fill
+      // Page type classification can fail but fields can still be detected
+      if (classification.fields && classification.fields.length > 0) {
+        console.log('[Navigator] Unknown page type but has fields, treating as form');
+        return handleFormAction(classification, providedResume, providedProfile, container, mode);
+      }
       return {
         status: 'unknown_state',
         reason: 'page_type_unknown',
@@ -218,7 +264,8 @@ async function handleFormAction(
   classification: PageClassification,
   providedResume?: { data: string; fileName?: string; mimeType?: string },
   providedProfile?: any,
-  container?: HTMLElement
+  container?: HTMLElement,
+  mode?: 'autonomous' | 'autofill'
 ): Promise<PageActionResult> {
   logger.log('Navigator', 'Handling form action...');
 
@@ -227,6 +274,7 @@ async function handleFormAction(
   const fillStats = await fillAllFields(classification, {
     resume: providedResume,
     profile: providedProfile,
+    mode, // Pass mode to determine skipPreFilled behavior
   });
 
   if (!fillStats.success) {
@@ -239,7 +287,14 @@ async function handleFormAction(
     `Fill complete: ${fillStats.filled} filled, ${fillStats.skipped} skipped`
   );
 
-  // 2. Submit / Next
+  // Skip submission in autofill mode - user will manually submit
+  if (mode === 'autofill') {
+    logger.log('Navigator', 'Autofill mode: skipping auto-submit, waiting for manual submission');
+    console.log('[Navigator] Autofill mode: form filled, awaiting manual submit');
+    return { status: 'completed', reason: 'autofill_complete_awaiting_manual_submit' };
+  }
+
+  // 2. Submit / Next (only in autonomous mode)
   logger.log('Navigator', 'Attempting to submit/progress form...');
 
   try {
@@ -267,9 +322,16 @@ async function handleFormAction(
  */
 async function handleModalAction(
   classification: PageClassification,
-  container?: HTMLElement
+  container?: HTMLElement,
+  mode?: 'autonomous' | 'autofill'
 ): Promise<PageActionResult> {
   logger.log('Navigator', 'Handling modal action...');
+
+  // In autofill mode, skip all autonomous actions - user will interact manually
+  if (mode === 'autofill') {
+    logger.log('Navigator', 'Autofill mode: skipping autonomous modal actions');
+    return { status: 'blocked', reason: 'autofill_mode_manual_interaction_required' };
+  }
 
   // Check for SUBMIT / REVIEW (Final Step)
   // Use findProgressionButton to leverage LinkedIn-specific selectors and avoid clicking settings links
@@ -299,7 +361,8 @@ async function handleModalAction(
     // Check validation of the found element
     const isModalVisible = modalElement && isTrulyVisible(modalElement);
 
-    if (!isModalVisible) {
+    // In autofill mode, skip modal opening logic (user already opened it)
+    if (!isModalVisible && mode !== 'autofill') {
       logger.log('Navigator', 'Modal is hidden, looking for button to show modal...');
 
       const allShowModalButtons = Array.from(document.querySelectorAll('button, a')).filter(

@@ -695,8 +695,13 @@ if (!USE_ORCHESTRATOR_V2) {
             (window as any).__actionInProgress = true;
 
             try {
-              const { jobId, vaultProfile, vaultResume } = message.data;
-              console.log('[Executor V2] EXECUTE_PAGE_ACTION received for job:', jobId);
+              const { jobId, vaultProfile, vaultResume, mode } = message.data;
+              console.log(
+                '[Executor V2] EXECUTE_PAGE_ACTION received for job:',
+                jobId,
+                'mode:',
+                mode
+              );
 
               const resumeData = vaultResume
                 ? {
@@ -706,7 +711,7 @@ if (!USE_ORCHESTRATOR_V2) {
                   }
                 : undefined;
 
-              const result = await executePageAction(resumeData, vaultProfile);
+              const result = await executePageAction(resumeData, vaultProfile, mode);
 
               sendResponse({
                 success: true,
@@ -877,6 +882,250 @@ if (!USE_ORCHESTRATOR_V2) {
             // Wait for animations to complete
             await new Promise((resolve) => setTimeout(resolve, 500));
             sendResponse({ success: true, closed: totalClosed });
+            break;
+          }
+
+          case 'TRACK_MANUAL_SUBMIT': {
+            const { jobUrl, jobTitle, company, location } = message.data;
+            console.log('[Executor V2] Setting up manual submit tracking for:', jobTitle);
+
+            // Track if we've already saved to avoid duplicates
+            let saved = false;
+
+            const saveAppliedJob = async () => {
+              if (saved) return;
+              saved = true;
+
+              console.log('[Executor V2] Manual submit SUCCESS detected, saving applied job');
+              console.log('[Executor V2] Job data:', { jobUrl, jobTitle, company, location });
+              try {
+                console.log('[Executor V2] Sending SAVE_APPLIED_JOB message to background...');
+                await chrome.runtime.sendMessage({
+                  type: 'SAVE_APPLIED_JOB',
+                  data: {
+                    jobUrl,
+                    jobTitle,
+                    company,
+                    location,
+                    mode: 'autofill',
+                  },
+                });
+                console.log('[Executor V2] ✅ SAVE_APPLIED_JOB message sent successfully');
+              } catch (error) {
+                console.error('[Executor V2] ❌ Error sending SAVE_APPLIED_JOB:', error);
+              }
+            };
+
+            // Method 1: URL change detection (SPA navigation after submit)
+            // NOTE: Only works for SPA-style navigation where the page doesn't fully reload.
+            // For full page reloads (classic form post → success page), the content script
+            // is destroyed before this interval can fire. That's why Method 3 exists.
+            const originalUrl = window.location.href;
+            const urlCheckInterval = setInterval(() => {
+              if (window.location.href !== originalUrl) {
+                console.log('[Executor V2] URL changed after submit, assuming success');
+                saveAppliedJob();
+                clearInterval(urlCheckInterval);
+              }
+            }, 500); // Faster check (500ms) to catch SPA navigations sooner
+
+            // Success detection logic (extracted to reuse)
+            const checkForSuccessMessage = () => {
+              // Check for success messages in common containers
+              const bodyText = document.body.textContent?.toLowerCase() || '';
+
+              // Look for success keywords in the entire page
+              // Use specific phrases to avoid false positives
+              const successKeywords = [
+                'has been submitted',
+                'has been received',
+                'application sent',
+                'thank you for applying',
+                'successfully submitted',
+                'application received',
+                'congratulations',
+                'application has been',
+                'we have received your application',
+                'application complete',
+                'application confirmed',
+              ];
+
+              const hasSuccessKeyword = successKeywords.some((keyword) =>
+                bodyText.includes(keyword)
+              );
+
+              if (hasSuccessKeyword) {
+                console.log('[Executor V2] 🔍 Success keyword found in page, checking elements...');
+
+                // Check for specific success message elements first
+                const successElements = document.querySelectorAll(
+                  '[data-test*="success"], [class*="success"], [class*="confirmation"], [role="alert"], [class*="congratulations"]'
+                );
+
+                for (const element of successElements) {
+                  const text = element.textContent?.toLowerCase() || '';
+                  if (successKeywords.some((keyword) => text.includes(keyword))) {
+                    console.log(
+                      '[Executor V2] ✅ Success message detected in success element:',
+                      text.substring(0, 100)
+                    );
+                    saveAppliedJob();
+                    observer.disconnect();
+                    clearInterval(urlCheckInterval);
+                    return true;
+                  }
+                }
+
+                // Fallback: Check all visible text elements (div, p, span, h1-h6)
+                // This catches success messages that don't have specific success classes
+                const allTextElements = document.querySelectorAll(
+                  'div, p, span, h1, h2, h3, h4, h5, h6'
+                );
+                for (const element of allTextElements) {
+                  const text = element.textContent?.toLowerCase() || '';
+                  // Only check elements with reasonable text length (not too short, not too long)
+                  if (text.length > 20 && text.length < 200) {
+                    if (successKeywords.some((keyword) => text.includes(keyword))) {
+                      // Verify this is a visible element
+                      const rect = element.getBoundingClientRect();
+                      if (rect.width > 0 && rect.height > 0) {
+                        console.log(
+                          '[Executor V2] ✅ Success message detected in text element:',
+                          text.substring(0, 100)
+                        );
+                        saveAppliedJob();
+                        observer.disconnect();
+                        clearInterval(urlCheckInterval);
+                        return true;
+                      }
+                    }
+                  }
+                }
+              }
+              return false;
+            };
+
+            // Method 2: Success message detection via MutationObserver
+            // Works for SPA-style forms that show success without navigating
+            const observer = new MutationObserver(() => {
+              checkForSuccessMessage();
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+            console.log(
+              '[Executor V2] ✅ Success detection observer initialized and watching for changes'
+            );
+
+            // Method 3: pagehide + submit click interception (PRIMARY trigger for classic form posts)
+            //
+            // Problem: for traditional form submissions, the page fully navigates to a success
+            // page. The content script is destroyed during navigation — before the URL interval
+            // or MutationObserver can fire — so we must detect the submit BEFORE it happens.
+            //
+            // Solution: intercept the submit button click to SET A FLAG, then on `pagehide`
+            // (which fires when the browser is actually navigating away) call saveAppliedJob().
+            //
+            // Why NOT save on click directly?
+            //   If form validation fails, the page stays visible. Saving immediately would be
+            //   a false positive — user never successfully applied. With the pagehide approach,
+            //   if validation fails the page stays → pagehide never fires → no false save.
+            //
+            // Why pagehide and not beforeunload?
+            //   `pagehide` fires more reliably for tab navigations in extension content scripts.
+
+            let submitWasClicked = false;
+
+            const submitSelectors = [
+              'button[type="submit"]',
+              'input[type="submit"]',
+              '[data-test*="submit"]',
+              '[data-testid*="submit"]',
+              'button[class*="submit"]',
+              '[data-submits]', // Greenhouse
+              '#submit_app', // Greenhouse
+            ];
+            const submitButtons = new Set<HTMLElement>();
+            for (const selector of submitSelectors) {
+              document
+                .querySelectorAll<HTMLElement>(selector)
+                .forEach((el) => submitButtons.add(el));
+            }
+            // Also find any visible button with "submit" / "apply" text
+            document.querySelectorAll<HTMLElement>('button, input[type="button"]').forEach((el) => {
+              const text = (el.textContent || el.getAttribute('value') || '').toLowerCase().trim();
+              if (text.includes('submit') || text.includes('apply now') || text === 'apply') {
+                submitButtons.add(el);
+              }
+            });
+
+            const submitClickHandler = () => {
+              console.log(
+                '[Executor V2] 🖱️ Submit button clicked — flagging, will save on pagehide'
+              );
+              submitWasClicked = true;
+              // Do NOT set saved=true here. If validation fails and page stays,
+              // we need to be able to fire again on the actual successful submit.
+            };
+
+            console.log(
+              `[Executor V2] Attaching submit click listener to ${submitButtons.size} button(s)`
+            );
+            for (const btn of submitButtons) {
+              // No `once:true` — keep listener alive through validation failures
+              btn.addEventListener('click', submitClickHandler, { capture: true });
+            }
+
+            // pagehide fires when page is actually navigating away (tab close, link, form post).
+            // We only care about it when the user already clicked submit on this page.
+            const pagehideHandler = () => {
+              if (submitWasClicked) {
+                console.log(
+                  '[Executor V2] 🚪 Page navigating after submit click — saving applied job'
+                );
+                saveAppliedJob();
+              }
+            };
+            window.addEventListener('pagehide', pagehideHandler, { capture: true, once: true });
+
+            // Clean up after 5 minutes (if user never submits)
+            const cleanup = () => {
+              observer.disconnect();
+              clearInterval(urlCheckInterval);
+              for (const btn of submitButtons) {
+                btn.removeEventListener('click', submitClickHandler, { capture: true });
+              }
+              window.removeEventListener('pagehide', pagehideHandler, { capture: true });
+              console.log('[Executor V2] Submit tracking cleanup after 5 minutes');
+            };
+            setTimeout(cleanup, 5 * 60 * 1000);
+
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'EXTRACT_JOB_METADATA': {
+            console.log('[Executor V2] Extracting job metadata from page');
+
+            try {
+              const { extractJobMetadata } = await import('./ats/metadata-extractor');
+              const metadata = extractJobMetadata();
+
+              sendResponse({
+                success: true,
+                title: metadata.title || 'Unknown Job',
+                company: metadata.company || 'Unknown Company',
+                location: metadata.location || '',
+                needsConfirmation: metadata.needsConfirmation,
+              });
+            } catch (error) {
+              console.error('[Executor V2] Error extracting job metadata:', error);
+              sendResponse({
+                success: false,
+                title: 'Unknown Job',
+                company: 'Unknown Company',
+                location: '',
+                needsConfirmation: true,
+              });
+            }
             break;
           }
 

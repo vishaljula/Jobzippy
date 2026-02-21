@@ -24,9 +24,14 @@ import {
 /**
  * Send message to content script and wait for response
  */
-function sendMessageToExecutor(tabId: number, message: { type: string; data?: any }): Promise<any> {
+function sendMessageToExecutor(
+  tabId: number,
+  message: { type: string; data?: any },
+  frameId?: number
+): Promise<any> {
   return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
+    const options = frameId !== undefined ? { frameId } : {};
+    chrome.tabs.sendMessage(tabId, message, options, (response) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
       } else {
@@ -34,6 +39,79 @@ function sendMessageToExecutor(tabId: number, message: { type: string; data?: an
       }
     });
   });
+}
+
+/**
+ * Classify page across all frames in a tab — returns the frame with the most form fields.
+ * This handles cases where the ATS embeds its form in an iframe (e.g. Greenhouse on company pages).
+ * Returns { classification, frameId } where frameId is the winning frame's ID (0 = main frame).
+ */
+export async function classifyPageAcrossFrames(
+  tabId: number
+): Promise<{ classification: any; frameId: number } | null> {
+  // Get all frames in the tab
+  let frames: chrome.webNavigation.GetAllFrameResultDetails[] = [];
+  try {
+    frames = await new Promise<chrome.webNavigation.GetAllFrameResultDetails[]>(
+      (resolve, reject) => {
+        chrome.webNavigation.getAllFrames({ tabId }, (result) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result || []);
+          }
+        });
+      }
+    );
+  } catch (e) {
+    console.warn('[Orchestrator V2] getAllFrames failed, falling back to main frame:', e);
+    // Fall through with empty frames - will still try main frame below
+  }
+
+  // Always include main frame (frameId 0) if not already listed
+  const frameIds = frames.map((f) => f.frameId);
+  if (!frameIds.includes(0)) {
+    frameIds.unshift(0);
+  }
+
+  console.log(
+    `[Orchestrator V2] classifyPageAcrossFrames: checking ${frameIds.length} frame(s) in tab ${tabId}`
+  );
+
+  let bestClassification: any = null;
+  let bestFrameId = 0;
+  let bestFieldCount = -1;
+
+  for (const frameId of frameIds) {
+    try {
+      const response = await sendMessageToExecutor(tabId, { type: 'CLASSIFY_PAGE' }, frameId);
+      if (response?.success && response?.classification) {
+        const fieldCount =
+          (response.classification.fields?.length || 0) +
+          (response.classification.actions?.length || 0);
+        console.log(
+          `[Orchestrator V2] Frame ${frameId}: ${fieldCount} fields+actions (type=${response.pageType})`
+        );
+        if (fieldCount > bestFieldCount) {
+          bestFieldCount = fieldCount;
+          bestClassification = response;
+          bestFrameId = frameId;
+        }
+      }
+    } catch {
+      // Frame may not have executor injected yet — skip
+    }
+  }
+
+  if (bestClassification) {
+    if (bestFrameId !== 0) {
+      console.log(
+        `[Orchestrator V2] ✅ Best frame is iframe ${bestFrameId} with ${bestFieldCount} field(s)`
+      );
+    }
+    return { classification: bestClassification, frameId: bestFrameId };
+  }
+  return null;
 }
 
 /**
@@ -469,15 +547,18 @@ async function openAtsTab(
     const atsUrlWithJob = `${state.atsUrl}?job=${state.currentJobId}`;
     const tab = await chrome.tabs.create({ url: atsUrlWithJob });
 
-    // Programmatically inject executor-v2.js (same pattern as old flow)
+    // Programmatically inject executor-v2.js into ALL frames
+    // (ATS form may be in a cross-origin iframe, e.g. Greenhouse embedded on a company career page)
     if (tab.id) {
       chrome.scripting
         .executeScript({
-          target: { tabId: tab.id },
+          target: { tabId: tab.id, allFrames: true },
           files: ['content/executor-v2.js'],
         })
         .then(() => {
-          console.log(`[Orchestrator V2] ✓ Executor-v2 injected into ATS tab ${tab.id}`);
+          console.log(
+            `[Orchestrator V2] ✓ Executor-v2 injected into ATS tab ${tab.id} (all frames)`
+          );
         })
         .catch((err) => {
           console.error(
@@ -520,21 +601,27 @@ async function waitForAtsReady(
   // Wait a bit before first attempt (give page time to open)
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  // Retry CLASSIFY_PAGE until executor is ready
+  // Retry CLASSIFY_PAGE (across all frames) until executor is ready
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       console.log(
         `[Orchestrator V2] Attempting to classify ATS page (attempt ${attempt}/${maxAttempts})`
       );
-      const classificationResponse = await sendMessageToExecutor(state.atsTabId, {
-        type: 'CLASSIFY_PAGE',
-      });
 
-      if (classificationResponse?.success && classificationResponse?.pageType) {
+      // classifyPageAcrossFrames checks all frames (main + iframes) and returns the one
+      // with the most form fields — handles embedded ATS like Greenhouse on company pages.
+      const result = await classifyPageAcrossFrames(state.atsTabId);
+
+      if (result?.classification?.success && result.classification?.pageType) {
+        const { classification: classificationResponse, frameId } = result;
         const pageType = classificationResponse.pageType;
-        console.log(`[Orchestrator V2] ATS page classified: ${pageType}`);
+        console.log(`[Orchestrator V2] ATS page classified: ${pageType} (frameId=${frameId})`);
 
         return {
+          state: {
+            // Store the winning frameId so fillAtsForm can send to the right frame
+            atsFrameId: frameId,
+          },
           data: {
             tabId: state.atsTabId,
             jobId: state.currentJobId,
@@ -543,7 +630,7 @@ async function waitForAtsReady(
           },
         };
       } else {
-        throw new Error('Classification response missing success or pageType');
+        throw new Error('No frame with form fields found yet');
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -635,16 +722,28 @@ async function fillAtsForm(
     });
 
     // Send FILL_FORM command to ATS tab executor WITH vault data
-    const response = await sendMessageToExecutor(state.atsTabId, {
-      type: 'FILL_FORM',
-      data: {
-        jobId: state.currentJobId,
-        formType: 'ats',
-        context: 'full_page',
-        vaultProfile, // Pass vault data to executor
-        vaultResume: resumeData, // Pass resume as serializable object
+    // Use atsFrameId if set — this handles iframe-embedded ATS forms (e.g. Greenhouse on company pages)
+    const targetFrameId =
+      state.atsFrameId !== undefined && state.atsFrameId !== null ? state.atsFrameId : undefined;
+    if (targetFrameId !== undefined && targetFrameId !== 0) {
+      console.log(
+        `[Orchestrator V2] fillAtsForm: sending FILL_FORM to iframe frame ${targetFrameId}`
+      );
+    }
+    const response = await sendMessageToExecutor(
+      state.atsTabId,
+      {
+        type: 'FILL_FORM',
+        data: {
+          jobId: state.currentJobId,
+          formType: 'ats',
+          context: 'full_page',
+          vaultProfile, // Pass vault data to executor
+          vaultResume: resumeData, // Pass resume as serializable object
+        },
       },
-    });
+      targetFrameId
+    );
 
     console.log('[Orchestrator V2] fillAtsForm - received response from executor:', response);
 

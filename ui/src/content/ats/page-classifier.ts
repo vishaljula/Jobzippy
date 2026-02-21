@@ -65,22 +65,355 @@ function isTrulyVisible(el: HTMLElement): boolean {
 
   // 3. "Check X Check Y" - Verify element is top-most at its center point
   // This detects elements covered by modals/overlays
+  // IMPORTANT: Skip this check for elements outside the viewport (below/above fold)
+  // They're still valid form fields, just need scrolling to interact with them
   const centerX = rect.left + rect.width / 2;
   const centerY = rect.top + rect.height / 2;
 
-  // elementsFromPoint returns an array from TOP (z-index) to BOTTOM
-  const elementsAtPoint = document.elementsFromPoint(centerX, centerY);
+  // Check if element is in viewport
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
 
-  if (elementsAtPoint.length === 0) return false; // Off-screen
+  const isInViewport =
+    centerY >= 0 && centerY <= viewportHeight && centerX >= 0 && centerX <= viewportWidth;
 
-  const topElement = elementsAtPoint[0];
-  if (!topElement) return false;
+  // Only do the elementsFromPoint check if element is in viewport
+  // Elements outside viewport are still "visible" (just need scrolling)
+  if (isInViewport) {
+    // elementsFromPoint returns an array from TOP (z-index) to BOTTOM
+    const elementsAtPoint = document.elementsFromPoint(centerX, centerY);
 
-  return el.contains(topElement) || topElement.contains(el);
+    if (elementsAtPoint.length === 0) return false; // Shouldn't happen if in viewport
+
+    const topElement = elementsAtPoint[0];
+    if (!topElement) return false;
+
+    // Check if element is actually clickable (not covered by modal/overlay)
+    const isClickable = el.contains(topElement) || topElement.contains(el);
+    if (!isClickable) return false;
+  }
+
+  // Element passed all checks (or is outside viewport but otherwise visible)
+  return true;
 }
 
 // Map the old function name to the new robust one
 const isElementVisible = isTrulyVisible;
+
+/**
+ * Extract label text and error message for a form element
+ * Uses recursive parent chain traversal to find sibling labels
+ * Supports modern UI frameworks (Material-UI, Gem, etc.)
+ */
+function extractLabelAndError(
+  element: HTMLElement,
+  maxDepth = 4
+): { labelText: string; errorText: string } {
+  let labelText = '';
+  let errorText = '';
+
+  // 1. Check direct associations first (fastest)
+  // SKIP for radio buttons - their direct label is usually just "Yes"/"No"
+  // We want to find the actual question text in parent siblings
+  const isRadio = element instanceof HTMLInputElement && element.type === 'radio';
+
+  if (element.id && !isRadio) {
+    const label = document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
+    if (label) {
+      let rawText = label.textContent?.trim() || '';
+      // Deduplicate: some frameworks (e.g. LinkedIn) render TWO identical spans inside a label
+      // (one aria-hidden, one visually-hidden), causing textContent to repeat the question twice.
+      // Detect the exact-half-repeat pattern and use only the first half.
+      if (rawText.length > 0 && rawText.length % 2 === 0) {
+        const half = rawText.length / 2;
+        if (rawText.substring(0, half) === rawText.substring(half)) {
+          rawText = rawText.substring(0, half);
+        }
+      }
+      labelText = rawText;
+    }
+  }
+
+  // 2. Check aria-label
+  if (!labelText) {
+    labelText = element.getAttribute('aria-label') || '';
+  }
+
+  // 3. Check placeholder (lower priority)
+  if (
+    !labelText &&
+    (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)
+  ) {
+    const placeholder = element.placeholder || '';
+    // Only use placeholder if it looks like a question (not just a hint)
+    if (placeholder.length > 10 || placeholder.includes('?')) {
+      labelText = placeholder;
+    }
+  }
+
+  // 4. Traverse parent chain looking for sibling labels and error messages
+  let current: HTMLElement | null = element;
+  let depth = 0;
+
+  while (current && depth < maxDepth) {
+    if (current.parentElement) {
+      const siblings = Array.from(current.parentElement.children) as HTMLElement[];
+
+      for (const sibling of siblings) {
+        if (sibling === current) continue;
+
+        const tag = sibling.tagName.toLowerCase();
+
+        // Check for label/legend siblings
+        // SKIP for radio buttons - their sibling labels are usually just "Yes"/"No"
+        if (!labelText && (tag === 'label' || tag === 'legend') && !isRadio) {
+          const text = sibling.textContent?.trim() || '';
+          if (text && text.length < 300) {
+            labelText = text;
+          }
+        }
+
+        // Check for span/div/p/h* siblings with question text (common in modern frameworks)
+        if (!labelText && ['span', 'div', 'p', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+          const text = sibling.textContent?.trim() || '';
+
+          // Skip if this looks like an error message
+          const classList = Array.from(sibling.classList);
+          const isErrorElement = classList.some(
+            (c) =>
+              c.includes('error') ||
+              c.includes('help') ||
+              c.includes('invalid') ||
+              c.includes('warning')
+          );
+
+          // Skip common error message patterns
+          const lowerText = text.toLowerCase();
+          const isErrorMessage =
+            lowerText.startsWith('please ') ||
+            lowerText.includes('required') ||
+            lowerText.includes('must ') ||
+            lowerText.includes('invalid') ||
+            lowerText.includes('error');
+
+          // Must have text, not too long, not an error, and look like a label
+          if (text && text.length > 3 && text.length < 300 && !isErrorElement && !isErrorMessage) {
+            // Prefer text with question marks, colons, or asterisks (required indicator)
+            if (text.includes('?') || text.endsWith(':') || text.includes('*')) {
+              labelText = text;
+            }
+            // Otherwise, save as fallback if we don't find anything better
+            else if (!labelText && text.length < 100) {
+              // Check if it looks like a label (not a paragraph of text)
+              const wordCount = text.split(/\s+/).length;
+              if (wordCount < 20) {
+                // Reasonable label length
+                labelText = text;
+              }
+            }
+          }
+        }
+
+        // Check for error/help text siblings
+        if (!errorText) {
+          const classList = Array.from(sibling.classList);
+          const hasErrorClass = classList.some(
+            (c) =>
+              c.includes('error') ||
+              c.includes('help') ||
+              c.includes('invalid') ||
+              c.includes('warning')
+          );
+
+          if (hasErrorClass) {
+            const text = sibling.textContent?.trim() || '';
+            if (text && text.length < 200) {
+              errorText = text;
+            }
+          }
+        }
+
+        // If we found both, we can stop
+        if (labelText && errorText) break;
+      }
+    }
+
+    // If we found both, no need to go deeper
+    if (labelText && errorText) break;
+
+    current = current.parentElement;
+    depth++;
+  }
+
+  // 5. Special handling for radio groups
+  if (!labelText && element instanceof HTMLInputElement && element.type === 'radio') {
+    // First try fieldset/legend (traditional approach)
+    const fieldset = element.closest('fieldset');
+    if (fieldset) {
+      const legend = fieldset.querySelector('legend');
+      if (legend) {
+        labelText = legend.textContent?.trim() || '';
+      }
+    }
+
+    // If no fieldset, look for question text in parent siblings
+    // Skip the direct label (which is usually just "Yes"/"No")
+    if (!labelText) {
+      let parent = element.parentElement;
+      console.log('[Radio Label] Starting parent traversal for radio button');
+      for (let depth = 0; depth < 5 && parent && !labelText; depth++) {
+        console.log(`[Radio Label] Depth ${depth}, parent:`, parent.className || parent.tagName);
+        if (parent.parentElement) {
+          const siblings = Array.from(parent.parentElement.children) as HTMLElement[];
+          console.log(`[Radio Label] Found ${siblings.length} siblings at depth ${depth}`);
+
+          // CRITICAL FIX: Check PRECEDING siblings first (where question text usually is)
+          // In Gem UI, the question text appears in a sibling BEFORE the radio buttons container
+          const parentIndex = siblings.indexOf(parent);
+          const precedingSiblings = siblings.slice(0, parentIndex).reverse(); // Reverse to check closest first
+          const followingSiblings = siblings.slice(parentIndex + 1);
+
+          // Check preceding siblings first (most likely to contain question)
+          for (const sibling of precedingSiblings) {
+            // Check the sibling itself AND its descendants for question text
+            const elementsToCheck = [
+              sibling,
+              ...Array.from(sibling.querySelectorAll('span, div, p, h3, h4, h5, h6')),
+            ];
+
+            for (const elem of elementsToCheck) {
+              const tag = elem.tagName.toLowerCase();
+              if (['span', 'div', 'p', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+                const text = elem.textContent?.trim() || '';
+
+                // Skip error messages
+                const classList = Array.from(elem.classList);
+                const isError = classList.some((c) => c.includes('error') || c.includes('help'));
+
+                console.log(
+                  `[Radio Label] Checking preceding <${tag}>: "${text.substring(0, 50)}...", isError: ${isError}`
+                );
+
+                // Must be a question (has ? or * or :) and not an error
+                if (text && text.length > 10 && !isError) {
+                  if (text.includes('?') || text.includes('*') || text.endsWith(':')) {
+                    console.log(
+                      `[Radio Label] ✓ Found question text in preceding sibling: "${text}"`
+                    );
+                    labelText = text;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (labelText) break;
+          }
+
+          // If not found in preceding siblings, check following siblings
+          if (!labelText) {
+            for (const sibling of followingSiblings) {
+              const elementsToCheck = [
+                sibling,
+                ...Array.from(sibling.querySelectorAll('span, div, p, h3, h4, h5, h6')),
+              ];
+
+              for (const elem of elementsToCheck) {
+                const tag = elem.tagName.toLowerCase();
+                if (['span', 'div', 'p', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+                  const text = elem.textContent?.trim() || '';
+
+                  const classList = Array.from(elem.classList);
+                  const isError = classList.some((c) => c.includes('error') || c.includes('help'));
+
+                  console.log(
+                    `[Radio Label] Checking following <${tag}>: "${text.substring(0, 50)}...", isError: ${isError}`
+                  );
+
+                  if (text && text.length > 10 && !isError) {
+                    if (text.includes('?') || text.includes('*') || text.endsWith(':')) {
+                      console.log(
+                        `[Radio Label] ✓ Found question text in following sibling: "${text}"`
+                      );
+                      labelText = text;
+                      break;
+                    }
+                  }
+                }
+              }
+
+              if (labelText) break;
+            }
+          }
+        }
+        parent = parent.parentElement;
+      }
+    }
+
+    // Add options to the label text
+    if (labelText) {
+      // Find all radio buttons in the same group
+      const radioName = element.name;
+      let radios: NodeListOf<HTMLInputElement> | undefined;
+
+      if (radioName) {
+        // Group by name
+        radios = document.querySelectorAll(`input[type="radio"][name="${CSS.escape(radioName)}"]`);
+      } else {
+        // Group by parent container
+        let parent = element.parentElement;
+        for (let i = 0; i < 4 && parent; i++) {
+          const radiosInParent = parent.querySelectorAll('input[type="radio"]');
+          if (radiosInParent.length > 1) {
+            radios = radiosInParent as NodeListOf<HTMLInputElement>;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+      }
+
+      // Extract option labels
+      if (radios && radios.length > 0) {
+        const options: string[] = [];
+        radios.forEach((r) => {
+          const id = r.id;
+          if (id) {
+            const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+            if (lbl?.textContent) {
+              const optionText = lbl.textContent.trim();
+              // Only add if it's a short option (not the full question)
+              if (optionText.length < 50 && !options.includes(optionText)) {
+                options.push(optionText);
+              }
+            }
+          }
+        });
+
+        if (options.length > 0) {
+          labelText = `${labelText} [Options: ${options.join(', ')}]`;
+        }
+      }
+    }
+  }
+
+  // 6. For radio buttons without fieldset, check if label contains the question
+  // This is now handled above, so we can simplify this section
+  if (!labelText && element instanceof HTMLInputElement && element.type === 'radio' && element.id) {
+    const label = document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
+    if (label) {
+      const labelText = label.textContent?.trim() || '';
+      // Only use if it looks like a full question (not just "Yes"/"No")
+      if (labelText.length > 10 || labelText.includes('?')) {
+        return { labelText, errorText };
+      }
+    }
+  }
+
+  return {
+    labelText: labelText.trim(),
+    errorText: errorText.trim(),
+  };
+}
 
 /**
  * Result of purpose inference with confidence score
@@ -101,8 +434,10 @@ export function detectFields(container: Document | Element = document): Detected
   // Iterate all potential form elements and infer purpose via traversal
   // =========================================================================
 
-  // Select all candidate elements
-  const candidates = container.querySelectorAll('input, select, textarea, button, a');
+  // Select all candidate elements (including ARIA combobox for custom dropdowns)
+  const candidates = container.querySelectorAll(
+    'input, select, textarea, button, a, [role="combobox"]'
+  );
 
   candidates.forEach((node) => {
     const element = node as HTMLElement;
@@ -111,8 +446,11 @@ export function detectFields(container: Document | Element = document): Detected
 
     // Special handling for Radio Buttons (often hidden for custom styling)
     if (tagName === 'input' && type === 'radio') {
-      // Check if this radio group has already been processed by name
+      // Check if this radio group has already been processed
+      // Try grouping by name first, then by parent container
       const name = (element as HTMLInputElement).name;
+
+      // Method 1: Group by name attribute (if present)
       if (
         name &&
         fields.some(
@@ -125,19 +463,61 @@ export function detectFields(container: Document | Element = document): Detected
         return; // Already processed this group
       }
 
+      // Method 2: Group by shared parent container (for radios without name)
+      // Find the closest parent that contains multiple radio buttons
+      if (!name) {
+        let parent = element.parentElement;
+        for (let i = 0; i < 4 && parent; i++) {
+          const radiosInParent = parent.querySelectorAll('input[type="radio"]');
+          if (radiosInParent.length > 1) {
+            // Check if we already processed a radio from this parent
+            const alreadyProcessed = fields.some(
+              (f) =>
+                f.element instanceof HTMLInputElement &&
+                f.element.type === 'radio' &&
+                parent?.contains(f.element)
+            );
+            if (alreadyProcessed) {
+              return; // Already processed this group
+            }
+            break; // Found the grouping parent, continue processing
+          }
+          parent = parent.parentElement;
+        }
+      }
+
       // Allow hidden radio buttons IF they have a visible label or container
-      // But we still prefer to use the FIRST visible radio if possible, so we might want to check visibility
-      // logic: if invisible, check if parent/label is visible.
-      // For now, if it's hidden, let's look for a visible label.
       if (!isElementVisible(element)) {
-        const label = container.querySelector(`label[for="${element.id}"]`);
+        const label = element.id
+          ? container.querySelector(`label[for="${CSS.escape(element.id)}"]`)
+          : null;
         if (!label || !isElementVisible(label as HTMLElement)) {
           // If both input and label are hidden, skip it
           return;
         }
       }
+    }
+    // Special handling for File Inputs (often hidden with custom upload UI)
+    else if (tagName === 'input' && type === 'file') {
+      // Allow hidden file inputs IF they have a visible parent container
+      // Modern UIs hide the native file input and show custom "Click to upload" UI
+      if (!isElementVisible(element)) {
+        // Check if parent container is visible (within 3 levels)
+        let parent = element.parentElement;
+        let foundVisibleParent = false;
+        for (let i = 0; i < 3 && parent; i++) {
+          if (isElementVisible(parent)) {
+            foundVisibleParent = true;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+        if (!foundVisibleParent) {
+          return; // Both input and parent container are hidden
+        }
+      }
     } else {
-      // For non-radio elements, enforce strict visibility
+      // For non-radio, non-file elements, enforce strict visibility
       if (!isElementVisible(element)) return;
     }
 
@@ -159,62 +539,74 @@ export function detectFields(container: Document | Element = document): Detected
         return; // Skip non-action links/buttons
       }
 
+      // Extract label and error for ALL fields (not just unknown)
+      // This ensures fields detected by purpose (e.g., linkedin, email) also get labelText
+      const { labelText, errorText } = extractLabelAndError(element);
+
       fields.push({
         type: elementType,
         purpose: inference.purpose,
         element,
         confidence: inference.confidence, // Dynamic confidence based on match quality
         selectors: ['inference-traversal'],
+        labelText,
+        errorText,
       });
     } else {
-      // It's unknown. If it's an input/select/textarea, we should still capture it
+      // It's unknown. If it's an input/select/textarea OR ARIA combobox, we should still capture it
       // so the LLM can try to answer it based on labelText (which we can try to extract)
-      if (['input', 'select', 'textarea'].includes(tagName)) {
+      const isFormControl =
+        ['input', 'select', 'textarea'].includes(tagName) ||
+        element.getAttribute('role') === 'combobox';
+
+      if (isFormControl) {
         // Exclude buttons/links from 'unknown' catch-all
         // Exclude submit/hidden inputs (but NOT radio buttons)
         if (tagName === 'input') {
           if (['submit', 'button', 'image', 'hidden'].includes(type)) return;
-        }
 
-        // Helper to extract text from label for LLM
-        let labelText = '';
+          // RADIO BUTTON GROUPING: Skip duplicate radios from same group
+          if (type === 'radio') {
+            const name = (element as HTMLInputElement).name;
 
-        // SPECIAL HANDLING FOR RADIO GROUPS: Get the question from FieldSet Legend
-        if (type === 'radio') {
-          const fieldset = element.closest('fieldset');
-          if (fieldset) {
-            const legend = fieldset.querySelector('legend');
-            if (legend) {
-              labelText = legend.innerText || legend.textContent || '';
+            // Method 1: Check by name
+            if (
+              name &&
+              fields.some(
+                (f) =>
+                  f.element instanceof HTMLInputElement &&
+                  f.element.type === 'radio' &&
+                  f.element.name === name
+              )
+            ) {
+              return; // Already processed this radio group
+            }
 
-              // Also grab the options for context
-              const radioName = (element as HTMLInputElement).name;
-              const allRadios = fieldset.querySelectorAll(
-                `input[type="radio"][name="${CSS.escape(radioName)}"]`
-              );
-              const options: string[] = [];
-              allRadios.forEach((r) => {
-                const id = r.id;
-                const lbl = container.querySelector(`label[for="${id}"]`);
-                if (lbl && lbl.textContent) options.push(lbl.textContent.trim());
-              });
-
-              if (options.length > 0) {
-                labelText = `${labelText.trim()} [Options: ${options.join(', ')}]`;
+            // Method 2: Check by parent container (for radios without name)
+            if (!name) {
+              let parent = element.parentElement;
+              for (let i = 0; i < 4 && parent; i++) {
+                const radiosInParent = parent.querySelectorAll('input[type="radio"]');
+                if (radiosInParent.length > 1) {
+                  const alreadyProcessed = fields.some(
+                    (f) =>
+                      f.element instanceof HTMLInputElement &&
+                      f.element.type === 'radio' &&
+                      parent?.contains(f.element)
+                  );
+                  if (alreadyProcessed) {
+                    return; // Already processed this radio group
+                  }
+                  break;
+                }
+                parent = parent.parentElement;
               }
             }
           }
         }
 
-        if (!labelText && element.id) {
-          const label = container.querySelector(`label[for="${element.id}"]`);
-          if (label) labelText = label.textContent || '';
-        }
-
-        // If we found a group label for radio, use that as the purpose for inference check one last time?
-        // No, inferPurposeFromElement should have caught it if it was "sponsorship".
-        // But if inferPurposeFromElement missed it because it didn't look at the legend, we might want to retry here?
-        // Actually, let's trust the catch-all to send it to LLM for now, as that was the specific user request.
+        // Extract label text and error message using comprehensive traversal
+        const { labelText, errorText } = extractLabelAndError(element);
 
         fields.push({
           type: getElementType(element),
@@ -222,7 +614,8 @@ export function detectFields(container: Document | Element = document): Detected
           element,
           confidence: 0.5,
           selectors: ['catch-all'],
-          labelText: labelText.trim(),
+          labelText,
+          errorText,
         });
       }
     }
@@ -247,6 +640,9 @@ function getElementType(element: HTMLElement): ElementType {
   if (tagName === 'button') return 'button';
   if (tagName === 'a') return 'link';
   if (tagName === 'select') return 'select';
+
+  // ARIA combobox (custom dropdowns)
+  if (element.getAttribute('role') === 'combobox') return 'select';
 
   return 'input';
 }
@@ -275,8 +671,10 @@ function matchTextToPurpose(
   if (hasAnyWord(['resume', 'cv', 'curriculum vitae']))
     return { purpose: 'resume', confidence: 0.95 };
   if (lowerText.includes('cover letter')) return { purpose: 'coverLetter', confidence: 0.95 };
-  if (hasWord('upload') && !lowerText.includes('photo'))
-    return { purpose: 'resume', confidence: 0.8 }; // Fallback for generic uploads often being resumes
+  // NOTE: We intentionally do NOT have a generic "upload → resume" fallback here.
+  // A bare "Optional Upload" label could be a cover letter, portfolio, or other doc.
+  // Classifying it as 'resume' causes the resume PDF to be uploaded in the wrong field.
+  // Instead, let it fall through to 'unknown' so it can be handled case-by-case.
 
   // 2. Contact Info
   // STRICTER PHONE CHECK: Prevent "Mobile Development" from matching "mobile"
@@ -294,19 +692,27 @@ function matchTextToPurpose(
   if (hasWord('email')) return { purpose: 'email', confidence: 0.95 };
   if (lowerText.includes('first name') || lowerText.includes('given name'))
     return { purpose: 'firstName', confidence: 0.95 };
+  // IMPORTANT: Check 'full name' and 'legal name' BEFORE 'last name'.
+  // Labels like "Full Legal Name (First & Last Name)" contain "last name" as a substring
+  // in the parenthetical, which would misclassify them as lastName if checked first.
+  if (lowerText.includes('full name') || lowerText.includes('legal name'))
+    return { purpose: 'fullName', confidence: 0.95 };
   if (
     lowerText.includes('last name') ||
     lowerText.includes('family name') ||
     lowerText.includes('surname')
   )
     return { purpose: 'lastName', confidence: 0.95 };
-  if (lowerText.includes('full name')) return { purpose: 'fullName', confidence: 0.95 };
   if (lowerText.includes('linkedin') || lowerText.includes('linked in'))
     return { purpose: 'linkedin', confidence: 0.9 };
   if (hasAnyWord(['website', 'portfolio', 'url'])) return { purpose: 'website', confidence: 0.85 };
 
   // 3. Work & Education
-  if (hasAnyWord(['experience', 'years'])) return { purpose: 'experience', confidence: 0.85 };
+  // Only classify as 'experience' if the text is short (e.g. "Years of experience", dropdown labels).
+  // Long essay-style questions that mention "experience" (e.g. "Please describe your experience with React")
+  // should stay as 'unknown' so the LLM can answer them properly.
+  if (hasAnyWord(['experience', 'years']) && lowerText.length <= 60)
+    return { purpose: 'experience', confidence: 0.85 };
   if (hasAnyWord(['salary', 'compensation', 'pay'])) return { purpose: 'unknown', confidence: 0.5 }; // TODO: add salary purpose
 
   // 4. Compliance / Demographics
@@ -340,6 +746,17 @@ function matchTextToPurpose(
     // Strict check for "Edit" buttons (must come before Apply/Review to prevent misclassification)
     if (lowerText === 'edit' || lowerText.startsWith('edit ') || hasWord('edit'))
       return { purpose: 'edit', confidence: 0.95 };
+
+    // Check for "Apply" button variations (common on job application forms)
+    // These should be classified as 'submit' since they submit the application
+    if (
+      lowerText.includes('apply and save') ||
+      lowerText.includes('apply without saving') ||
+      lowerText.includes('apply now') ||
+      (lowerText.startsWith('apply ') && lowerText.length < 30) // "Apply for this job", etc.
+    ) {
+      return { purpose: 'submit', confidence: 0.95 };
+    }
 
     // Strict check for simple "apply" keyword
     if (hasWord('apply') && !lowerText.includes('applying') && !lowerText.includes('application'))
@@ -383,19 +800,46 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
     targetTag === 'a' ||
     (targetTag === 'input' && ['submit', 'button', 'image', 'reset'].includes(targetType));
 
+  // IMPORTANT: textarea elements should NEVER be classified as short identity fields.
+  // A textarea is designed for long-form text input (essay questions, descriptions, etc.).
+  // firstName/lastName/fullName are always short single-line inputs.
+  // If a textarea picks up a nearby "First Name" label from a sibling field's DOM context,
+  // we must not misclassify it.
+  const isTextarea = targetTag === 'textarea';
+  const IDENTITY_PURPOSES = new Set(['firstName', 'lastName', 'fullName']);
+  // File-type purposes must ONLY be assigned from direct element attributes (type=file, name*=resume).
+  // Never assign them via sibling label traversal — otherwise text inputs next to a "Resume Upload"
+  // field entry get classified as 'resume' and filled with the filename.
+  const FILE_PURPOSES = new Set(['resume', 'coverLetter']);
+
   // First check if there is an explicit label[for] linked to this element
   // This is the strongest signal and should be checked globally first
+  //
+  // CRITICAL: If a label[for] IS found (even if purpose resolves to 'unknown'),
+  // it means this element already has a semantically-scoped label. We set
+  // hasExplicitLabel = true so the sibling traversal loop SKIPS scanning siblings at
+  // depth > 0. Without this guard, the traversal climbs to the form root and picks up
+  // NEIGHBORING fields' label text (e.g. "Email"), misclassifying unrelated inputs.
+  let hasExplicitLabel = false;
   if (element.id) {
     const root = element.ownerDocument || document;
     // Escape ID for selector
     const escapedId = CSS.escape(element.id);
     const label = root.querySelector(`label[for="${escapedId}"]`);
-    if (label && label.textContent) {
+    if (label && label.textContent?.trim()) {
+      hasExplicitLabel = true; // Mark: this element's scope is already defined by label[for]
       const match = matchTextToPurpose(label.textContent, isTargetActionable);
       if (match.purpose !== 'unknown') {
+        // Textareas cannot be identity fields - keep as unknown for LLM to handle
+        if (isTextarea && IDENTITY_PURPOSES.has(match.purpose)) {
+          return { purpose: 'unknown', confidence: 0.5 };
+        }
         // Label match gets high confidence (0.9)
         return { purpose: match.purpose, confidence: Math.min(0.9, match.confidence) };
       }
+      // Purpose is 'unknown' from label text (e.g. "Gender Pronouns", "Preferred Name").
+      // Don't return yet — still check element's own attributes at depth 0 below.
+      // But sibling traversal at depth > 0 will be blocked by hasExplicitLabel.
     }
   }
 
@@ -417,6 +861,9 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
 
       const match = matchTextToPurpose(value, isTargetActionable);
       if (match.purpose !== 'unknown') {
+        // Textareas cannot be identity fields - skip if this match is an identity purpose
+        if (isTextarea && IDENTITY_PURPOSES.has(match.purpose)) continue;
+
         // Direct element match gets highest confidence
         let confidence =
           depth === 0 ? Math.min(0.95, match.confidence) : match.confidence * (1 - depth * 0.1);
@@ -464,7 +911,13 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
 
     // 3. Check SIBLINGS (from the perspective of the parent)
     // "Check siblings from the parent to see if there is a label or some indicator"
-    if (current.parentElement) {
+    //
+    // KEY GUARD: If this element has an explicit label[for] association, skip sibling
+    // scanning at depth > 0. The label[for] already scopes this field semantically.
+    // Scanning siblings at higher depths finds OTHER fields' labels (cross-field contamination).
+    // At depth 0 (element's immediate parent) we still scan — useful for inputs wrapped
+    // directly beside their label without a label[for] (e.g. some older form patterns).
+    if (current.parentElement && !(hasExplicitLabel && depth > 0)) {
       const siblings = Array.from(current.parentElement.children) as HTMLElement[];
       for (const sibling of siblings) {
         if (sibling === current) continue; // Skip self
@@ -474,7 +927,16 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
         if (siblingTag === 'label' || siblingTag === 'legend') {
           const text = sibling.textContent || '';
           const match = matchTextToPurpose(text, isTargetActionable);
-          if (match.purpose !== 'unknown') {
+          // SAFETY: Never assign identity field purposes or file purposes from sibling text traversal.
+          // Identity fields (firstName, lastName, fullName) must match via direct element
+          // attributes or explicit label[for] only, to prevent cross-field contamination.
+          // File purposes (resume, coverLetter) must match via element type/attributes only,
+          // otherwise text inputs next to a Resume Upload section get misclassified.
+          if (
+            match.purpose !== 'unknown' &&
+            !IDENTITY_PURPOSES.has(match.purpose) &&
+            !FILE_PURPOSES.has(match.purpose)
+          ) {
             const confidence = match.confidence * (1 - depth * 0.1);
             if (confidence > bestMatch.confidence) {
               bestMatch = { purpose: match.purpose, confidence };
@@ -486,7 +948,11 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
         const labelInSibling = sibling.querySelector('label, .label, .field-label');
         if (labelInSibling && labelInSibling.textContent) {
           const match = matchTextToPurpose(labelInSibling.textContent, isTargetActionable);
-          if (match.purpose !== 'unknown') {
+          if (
+            match.purpose !== 'unknown' &&
+            !IDENTITY_PURPOSES.has(match.purpose) &&
+            !FILE_PURPOSES.has(match.purpose)
+          ) {
             const confidence = match.confidence * (1 - depth * 0.1);
             if (confidence > bestMatch.confidence) {
               bestMatch = { purpose: match.purpose, confidence };
@@ -501,7 +967,11 @@ function inferPurposeFromElement(element: HTMLElement, maxDepth: number = 3): Pu
           // Limit text length to avoid matching huge blocks of text
           if (text.length < 100) {
             const match = matchTextToPurpose(text, isTargetActionable);
-            if (match.purpose !== 'unknown') {
+            if (
+              match.purpose !== 'unknown' &&
+              !IDENTITY_PURPOSES.has(match.purpose) &&
+              !FILE_PURPOSES.has(match.purpose)
+            ) {
               const confidence = match.confidence * (1 - depth * 0.15); // Slightly lower for generic text
               if (confidence > bestMatch.confidence) {
                 bestMatch = { purpose: match.purpose, confidence };

@@ -25,6 +25,12 @@ import {
   type ResumeData,
 } from '../../lib/llm-form-helper';
 import { getLastValidationErrors } from './navigator';
+import {
+  isNarrativeField,
+  makeFieldSignature,
+  getFieldMemory,
+  saveFieldMemory,
+} from '../../lib/field-memory';
 
 export interface FormFillerConfig {
   firstName: string;
@@ -43,16 +49,36 @@ export interface FormFillerConfig {
   jobDescription?: string;
   // Resume data for LLM
   resumeData?: ResumeData;
+  // Control whether to skip pre-filled fields
+  // Set to false for manual autofill (fill everything)
+  // Set to true for orchestrator mode (skip pre-filled to avoid unnecessary changes)
+  skipPreFilled?: boolean;
 }
 
 // Guard to prevent double-filling during the same session
 let isCurrentlyFilling = false;
 
+// SnapshotEntry records what the LLM filled so we can diff on button click.
+interface SnapshotEntry {
+  originalValue: string; // what LLM filled
+  signature: string; // field memory storage key
+  questionText: string; // for narrative detection
+  inputType: string; // for reading current value
+}
+
 export class FormFiller {
   private config: FormFillerConfig;
+  private skipPreFilled: boolean;
+
+  // Field memory: snapshot of LLM-filled elements for correction capture
+  private llmFilledSnapshot = new Map<HTMLElement, SnapshotEntry>();
+  private _captureListenerCleanup: (() => void) | null = null;
 
   constructor(config: FormFillerConfig) {
     this.config = config;
+    // Default to true (skip pre-filled) for backward compatibility with orchestrator
+    // Manual autofill should explicitly set this to false
+    this.skipPreFilled = config.skipPreFilled ?? true;
   }
 
   /**
@@ -155,6 +181,24 @@ export class FormFiller {
       return 0;
     }
 
+    // Extract job context from page if not provided in config
+    // This enables LLM form filling in autofill mode
+    let jobTitle = this.config.jobTitle;
+    let company = this.config.company;
+    let jobDescription = this.config.jobDescription;
+
+    if (!jobTitle || !company) {
+      const { extractJobContext } = await import('./job-context-extractor');
+      const extractedContext = extractJobContext();
+
+      // Config takes precedence over extracted context
+      if (!jobTitle) jobTitle = extractedContext.jobTitle;
+      if (!company) company = extractedContext.company;
+      if (!jobDescription) jobDescription = extractedContext.jobDescription;
+
+      logger.log('FormFiller', 'Using extracted job context', { jobTitle, company });
+    }
+
     // Build questions list
     const questions: FormQuestion[] = [];
     const fieldMap = new Map<string, DetectedField>();
@@ -166,10 +210,16 @@ export class FormFiller {
 
       // Get question text - prefer pre-computed labelText from classifier
       const questionText = field.labelText || this.findLabelText(element) || field.purpose || '';
+      const inputType = this.getInputTypeForLLM(element);
 
       logger.log('FormFiller', `Processing unknown field: "${questionText.substring(0, 60)}..."`);
+      console.log('[FormFiller] Unknown field:', {
+        question: questionText.substring(0, 80),
+        element: element.tagName,
+        isSelect: element instanceof HTMLSelectElement,
+        isCombobox: element.getAttribute('role') === 'combobox',
+      });
 
-      // Try local answer first (faster, no API call)
       // Detect required from multiple sources (element, fieldset, labelText with *)
       const isRequired: boolean =
         (element as HTMLInputElement).required ||
@@ -178,13 +228,44 @@ export class FormFiller {
         element.closest('fieldset')?.hasAttribute('required') === true ||
         (field.labelText?.includes('*') ?? false);
 
-      // Extract options - from select elements or from labelText for radio buttons
+      // ── FIELD MEMORY CHECK ────────────────────────────────────────────────
+      // For non-narrative fields, check if the user previously corrected this
+      // exact question. If so, use the stored answer and skip LLM entirely.
+      if (!isNarrativeField(questionText, inputType)) {
+        const signature = makeFieldSignature(questionText, inputType);
+        const memorizedAnswer = await getFieldMemory(signature);
+        if (memorizedAnswer !== null) {
+          console.log(`[FieldMemory] Hit: "${signature}" → "${memorizedAnswer}"`);
+          logger.log(
+            'FormFiller',
+            `Field memory hit: "${questionText.substring(0, 40)}" = "${memorizedAnswer}"`
+          );
+          const fillSuccess = await this.fillFieldWithValue(element, field.type, memorizedAnswer);
+          if (fillSuccess) {
+            localFilledCount++;
+            continue;
+          }
+          // If fill failed, fall through to LLM
+        }
+      } else {
+        console.log(`[FieldMemory] Skipping narrative field: "${questionText.substring(0, 60)}"`);
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // Extract options - from select elements, ARIA comboboxes, or from labelText for radio buttons
       // Radio labelText format: "Question? * [Options: Yes, No]"
       let localOptions: string[] | undefined;
       if (element instanceof HTMLSelectElement) {
         localOptions = Array.from(element.options)
           .map((o) => o.textContent?.trim() || '')
           .filter(Boolean);
+      } else if (element.getAttribute('role') === 'combobox') {
+        // Open the ARIA combobox temporarily to read options from the DOM
+        localOptions = await this.extractAriaComboboxOptions(element);
+        logger.log(
+          'FormFiller',
+          `Extracted ${localOptions?.length ?? 0} options from ARIA combobox`
+        );
       } else if (field.labelText?.includes('[Options:')) {
         const optionsMatch = field.labelText.match(/\[Options:\s*([^\]]+)\]/);
         if (optionsMatch && optionsMatch[1]) {
@@ -195,6 +276,7 @@ export class FormFiller {
         }
       }
 
+      // Try local answer first (rule-based classifiers, faster than LLM)
       const localAnswer = tryAnswerLocally(
         {
           fieldId:
@@ -202,7 +284,7 @@ export class FormFiller {
               ? field.purpose
               : `unknown_field_${questions.length}`,
           questionText,
-          inputType: this.getInputTypeForLLM(element),
+          inputType,
           options: localOptions,
           isRequired,
         },
@@ -212,28 +294,18 @@ export class FormFiller {
 
       if (localAnswer !== null) {
         logger.log('FormFiller', `Local answer found: "${localAnswer}"`);
-        // Fill locally - track if it was successful
         const fillSuccess = await this.fillFieldWithValue(element, field.type, localAnswer);
         if (fillSuccess) {
           localFilledCount++;
           logger.log('FormFiller', `Successfully filled field with local answer: "${localAnswer}"`);
-          continue; // Successfully filled, move to next field
+          continue;
         } else {
           logger.log(
             'FormFiller',
             `Failed to fill field with local answer: "${localAnswer}", will try LLM`
           );
-          // Fall through to add to LLM questions - don't continue!
+          // Fall through to LLM
         }
-      }
-
-      // Need LLM for this one - but only if we have job context
-      if (!this.config.jobTitle) {
-        logger.log(
-          'FormFiller',
-          `No job title for LLM, skipping field: "${questionText.substring(0, 40)}..."`
-        );
-        continue;
       }
 
       // Use unique ID for unknown fields to prevent collision in fieldMap
@@ -242,13 +314,14 @@ export class FormFiller {
           ? field.purpose
           : `unknown_field_${questions.length}`;
 
-      // Extract options - from select elements or from labelText for radio buttons
-      // Radio labelText format: "Question? * [Options: Yes, No]"
+      // Reuse localOptions for ARIA comboboxes (already opened above)
       let options: string[] | undefined;
       if (element instanceof HTMLSelectElement) {
         options = Array.from(element.options)
           .map((o) => o.textContent?.trim() || '')
           .filter(Boolean);
+      } else if (element.getAttribute('role') === 'combobox') {
+        options = localOptions;
       } else if (field.labelText?.includes('[Options:')) {
         const optionsMatch = field.labelText.match(/\[Options:\s*([^\]]+)\]/);
         if (optionsMatch && optionsMatch[1]) {
@@ -267,15 +340,15 @@ export class FormFiller {
       questions.push({
         fieldId,
         questionText,
-        inputType: this.getInputTypeForLLM(element),
+        inputType,
         options,
         maxLength:
           (element as HTMLInputElement).maxLength > 0
             ? (element as HTMLInputElement).maxLength
             : undefined,
         isRequired,
-        validationError, // Include error from previous attempt
-        previousAnswer, // Include what was answered before
+        validationError,
+        previousAnswer,
       });
       fieldMap.set(fieldId, field);
     }
@@ -288,11 +361,11 @@ export class FormFiller {
     const coverLetterField = fields.find((f) => f.purpose === 'coverLetter');
     if (coverLetterField) {
       const element = coverLetterField.element as HTMLElement;
-      if (element && this.config.jobDescription) {
+      if (element && jobDescription) {
         const coverLetter = await generateCoverLetter({
-          jobTitle: this.config.jobTitle!,
-          company: this.config.company || 'the company',
-          jobDescription: this.config.jobDescription,
+          jobTitle: jobTitle!,
+          company: company || 'the company',
+          jobDescription: jobDescription,
           resumeData: this.config.resumeData!,
         });
         if (coverLetter) {
@@ -309,14 +382,24 @@ export class FormFiller {
     }
 
     // Batch call to LLM for remaining questions
+    console.log(
+      '[FormFiller] Sending to LLM:',
+      questions.map((q) => ({
+        fieldId: q.fieldId,
+        question: q.questionText.substring(0, 60),
+        type: q.inputType,
+        options: q.options,
+      }))
+    );
     const answers = await answerQuestionBatch({
-      jobTitle: this.config.jobTitle!,
-      company: this.config.company || 'the company',
-      jobDescription: this.config.jobDescription,
+      jobTitle: jobTitle!,
+      company: company || 'the company',
+      jobDescription: jobDescription,
       questions,
       resumeData: this.config.resumeData!,
     });
 
+    console.log('[FormFiller] LLM answers:', answers);
     let filled = 0;
     for (const [fieldId, answer] of Object.entries(answers)) {
       const field = fieldMap.get(fieldId);
@@ -330,6 +413,26 @@ export class FormFiller {
         if (fillSuccess) {
           filled++;
           logger.log('FormFiller', `Successfully filled LLM answer for: ${fieldId} = "${answer}"`);
+
+          // ── SNAPSHOT for correction capture ──────────────────────────────
+          // Find the original question for this field to check narrative later
+          const matchedQuestion = questions.find((q) => q.fieldId === fieldId);
+          if (
+            matchedQuestion &&
+            !isNarrativeField(matchedQuestion.questionText, matchedQuestion.inputType)
+          ) {
+            const signature = makeFieldSignature(
+              matchedQuestion.questionText,
+              matchedQuestion.inputType
+            );
+            this.llmFilledSnapshot.set(element, {
+              originalValue: answer,
+              signature,
+              questionText: matchedQuestion.questionText,
+              inputType: matchedQuestion.inputType,
+            });
+          }
+          // ─────────────────────────────────────────────────────────────────
         } else {
           logger.log(
             'FormFiller',
@@ -344,7 +447,149 @@ export class FormFiller {
       }
     }
 
+    // ── ATTACH BUTTON-CLICK CAPTURE LISTENER ─────────────────────────────
+    // After LLM fills are done, listen for ANY button click on the document.
+    // This captures user corrections regardless of whether it's Next/Submit/Continue.
+    if (this.llmFilledSnapshot.size > 0) {
+      this.attachCaptureListener();
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     return filled + localFilledCount;
+  }
+
+  // ============================================================================
+  // Field Memory — Correction Capture
+  // ============================================================================
+
+  /**
+   * Attach a single document-level click listener (capture phase) that fires on
+   * ANY button click after the LLM has filled fields.
+   *
+   * Gated on snapshot.size > 0 — so irrelevant clicks (before any LLM fill) are ignored.
+   * The listener removes itself after the first capture to avoid accumulating handlers.
+   * On multi-step forms each LLM-fill round reattaches it fresh.
+   */
+  private attachCaptureListener(): void {
+    // Clean up any stale listener from a previous step
+    if (this._captureListenerCleanup) {
+      this._captureListenerCleanup();
+      this._captureListenerCleanup = null;
+    }
+
+    const handler = (event: Event) => {
+      const target = event.target as HTMLElement;
+      // Only fire on button-like elements
+      const isButton =
+        target.tagName === 'BUTTON' ||
+        target.closest('button') !== null ||
+        (target instanceof HTMLInputElement &&
+          (target.type === 'submit' || target.type === 'button')) ||
+        target.getAttribute('role') === 'button';
+
+      if (!isButton) return;
+      if (this.llmFilledSnapshot.size === 0) return;
+
+      console.log('[FieldMemory] Button click detected — capturing corrections...');
+      // Run async without blocking the click
+      void this.captureCorrections();
+    };
+
+    document.addEventListener('click', handler, { capture: true });
+
+    this._captureListenerCleanup = () => {
+      document.removeEventListener('click', handler, { capture: true });
+    };
+
+    console.log('[FieldMemory] Capture listener attached');
+  }
+
+  /**
+   * Walk the LLM-filled snapshot, compare current field values to what we filled,
+   * and save any meaningful corrections to field memory.
+   * Clears the snapshot and removes the document listener after capture.
+   */
+  private async captureCorrections(): Promise<void> {
+    // Remove listener first so re-entrant clicks don't re-trigger
+    if (this._captureListenerCleanup) {
+      this._captureListenerCleanup();
+      this._captureListenerCleanup = null;
+    }
+
+    const snapshot = new Map(this.llmFilledSnapshot);
+    this.llmFilledSnapshot.clear();
+
+    for (const [element, entry] of snapshot) {
+      try {
+        const currentValue = this.readElementValue(element, entry.inputType);
+        if (currentValue === null) continue;
+
+        const originalTrimmed = entry.originalValue.trim().toLowerCase();
+        const currentTrimmed = currentValue.trim().toLowerCase();
+
+        // Skip if unchanged or only whitespace differs
+        if (originalTrimmed === currentTrimmed) continue;
+        // Skip if the field is now empty (user cleared it, not a correction)
+        if (currentTrimmed.length === 0) continue;
+
+        console.log(`[FieldMemory] Saving correction: "${entry.signature}" → "${currentValue}"`);
+        await saveFieldMemory(entry.signature, currentValue);
+      } catch (err) {
+        console.error('[FieldMemory] Error capturing correction:', err);
+      }
+    }
+  }
+
+  /**
+   * Read the current value of a field element in a uniform way across all types.
+   */
+  private readElementValue(element: HTMLElement, inputType: string): string | null {
+    try {
+      if (element instanceof HTMLInputElement) {
+        if (inputType === 'checkbox') {
+          return element.checked ? 'yes' : 'no';
+        }
+        if (inputType === 'radio') {
+          // Find the checked radio in the same group
+          const name = element.name;
+          const form = element.closest('form') ?? document;
+          const checked = name
+            ? (form.querySelector(
+                `input[type="radio"][name="${CSS.escape(name)}"]:checked`
+              ) as HTMLInputElement | null)
+            : null;
+          if (checked) {
+            // Prefer label text over raw value
+            const label = checked.id
+              ? document.querySelector(`label[for="${checked.id}"]`)
+              : checked.closest('label');
+            return label?.textContent?.trim() || checked.value || null;
+          }
+          return null;
+        }
+        return element.value;
+      }
+
+      if (element instanceof HTMLTextAreaElement) {
+        return element.value;
+      }
+
+      if (element instanceof HTMLSelectElement) {
+        const opt = element.options[element.selectedIndex];
+        return opt ? opt.text.trim() || opt.value : element.value;
+      }
+
+      // ARIA combobox — read the displayed text from the combobox's input or textContent
+      if (element.getAttribute('role') === 'combobox') {
+        const input = element.querySelector('input') as HTMLInputElement | null;
+        if (input) return input.value;
+        return element.textContent?.trim() || null;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -358,7 +603,54 @@ export class FormFiller {
       if (element.type === 'radio') return 'radio';
       if (element.type === 'checkbox') return 'checkbox';
     }
+    // ARIA combobox (custom dropdowns like LinkedIn's) should be treated as select
+    if (element.getAttribute('role') === 'combobox') return 'select';
     return 'text';
+  }
+
+  /**
+   * Extract options from an ARIA combobox by temporarily opening it.
+   * Opens the dropdown, reads [role="option"] text, then closes it.
+   * Returns undefined if no options are found.
+   */
+  private async extractAriaComboboxOptions(combobox: HTMLElement): Promise<string[] | undefined> {
+    try {
+      // Open the dropdown
+      combobox.click();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Find associated listbox
+      const listboxId = combobox.getAttribute('aria-controls');
+      let listbox: HTMLElement | null = null;
+      if (listboxId) {
+        listbox = document.getElementById(listboxId);
+      }
+      if (!listbox) {
+        listbox =
+          (combobox.parentElement?.querySelector('[role="listbox"]') as HTMLElement) ?? null;
+      }
+      if (!listbox) {
+        // Also search in document root (some portals append listbox to body)
+        listbox = (document.querySelector('[role="listbox"]') as HTMLElement) ?? null;
+      }
+
+      let options: string[] | undefined;
+      if (listbox) {
+        const optionEls = listbox.querySelectorAll('[role="option"]');
+        const texts = Array.from(optionEls)
+          .map((o) => (o.textContent || '').trim())
+          .filter(Boolean);
+        if (texts.length > 0) options = texts;
+      }
+
+      // Close the dropdown again
+      combobox.click();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      return options;
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -410,13 +702,38 @@ export class FormFiller {
         }
         return true;
       } else if (element.type === 'radio') {
-        // Find the radio with matching value and click it
-        // Look in form first, then fieldset, then fall back to document
-        const fieldset = element.closest('fieldset');
-        const form = element.closest('form');
-        const container = fieldset || form || document;
-        const radios = container.querySelectorAll(`input[name="${element.name}"]`);
-        const radioList = radios.length > 0 ? Array.from(radios) : [element];
+        // Find all radios in the same group
+        // Use the same grouping logic as the page classifier
+        const name = element.name;
+        let radioList: HTMLInputElement[] = [];
+
+        if (name) {
+          // Method 1: Group by name attribute (standard approach)
+          const fieldset = element.closest('fieldset');
+          const form = element.closest('form');
+          const container = fieldset || form || document;
+          const radios = container.querySelectorAll(
+            `input[type="radio"][name="${CSS.escape(name)}"]`
+          );
+          radioList = Array.from(radios) as HTMLInputElement[];
+        } else {
+          // Method 2: Group by parent container (for radios without name attribute)
+          // This is common in custom UI frameworks like Gem
+          let parent = element.parentElement;
+          for (let i = 0; i < 4 && parent; i++) {
+            const radiosInParent = parent.querySelectorAll('input[type="radio"]');
+            if (radiosInParent.length > 1) {
+              radioList = Array.from(radiosInParent) as HTMLInputElement[];
+              break;
+            }
+            parent = parent.parentElement;
+          }
+        }
+
+        // Fallback to just this element if we couldn't find a group
+        if (radioList.length === 0) {
+          radioList = [element];
+        }
 
         logger.log(
           'FormFiller',
@@ -490,6 +807,9 @@ export class FormFiller {
       return true;
     } else if (element instanceof HTMLSelectElement) {
       return await this.fillSelect(element, value);
+    } else if (element.getAttribute('role') === 'combobox') {
+      // Handle ARIA combobox (custom dropdowns)
+      return await this.fillAriaCombobox(element, value);
     }
     return true;
   }
@@ -583,12 +903,28 @@ export class FormFiller {
       }
     }
 
+    // For cover letter file inputs: generate via LLM and upload as PDF
+    if (isFileInput && field.purpose === 'coverLetter') {
+      try {
+        await this.fillCoverLetterFileInput(element as HTMLInputElement);
+        logger.log('FormFiller', `Successfully filled cover letter file field`);
+        return true;
+      } catch (error) {
+        logger.error('FormFiller', `Error filling cover letter file field`, error);
+        // Don't rethrow — cover letter upload is best-effort; resume is mandatory
+        console.warn('[FormFiller] Cover letter upload failed, skipping:', error);
+        return false;
+      }
+    }
+
     // =========================================================================
     // SKIP PRE-FILLED FIELDS (except resume which is handled above)
     // LinkedIn pre-fills many fields from the user's profile - don't overwrite
-    // UNLESS the field has a validation error from a previous attempt
+    // UNLESS:
+    // 1. The field has a validation error from a previous attempt, OR
+    // 2. We're in manual autofill mode (skipPreFilled = false)
     // =========================================================================
-    if (this.isFieldPreFilled(element)) {
+    if (this.skipPreFilled && this.isFieldPreFilled(element)) {
       // Check if this field has a validation error from previous attempt
       const validationErrors = getLastValidationErrors();
       const hasValidationError = validationErrors.has(element);
@@ -617,8 +953,12 @@ export class FormFiller {
       }
 
       // No known value - mark for LLM if required, otherwise skip
-      if (isRequired) {
-        logger.log('FormFiller', `No value for required field, needs LLM: ${field.purpose}`);
+      // Exception: unknown/experience fields should go to LLM even if optional
+      const shouldUseLLM =
+        isRequired || field.purpose === 'unknown' || field.purpose === 'experience';
+
+      if (shouldUseLLM) {
+        logger.log('FormFiller', `No value for field, needs LLM: ${field.purpose}`);
         console.log('[FormFiller] Field needs LLM:', field.purpose);
         return 'unknown';
       }
@@ -654,6 +994,9 @@ export class FormFiller {
         await this.fillTextarea(element, value);
       } else if (element instanceof HTMLSelectElement) {
         success = await this.fillSelect(element, value);
+      } else if (element.getAttribute('role') === 'combobox') {
+        // Handle ARIA combobox (custom dropdowns)
+        success = await this.fillAriaCombobox(element, value);
       }
 
       // Restore original display style if we temporarily made it visible
@@ -934,6 +1277,83 @@ export class FormFiller {
   }
 
   /**
+   * Fill an ARIA combobox (custom dropdown)
+   * These are DIV elements with role="combobox" that need to be clicked to open
+   */
+  private async fillAriaCombobox(
+    combobox: HTMLElement,
+    value: string | number | boolean | null | undefined
+  ): Promise<boolean> {
+    if (value === null || value === undefined) {
+      logger.log('FormFiller', `No value provided for ARIA combobox`);
+      return false;
+    }
+
+    const stringValue = String(value).toLowerCase();
+
+    logger.log('FormFiller', `Filling ARIA combobox with value: ${stringValue}`);
+    console.log('[FormFiller] Filling ARIA combobox:', stringValue);
+
+    try {
+      // Click the combobox to open the dropdown
+      combobox.click();
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for dropdown to open
+
+      // Find the associated listbox
+      const listboxId = combobox.getAttribute('aria-controls');
+      let listbox: HTMLElement | null = null;
+
+      if (listboxId) {
+        listbox = document.getElementById(listboxId);
+      } else {
+        // Fallback: find listbox by role near the combobox
+        listbox = combobox.parentElement?.querySelector('[role="listbox"]') as HTMLElement;
+      }
+
+      if (!listbox) {
+        logger.warn('FormFiller', 'Could not find listbox for ARIA combobox');
+        console.warn('[FormFiller] No listbox found for combobox');
+        return false;
+      }
+
+      // Find all options in the listbox
+      const options = listbox.querySelectorAll('[role="option"]');
+
+      logger.log('FormFiller', `Found ${options.length} options in listbox`);
+
+      // Try to find matching option
+      for (const option of Array.from(options)) {
+        const optionText = (option.textContent || '').toLowerCase().trim();
+
+        // Exact match or contains match
+        if (
+          optionText === stringValue ||
+          optionText.includes(stringValue) ||
+          stringValue.includes(optionText)
+        ) {
+          logger.log('FormFiller', `Clicking option: ${optionText}`);
+          console.log('[FormFiller] Selecting option:', optionText);
+          (option as HTMLElement).click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return true;
+        }
+      }
+
+      logger.warn('FormFiller', `No matching option found for: ${stringValue}`);
+      console.warn('[FormFiller] No match found in combobox for:', stringValue);
+
+      // Close the dropdown by clicking the combobox again
+      combobox.click();
+
+      return false;
+    } catch (error) {
+      logger.error('FormFiller', 'Error filling ARIA combobox:', error);
+      console.error('[FormFiller] ARIA combobox error:', error);
+      return false;
+    }
+  }
+
+  /**
    * Fill a radio button
    * Uses humanToggle for realistic click behavior
    */
@@ -1017,6 +1437,181 @@ export class FormFiller {
       console.error('[FormFiller] Error attaching resume:', error);
       throw error;
     }
+  }
+
+  /**
+   * Fill a cover letter file input:
+   * 1. Generate cover letter text via LLM
+   * 2. Convert to a minimal PDF Blob
+   * 3. Attach to the file input via attachFile
+   */
+  private async fillCoverLetterFileInput(input: HTMLInputElement): Promise<void> {
+    if (!this.config.jobDescription) {
+      console.warn('[FormFiller] No job description — cannot generate cover letter PDF, skipping');
+      return;
+    }
+
+    console.log('[FormFiller] Generating cover letter PDF for file input...');
+
+    // Build resumeData from config (same as what fillUnknownFieldsWithLLM uses)
+    const resumeData: ResumeData = {
+      summary: [
+        this.config.firstName && this.config.lastName
+          ? `${this.config.firstName} ${this.config.lastName}`
+          : '',
+        this.config.jobTitle ?? '',
+      ]
+        .filter(Boolean)
+        .join(', '),
+      totalYearsExperience: 0,
+      skills: [],
+      education: [],
+      recentJobTitle: this.config.jobTitle ?? '',
+      recentCompany: '',
+      email: this.config.email,
+      employment: [],
+    };
+
+    const coverLetterText = await generateCoverLetter({
+      jobTitle: this.config.jobTitle ?? 'this position',
+      company: this.config.company ?? '',
+      jobDescription: this.config.jobDescription,
+      resumeData,
+    });
+
+    if (!coverLetterText) {
+      console.warn('[FormFiller] LLM returned no cover letter text — skipping file upload');
+      return;
+    }
+
+    console.log('[FormFiller] Cover letter generated, length:', coverLetterText.length);
+
+    // Convert plain text → minimal valid PDF Blob (no external library needed)
+    const pdfBlob = this.generateCoverLetterPdfBlob(coverLetterText);
+    const pdfFile = new File([pdfBlob], 'cover_letter.pdf', { type: 'application/pdf' });
+
+    // Make input accessible if hidden
+    const wasHidden = !this.isVisible(input);
+    let originalStyles: Record<string, string> | null = null;
+    if (wasHidden) {
+      originalStyles = {
+        display: input.style.display,
+        visibility: input.style.visibility,
+        opacity: input.style.opacity,
+        position: input.style.position,
+        left: input.style.left,
+      };
+      input.style.display = 'block';
+      input.style.visibility = 'visible';
+      input.style.opacity = '1';
+      input.style.position = 'absolute';
+      input.style.left = '-9999px';
+    }
+
+    await attachFile(input, pdfFile);
+    console.log('[FormFiller] Cover letter PDF attached:', pdfFile.name);
+
+    if (wasHidden && originalStyles) {
+      input.style.display = originalStyles['display'] ?? '';
+      input.style.visibility = originalStyles['visibility'] ?? '';
+      input.style.opacity = originalStyles['opacity'] ?? '';
+      input.style.position = originalStyles['position'] ?? '';
+      input.style.left = originalStyles['left'] ?? '';
+    }
+  }
+
+  /**
+   * Create a minimal but valid PDF Blob from plain text.
+   * No external library needed — uses only PDF spec primitives.
+   * ATS parsers read the text stream content, so this is fully compatible.
+   */
+  private generateCoverLetterPdfBlob(text: string): Blob {
+    // PDF requires ISO-8859-1 safe characters in streams without font embedding.
+    // We encode the text as PDF string literals, replacing special chars.
+    const safeText = text
+      .replace(/\\/g, '\\\\') // backslash first
+      .replace(/\(/g, '\\(') // open paren
+      .replace(/\)/g, '\\)') // close paren
+      .replace(/\r\n/g, '\n') // normalize CRLF
+      .substring(0, 32000); // PDF stream size guard
+
+    // Split into lines of ≤90 chars for readability in the PDF stream
+    const LINE_WIDTH = 90;
+    const words = safeText.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+    for (const word of words) {
+      // Handle explicit newlines in the text
+      const parts = word.split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]!;
+        if (currentLine.length + part.length + 1 <= LINE_WIDTH) {
+          currentLine = currentLine ? currentLine + ' ' + part : part;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = part;
+        }
+        // Explicit newline between parts
+        if (i < parts.length - 1) {
+          lines.push(currentLine);
+          currentLine = '';
+        }
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    // Build PDF text stream: each line positioned with Td operator
+    const leading = 14; // line height in points
+    const margin = 50;
+    const pageHeight = 792; // US Letter
+    const startY = pageHeight - margin;
+
+    // BT = Begin Text, Tf = set font, Td = move cursor, Tj = show string, ET = End Text
+    const streamLines: string[] = [
+      'BT',
+      `/F1 11 Tf`,
+      `${margin} ${startY} Td`,
+      `${leading} TL`, // Text leading
+    ];
+    for (const line of lines) {
+      streamLines.push(`(${line}) Tj T*`);
+    }
+    streamLines.push('ET');
+    const streamContent = streamLines.join('\n');
+    const streamBytes = new TextEncoder().encode(streamContent);
+    const streamLength = streamBytes.length;
+
+    // Minimal PDF structure
+    const pdf = [
+      '%PDF-1.4',
+      '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+      '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+      '3 0 obj << /Type /Page /Parent 2 0 R',
+      '  /MediaBox [0 0 612 792]',
+      '  /Contents 4 0 R',
+      '  /Resources << /Font << /F1 5 0 R >> >>',
+      '>> endobj',
+      `4 0 obj << /Length ${streamLength} >>`,
+      'stream',
+      streamContent,
+      'endstream endobj',
+      '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+      'xref',
+      '0 6',
+      '0000000000 65535 f ',
+      // Object offsets will be approximate — most readers handle this gracefully
+      '0000000009 00000 n ',
+      '0000000058 00000 n ',
+      '0000000115 00000 n ',
+      '0000000274 00000 n ',
+      '0000000350 00000 n ',
+      'trailer << /Size 6 /Root 1 0 R >>',
+      'startxref',
+      '450',
+      '%%EOF',
+    ].join('\n');
+
+    return new Blob([pdf], { type: 'application/pdf' });
   }
 
   /**
@@ -1143,7 +1738,8 @@ export class FormFiller {
  */
 export async function createFormFillerFromVault(
   providedResume?: { data: string; fileName?: string; mimeType?: string },
-  providedProfile?: any // Add profile parameter
+  providedProfile?: any, // Add profile parameter
+  skipPreFilled?: boolean // Add skipPreFilled parameter (default: true for orchestrator, false for autofill)
 ): Promise<FormFiller | null> {
   try {
     logger.log('FormFiller', 'Loading user data from vault via background...');
@@ -1152,6 +1748,7 @@ export async function createFormFillerFromVault(
       hasData: !!providedResume?.data,
       dataLength: providedResume?.data?.length || 0,
       fileName: providedResume?.fileName,
+      skipPreFilled,
     });
 
     // Use provided profile if available, otherwise fetch from background
@@ -1296,12 +1893,15 @@ export async function createFormFillerFromVault(
       jobTitle: jobContext.jobTitle,
       company: jobContext.company,
       jobDescription: jobContext.jobDescription,
+      // Pass skipPreFilled parameter
+      skipPreFilled,
     };
 
     logger.log('FormFiller', 'Created from vault data with LLM context', {
       hasResumeData: !!config.resumeData,
       hasJobTitle: !!config.jobTitle,
       hasCompany: !!config.company,
+      skipPreFilled: config.skipPreFilled,
     });
     return new FormFiller(config);
   } catch (error) {
@@ -1380,6 +1980,7 @@ function buildResumeDataFromProfile(profile: any): ResumeData {
     })),
     recentJobTitle: recentJob.title || '',
     recentCompany: recentJob.company || '',
+    email: profile.identity?.email || undefined, // NEW: Include email for local answering
     // Include employment history with duties for skill-year calculation
     employment: employment.map((job: any) => ({
       company: job.company || '',

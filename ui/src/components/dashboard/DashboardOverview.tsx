@@ -1,18 +1,13 @@
-import {
-  Loader2,
-  PenSquare,
-  Briefcase,
-  MapPin,
-  Play,
-  Square,
-  CheckCircle2,
-  AlertCircle,
-} from 'lucide-react';
+import { Loader2, PenSquare, Briefcase, MapPin, Check, X, AlertCircle, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { UserInfo } from '@/lib/types';
 import { useApplicationsData } from '@/lib/jobs/useApplicationsData';
 import type { JobRecord } from '@/lib/jobs/store-types';
+import { AutofillCard } from './AutofillCard';
+import { updateJobMetadata } from '@/lib/jobs/store';
+import { MetadataConfirmationModal } from './MetadataConfirmationModal';
 
 interface DashboardOverviewProps {
   user: UserInfo | null;
@@ -166,56 +161,6 @@ function DonutChart({ stats }: DonutChartProps) {
   );
 }
 
-function JobStatusBadge({ status }: { status: JobRecord['status'] }) {
-  if (status === 'applying') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/20 px-3 py-1 text-xs font-medium text-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-        <Loader2 className="h-3 w-3 animate-spin" /> Applying
-      </span>
-    );
-  }
-  if (status === 'ats_filling') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#7000ff]/10 border border-[#7000ff]/20 px-3 py-1 text-xs font-medium text-[#a78bfa] shadow-[0_0_10px_rgba(112,0,255,0.1)]">
-        <Loader2 className="h-3 w-3 animate-spin" /> Filling form
-      </span>
-    );
-  }
-  if (status === 'completed') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00ff9d]/10 border border-[#00ff9d]/20 px-3 py-1 text-xs font-medium text-[#00ff9d] shadow-[0_0_10px_rgba(0,255,157,0.1)]">
-        Applied
-      </span>
-    );
-  }
-  if (status === 'failed') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#7000ff]/10 border border-[#7000ff]/20 px-3 py-1 text-xs font-medium text-[#a78bfa]">
-        Failed
-      </span>
-    );
-  }
-  if (status === 'queued') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-400">
-        In queue
-      </span>
-    );
-  }
-  if (status === 'skipped') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-500">
-        Skipped
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-medium text-slate-500">
-      {status}
-    </span>
-  );
-}
-
 function formatAppliedDate(timestamp: number | undefined): string {
   if (!timestamp) {
     return '—';
@@ -230,6 +175,7 @@ function formatAppliedDate(timestamp: number | undefined): string {
   });
 }
 
+/*
 function ControlCard({
   engineState,
   engineStatus,
@@ -246,7 +192,7 @@ function ControlCard({
 
   return (
     <div className="relative group w-full">
-      {/* Glow Effect */}
+      {/* Glow Effect *\/}
       <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
 
       <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-6 rounded-2xl flex items-center justify-between">
@@ -306,17 +252,224 @@ function ControlCard({
     </div>
   );
 }
+*/
 
-export function DashboardOverview({
-  user,
-  onEditProfile,
-  engineState,
-  engineStatus,
-  onStartAgent,
-  onStopAgent,
-}: DashboardOverviewProps) {
+export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProps) {
   const { inProgress, history, stats, isLoading, error, refresh } = useApplicationsData();
   const displayName = user?.given_name ?? user?.name?.split(' ')[0] ?? 'Job seeker';
+
+  // Autofill mode state
+  const [isAutofilling, setIsAutofilling] = useState(false);
+
+  // Removed modal state - autofill now adds job directly to table in editable state
+
+  // Modal state for post-submit confirmation
+  const [showMetadataModal, setShowMetadataModal] = useState(false);
+  const [extractedMetadata, setExtractedMetadata] = useState<{
+    title: string;
+    company: string;
+    location: string;
+    jobUrl: string;
+  } | null>(null);
+
+  // Editing state
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedCompany, setEditedCompany] = useState('');
+  const [editedLocation, setEditedLocation] = useState('');
+
+  // Listen for OPEN_JOB_IN_EDIT_MODE message from background (now shows modal instead)
+  useEffect(() => {
+    console.log('[Dashboard] Setting up OPEN_JOB_IN_EDIT_MODE listener');
+    const handler = (message: any) => {
+      console.log('[Dashboard] Received message:', message.type, message);
+      if (message.type === 'OPEN_JOB_IN_EDIT_MODE' && message.data?.metadata) {
+        console.log(
+          '[Dashboard] Success detected, showing confirmation modal with metadata:',
+          message.data.metadata
+        );
+        setExtractedMetadata(message.data.metadata);
+        setShowMetadataModal(true);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => {
+      console.log('[Dashboard] Removing OPEN_JOB_IN_EDIT_MODE listener');
+      chrome.runtime.onMessage.removeListener(handler);
+    };
+  }, []);
+
+  // Autofill handler - extract metadata first, then show confirmation
+  const handleAutofill = async () => {
+    console.log('[Dashboard] Autofill button clicked');
+    setIsAutofilling(true);
+    try {
+      // Get the current active tab
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const currentTab = tabs[0];
+
+      console.log('[Dashboard] Current tab:', currentTab?.id, currentTab?.url);
+
+      if (!currentTab?.id || !currentTab?.url) {
+        console.error('[Dashboard] No active tab found');
+        setIsAutofilling(false);
+        return;
+      }
+
+      // Inject content script first (in case it's not already loaded)
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          files: ['content/executor-v2.js'],
+        });
+        console.log('[Dashboard] Content script injected successfully');
+        // Wait a bit for script to initialize
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        // Script might already be injected, that's okay
+        console.log('[Dashboard] Content script already injected or injection failed:', error);
+      }
+
+      // Extract metadata from the page
+      console.log('[Dashboard] Extracting metadata from page...');
+      const response = await chrome.tabs.sendMessage(currentTab.id, {
+        type: 'EXTRACT_JOB_METADATA',
+      });
+
+      console.log('[Dashboard] Metadata extraction response:', response);
+
+      if (response?.success) {
+        // Trigger autofill (job will be created when user clicks submit)
+        console.log('[Dashboard] Sending START_AUTOFILL message');
+        await chrome.runtime.sendMessage({
+          type: 'START_AUTOFILL',
+          tabId: currentTab.id,
+          metadata: {
+            title: response.title || '',
+            company: response.company || '',
+            location: response.location || '',
+          },
+        });
+        console.log('[Dashboard] START_AUTOFILL message sent');
+
+        // Reset after a delay (actual completion detected by engine state)
+        setTimeout(() => setIsAutofilling(false), 3000);
+      } else {
+        console.error('[Dashboard] Metadata extraction failed');
+        setIsAutofilling(false);
+      }
+    } catch (error) {
+      console.error('[Dashboard] Autofill error:', error);
+      setIsAutofilling(false);
+    }
+  };
+
+  // Edit handlers
+  const handleStartEdit = (job: JobRecord) => {
+    setEditingJobId(job.id);
+    setEditedTitle(job.title);
+    setEditedCompany(job.company);
+    setEditedLocation(job.location || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingJobId(null);
+    setEditedTitle('');
+    setEditedCompany('');
+    setEditedLocation('');
+  };
+
+  const handleConfirmEdit = async (jobId: string) => {
+    try {
+      await updateJobMetadata(jobId, {
+        title: editedTitle,
+        company: editedCompany,
+        location: editedLocation || undefined,
+      });
+      // Exit edit mode
+      setEditingJobId(null);
+      setEditedTitle('');
+      setEditedCompany('');
+      setEditedLocation('');
+      // Refresh the data to show updated values
+      refresh();
+    } catch (error) {
+      console.error('[Dashboard] Error updating job metadata:', error);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      // Import deleteJob from db
+      const { deleteJob } = await import('@/lib/jobs/db');
+      await deleteJob(jobId);
+      // Exit edit mode
+      setEditingJobId(null);
+      setEditedTitle('');
+      setEditedCompany('');
+      setEditedLocation('');
+      // Refresh the data to remove deleted job
+      refresh();
+      console.log('[Dashboard] Job deleted:', jobId);
+    } catch (error) {
+      console.error('[Dashboard] Error deleting job:', error);
+    }
+  };
+
+  // Handle metadata confirmation after submit - save to DB
+  const handleMetadataConfirm = async (confirmed: {
+    title: string;
+    company: string;
+    jobUrl: string;
+  }) => {
+    console.log('[Dashboard] Metadata confirmed:', confirmed);
+    setShowMetadataModal(false);
+
+    try {
+      // Determine platform from the confirmed URL (user may have edited it)
+      const jobUrl = confirmed.jobUrl || extractedMetadata?.jobUrl || '';
+
+      // Import job store functions
+      const { upsertJob } = await import('@/lib/jobs/store');
+
+      // Determine platform from URL
+      let platform = 'unknown';
+      let jobId = `autofill_${Date.now()}`;
+
+      if (jobUrl.includes('linkedin.com')) {
+        platform = 'linkedin';
+        const match = jobUrl.match(/jobs\/view\/(\d+)/);
+        if (match) jobId = match[1]!;
+      } else if (jobUrl.includes('indeed.com')) {
+        platform = 'indeed';
+        const match = jobUrl.match(/[?&]jk=([^&]+)/);
+        if (match) jobId = match[1]!;
+      }
+
+      // Save the job as completed with confirmed metadata
+      await upsertJob(platform, jobId, {
+        title: confirmed.title,
+        company: confirmed.company,
+        url: jobUrl,
+        status: 'completed',
+        needsConfirmation: false,
+      });
+
+      console.log('[Dashboard] Job saved successfully');
+      refresh();
+      setExtractedMetadata(null);
+    } catch (error) {
+      console.error('[Dashboard] Error saving job:', error);
+    }
+  };
+
+  // Handle metadata modal cancel
+  const handleMetadataCancel = () => {
+    console.log('[Dashboard] Metadata confirmation cancelled');
+    setShowMetadataModal(false);
+    setExtractedMetadata(null);
+  };
+
   const profileSummary = [
     { label: 'Visa', value: 'H‑1B (needs sponsorship)' },
     { label: 'Locations', value: 'Remote • Austin, TX • NYC' },
@@ -351,13 +504,26 @@ export function DashboardOverview({
 
   return (
     <div className="space-y-8">
-      {/* Control Center */}
-      <ControlCard
+      {/* Metadata Confirmation Modal - shown after successful submit */}
+      {extractedMetadata && (
+        <MetadataConfirmationModal
+          isOpen={showMetadataModal}
+          metadata={extractedMetadata}
+          onConfirm={handleMetadataConfirm}
+          onCancel={handleMetadataCancel}
+        />
+      )}
+
+      {/* Autofill Card - Primary CTA */}
+      <AutofillCard isAutofilling={isAutofilling} onAutofill={handleAutofill} />
+
+      {/* Control Center - Agent Mode (hidden for MVP - autofill only) */}
+      {/* <ControlCard
         engineState={engineState}
         engineStatus={engineStatus}
         onStart={onStartAgent}
         onStop={onStopAgent}
-      />
+      /> */}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Pipeline Card */}
@@ -451,9 +617,9 @@ export function DashboardOverview({
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#00ff9d] mb-1">
-                Live matches
+                Applied Jobs
               </p>
-              <h2 className="text-xl font-bold text-white tracking-tight">Live job match status</h2>
+              <h2 className="text-xl font-bold text-white tracking-tight">Your applications</h2>
             </div>
           </div>
 
@@ -477,45 +643,190 @@ export function DashboardOverview({
             <table className="w-full text-sm">
               <thead className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="pb-4 pl-4">Company / Organization</th>
-                  <th className="pb-4">Location</th>
-                  <th className="pb-4">Status</th>
-
+                  <th className="pb-4 pl-4">Company / Job Title</th>
+                  <th className="pb-4">Job URL</th>
                   <th className="pb-4 pr-4 text-right">Date applied</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {isLoading && tableJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-slate-400">
+                    <td colSpan={3} className="py-8 text-center text-slate-400">
                       <Loader2 className="h-5 w-5 animate-spin inline-block mr-2 text-[#00f0ff]" />
                       Loading applications...
                     </td>
                   </tr>
                 ) : tableJobs.length > 0 ? (
                   tableJobs.map((job) => {
+                    const isEditing = editingJobId === job.id;
+                    const needsConfirmation = job.needsConfirmation;
                     return (
-                      <tr key={job.id} className="group transition-colors hover:bg-white/[0.02]">
-                        <td className="py-4 pl-4">
-                          <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">
-                            {job.company}
-                          </p>
-                          <p className="text-xs font-medium text-slate-400 mt-0.5">{job.title}</p>
-                        </td>
-                        <td className="py-4 text-slate-300 font-medium">{job.location ?? '—'}</td>
-                        <td className="py-4">
-                          <JobStatusBadge status={job.status} />
-                        </td>
+                      <tr
+                        key={job.id}
+                        className={`group transition-all ${
+                          needsConfirmation
+                            ? 'bg-[#00ff9d]/5 hover:bg-[#00ff9d]/10 border-l-2 border-[#00ff9d]'
+                            : 'hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        {isEditing ? (
+                          /* Edit Mode - Form-style layout */
+                          <td colSpan={3} className="py-4 px-4">
+                            <div className="space-y-4">
+                              {/* Form Grid - 2 columns */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Left Column */}
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                      Company Name
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editedCompany}
+                                      onChange={(e) => setEditedCompany(e.target.value)}
+                                      className="w-full bg-[#0a1628]/80 border border-[#00f0ff]/20 rounded-lg px-3 py-2 text-sm font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff]/50 transition-all"
+                                      placeholder="Enter company name"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                      Job Title
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editedTitle}
+                                      onChange={(e) => setEditedTitle(e.target.value)}
+                                      className="w-full bg-[#0a1628]/80 border border-[#00f0ff]/20 rounded-lg px-3 py-2 text-sm font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff]/50 transition-all"
+                                      placeholder="Enter job title"
+                                    />
+                                  </div>
+                                </div>
 
-                        <td className="py-4 pr-4 text-right font-mono text-xs text-slate-400">
-                          {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
-                        </td>
+                                {/* Right Column */}
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                      Location
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editedLocation}
+                                      onChange={(e) => setEditedLocation(e.target.value)}
+                                      className="w-full bg-[#0a1628]/80 border border-[#00f0ff]/20 rounded-lg px-3 py-2 text-sm font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff]/50 transition-all"
+                                      placeholder="City, State or Remote"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                      Status
+                                    </label>
+                                    <div className="flex items-center h-[42px]">
+                                      <span className="inline-flex items-center rounded-full bg-[#00ff9d]/10 px-3 py-1 text-xs font-semibold text-[#00ff9d] border border-[#00ff9d]/20">
+                                        Applied
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Action Buttons - Bottom Right */}
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+                                {/* Delete button on the left */}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteJob(job.id)}
+                                  className="h-8 px-4 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
+
+                                {/* Cancel and Confirm on the right */}
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleCancelEdit}
+                                    className="h-8 px-4 border-white/20 text-slate-300 hover:bg-white/5 hover:border-white/30"
+                                  >
+                                    <X className="h-4 w-4 mr-1" />
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleConfirmEdit(job.id)}
+                                    className="h-8 px-4 bg-[#00ff9d] hover:bg-[#00e68a] text-black font-semibold border-0 shadow-lg shadow-[#00ff9d]/20"
+                                  >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Confirm
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        ) : (
+                          /* Normal Mode - Regular table cells */
+                          <>
+                            <td className="py-4 pl-4">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1">
+                                  <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">
+                                    {job.company}
+                                  </p>
+                                  <p className="text-xs font-medium text-slate-400 mt-0.5">
+                                    {job.title}
+                                  </p>
+                                </div>
+                                {needsConfirmation && (
+                                  <div title="Needs confirmation" className="flex-shrink-0 mt-0.5">
+                                    <AlertCircle className="h-4 w-4 text-[#ff9d00]" />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-4 max-w-[200px]">
+                              {job.url ? (
+                                <a
+                                  href={job.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-[#00f0ff]/70 hover:text-[#00f0ff] font-mono truncate block max-w-[200px] transition-colors"
+                                  title={job.url}
+                                >
+                                  {job.url.replace(/^https?:\/\//, '').substring(0, 45)}
+                                  {job.url.replace(/^https?:\/\//, '').length > 45 ? '…' : ''}
+                                </a>
+                              ) : (
+                                <span className="text-slate-600 text-xs">—</span>
+                              )}
+                            </td>
+
+                            <td className="py-4 pr-4 text-right">
+                              <div className="flex items-center justify-end gap-3">
+                                <span className="font-mono text-xs text-slate-400">
+                                  {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleStartEdit(job)}
+                                  className="h-7 px-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-[#00f0ff]"
+                                >
+                                  <PenSquare className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="py-12 text-center">
+                    <td colSpan={3} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center">
                           <Briefcase className="h-6 w-6 text-slate-500" />

@@ -22,6 +22,9 @@ export interface JobRecord {
   sourceTabId?: number; // tab that initiated the job
   atsTabId?: number; // ATS tab ID if external
   applyType?: 'easy_apply' | 'external' | 'unknown';
+
+  // Metadata confirmation
+  needsConfirmation?: boolean; // True if metadata is incomplete/uncertain
 }
 
 export interface JobStats {

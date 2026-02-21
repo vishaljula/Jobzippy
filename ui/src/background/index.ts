@@ -1424,6 +1424,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ status: 'started' });
       break;
     }
+
+    case 'START_AUTOFILL': {
+      // Autofill mode: Fill current page form, wait for manual submit
+      console.log('[Jobzippy] 📨 START_AUTOFILL message received');
+      if (USE_ORCHESTRATOR_V2) {
+        console.log('[Jobzippy] ✅ Using Orchestrator V2 for autofill');
+        const tabId = message.tabId;
+
+        if (!tabId) {
+          console.error('[Jobzippy] ❌ No tabId provided for autofill');
+          sendResponse({ status: 'error', message: 'No tab ID provided' });
+          break;
+        }
+
+        console.log('[Jobzippy] 🚀 Importing and calling executeAutofillMode for tab:', tabId);
+        import('./orchestration').then(({ executeAutofillMode }) => {
+          console.log('[Jobzippy] 📞 Calling executeAutofillMode...');
+          executeAutofillMode(tabId).catch((error: Error) => {
+            console.error('[Jobzippy] ❌ Autofill mode error:', error);
+          });
+        });
+
+        sendResponse({ status: 'autofilling' });
+      } else {
+        console.log('[Jobzippy] ❌ Orchestrator V2 not enabled');
+        sendResponse({ status: 'error', message: 'Autofill mode requires Orchestrator V2' });
+      }
+      break;
+    }
+
     case 'STOP_AUTO_APPLY':
       // Only handle if NOT using Orchestrator V2
       if (USE_ORCHESTRATOR_V2) {
@@ -1564,8 +1594,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             // Convert ArrayBuffer to base64 for transfer
             const bytes = new Uint8Array(resumeArrayBuffer);
             let binary = '';
+            // Use for loop to ensure all bytes are processed correctly
             for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i] || 0);
+              binary += String.fromCharCode(bytes[i]!);
             }
             const base64 = btoa(binary);
             sendResponse({
@@ -1648,6 +1679,116 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ status: 'success', coverLetter: result.coverLetter });
         } catch (error) {
           console.error('[Jobzippy] LLM_GENERATE_COVER_LETTER error:', error);
+          sendResponse({ status: 'error', error: String(error) });
+        }
+      })();
+      return true;
+
+    // ========================================================================
+    // FIELD MEMORY (Learn from user corrections to LLM-filled fields)
+    // ========================================================================
+    case 'GET_FIELD_MEMORY':
+      (async () => {
+        try {
+          const { signature } = message.data;
+          const result = await chrome.storage.local.get('field_memory');
+          const store = (result['field_memory'] || {}) as Record<
+            string,
+            { answer: string; lastUsed: number }
+          >;
+          const entry = store[signature];
+          if (!entry) {
+            sendResponse({ status: 'success', answer: null });
+            return;
+          }
+          // Update LRU timestamp
+          entry.lastUsed = Date.now();
+          await chrome.storage.local.set({ field_memory: store });
+          sendResponse({ status: 'success', answer: entry.answer });
+        } catch (error) {
+          console.error('[Jobzippy] GET_FIELD_MEMORY error:', error);
+          sendResponse({ status: 'error', error: String(error) });
+        }
+      })();
+      return true;
+
+    case 'SAVE_FIELD_MEMORY':
+      (async () => {
+        try {
+          const { signature, answer } = message.data;
+          const FIELD_MEMORY_CAP = 500;
+          const result = await chrome.storage.local.get('field_memory');
+          const store = (result['field_memory'] || {}) as Record<
+            string,
+            { answer: string; lastUsed: number }
+          >;
+
+          store[signature] = { answer, lastUsed: Date.now() };
+
+          // LRU eviction when over cap
+          const keys = Object.keys(store);
+          if (keys.length > FIELD_MEMORY_CAP) {
+            const sorted = keys.sort(
+              (a, b) => (store[a]?.lastUsed ?? 0) - (store[b]?.lastUsed ?? 0)
+            );
+            const toRemove = sorted.slice(0, keys.length - FIELD_MEMORY_CAP);
+            for (const key of toRemove) delete store[key];
+            console.log(`[Jobzippy] FieldMemory: Evicted ${toRemove.length} LRU entries`);
+          }
+
+          await chrome.storage.local.set({ field_memory: store });
+          console.log(`[Jobzippy] FieldMemory: Saved "${signature}" → "${answer}"`);
+          sendResponse({ status: 'success' });
+        } catch (error) {
+          console.error('[Jobzippy] SAVE_FIELD_MEMORY error:', error);
+          sendResponse({ status: 'error', error: String(error) });
+        }
+      })();
+      return true;
+
+    case 'SAVE_APPLIED_JOB':
+      (async () => {
+        try {
+          const { jobUrl, jobTitle, company, location, mode } = message.data;
+          console.log('[Jobzippy] SAVE_APPLIED_JOB (success detected):', jobTitle, 'mode:', mode);
+
+          // Don't save to DB yet - just show modal for user confirmation
+          // Actual save happens when user confirms in modal (handleMetadataConfirm)
+
+          // Broadcast message to dashboard to show confirmation modal
+          console.log('[Jobzippy] Broadcasting OPEN_JOB_IN_EDIT_MODE message with metadata:', {
+            title: jobTitle,
+            company,
+            location,
+            jobUrl,
+          });
+
+          chrome.runtime
+            .sendMessage({
+              type: 'OPEN_JOB_IN_EDIT_MODE',
+              data: {
+                metadata: {
+                  title: jobTitle,
+                  company: company || 'Unknown',
+                  location: location || '',
+                  jobUrl: jobUrl,
+                },
+              },
+            })
+            .then(() => {
+              console.log('[Jobzippy] OPEN_JOB_IN_EDIT_MODE message sent successfully');
+            })
+            .catch((error) => {
+              console.warn(
+                '[Jobzippy] Failed to send OPEN_JOB_IN_EDIT_MODE (dashboard might be closed):',
+                error
+              );
+            });
+
+          console.log('[Jobzippy] Confirmation modal triggered');
+          sendResponse({ status: 'success' });
+        } catch (error) {
+          console.error('[Jobzippy] SAVE_APPLIED_JOB error:', error);
           sendResponse({ status: 'error', error: String(error) });
         }
       })();

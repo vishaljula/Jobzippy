@@ -13,10 +13,13 @@ import {
   orchestrationTasks,
   taskActionParamHandlers,
   broadcastEngineState,
+  classifyPageAcrossFrames,
 } from './orchestrationTaskHelper';
 import { evaluateConditionalNextStep } from './orchestrationHelper';
 import { broadcastJobStatusOnly } from './job-persistence';
 import { startDebugRun, logStep, logStepResult } from './orchestration-debug';
+import { backgroundVaultService, STORES } from './vault-service-worker';
+import { deriveVaultPassword } from '../lib/vault/utils';
 
 // ============================================================================
 // FEATURE FLAG
@@ -429,4 +432,245 @@ function determineNextStep(
   }
 
   return staticNextStep;
+}
+
+// ============================================================================
+// AUTOFILL MODE (Copilot Mode)
+// ============================================================================
+
+/**
+ * Autofill Mode: Fill current page form and wait for manual submit
+ * User clicks "Autofill" button → fills form → user manually submits
+ */
+export async function executeAutofillMode(tabId: number): Promise<void> {
+  console.log('[Autofill Mode] Starting autofill on tab:', tabId);
+  broadcastEngineState('RUNNING', 'Autofilling form...');
+
+  try {
+    // 1. Get tab info
+    const currentTab = await chrome.tabs.get(tabId);
+
+    if (!currentTab) {
+      console.error('[Autofill Mode] Tab not found:', tabId);
+      broadcastEngineState('IDLE', 'Error: Tab not found');
+      return;
+    }
+
+    console.log('[Autofill Mode] Active tab:', tabId, currentTab.url);
+
+    // 2. Ensure content script is injected (in case extension was opened after page load)
+    // Inject into ALL frames — the ATS form may be in an iframe (e.g. Greenhouse on company pages)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: ['content/executor-v2.js'],
+      });
+      console.log('[Autofill Mode] Content script injected successfully (all frames)');
+      // Wait a bit for script to initialize
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } catch (error) {
+      // Script might already be injected, that's okay
+      console.log('[Autofill Mode] Content script already injected or injection failed:', error);
+    }
+
+    // 3. Classify the current page — scan ALL frames to handle iframe-embedded ATS forms
+    // (e.g. Greenhouse application form embedded inside a company careers page)
+    console.log('[Autofill Mode] Classifying page (all frames)...');
+    const classifyResult = await classifyPageAcrossFrames(tabId);
+
+    if (!classifyResult?.classification) {
+      console.error('[Autofill Mode] Failed to classify page');
+      broadcastEngineState('IDLE', 'Error: Could not detect form');
+      return;
+    }
+
+    const { classification: classifyResponse, frameId: formFrameId } = classifyResult;
+    const classification = classifyResponse.classification;
+    console.log(
+      '[Autofill Mode] Page classified:',
+      classification.type,
+      '(frameId=' + formFrameId + ')'
+    );
+    console.log('[Autofill Mode] Detected fields:', classification.fields?.length || 0);
+    console.log('[Autofill Mode] Detected actions:', classification.actions?.length || 0);
+
+    // 3. Check if there are any fields to fill (regardless of page type)
+    // Page type can be 'unknown' but still have fillable fields
+    const hasFields = classification.fields && classification.fields.length > 0;
+
+    if (!hasFields) {
+      console.warn('[Autofill Mode] No fillable fields detected on this page');
+      broadcastEngineState('IDLE', 'No form fields found on this page');
+      return;
+    }
+
+    console.log('[Autofill Mode] Found', classification.fields.length, 'fields to fill');
+
+    // 4. Load vault data (same as agent mode)
+    const storage = await chrome.storage.local.get('user_info');
+    const user = storage.user_info;
+
+    if (!user) {
+      console.error('[Autofill Mode] No user info found');
+      broadcastEngineState('IDLE', 'Error: Please complete onboarding first');
+      return;
+    }
+
+    // Use static imports (already imported at top of file)
+    const password = deriveVaultPassword(user);
+
+    // Load profile and resume
+    const [profile, history, resumeArrayBuffer] = await Promise.all([
+      backgroundVaultService.load(STORES.profile, password),
+      backgroundVaultService.load(STORES.history, password),
+      backgroundVaultService.loadResume(password),
+    ]);
+
+    if (!profile) {
+      console.error('[Autofill Mode] No profile found in vault');
+      broadcastEngineState('IDLE', 'Error: Profile not found');
+      return;
+    }
+
+    // Merge history into profile
+    const vaultProfile = {
+      ...profile,
+      history: history || { employment: [], education: [], skills: [] },
+    };
+
+    // Convert resume to base64
+    let vaultResume = null;
+    if (resumeArrayBuffer) {
+      const bytes = new Uint8Array(resumeArrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i] || 0);
+      }
+      const base64 = btoa(binary);
+      vaultResume = {
+        base64,
+        fileName: 'resume.pdf',
+        mimeType: 'application/pdf',
+      };
+    }
+
+    console.log('[Autofill Mode] Vault data loaded');
+
+    // 5. Fill the form using EXECUTE_PAGE_ACTION (same as agent mode)
+    // The content script will handle setting humanizeConfig.autofillMode based on mode='autofill'
+    // Note: We don't pass classification - executor will re-classify the page
+    console.log('[Autofill Mode] Filling form...');
+    broadcastEngineState('RUNNING', 'Filling form fields...');
+
+    // Send EXECUTE_PAGE_ACTION to the correct frame (may be an iframe for embedded ATS)
+    const fillResponse = await new Promise<any>((resolve, reject) => {
+      const options = formFrameId !== 0 ? { frameId: formFrameId } : {};
+      if (formFrameId !== 0) {
+        console.log('[Autofill Mode] Routing EXECUTE_PAGE_ACTION to iframe frameId:', formFrameId);
+      }
+      chrome.tabs.sendMessage(
+        tabId,
+        {
+          type: 'EXECUTE_PAGE_ACTION',
+          data: {
+            vaultProfile,
+            vaultResume,
+            mode: 'autofill', // Pass autofill mode to content script
+          },
+        },
+        options,
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+
+    if (!fillResponse?.success) {
+      console.error('[Autofill Mode] Form fill failed:', fillResponse?.reason);
+      broadcastEngineState('IDLE', `Error: ${fillResponse?.reason || 'Form fill failed'}`);
+      return;
+    }
+
+    console.log('[Autofill Mode] Form filled successfully');
+
+    // 6. Always set up manual submit tracking in autofill mode
+    // (User will manually review and submit, so we need to track it)
+    console.log('[Autofill Mode] Setting up submit tracking...');
+    console.log('[Autofill Mode] Detected actions:', classification.actions);
+
+    // Extract job metadata from page for tracking
+    // When the form is in an iframe, try that frame first (it has the actual job posting data),
+    // then fall back to the main frame
+    let jobMetadata: any = null;
+    if (formFrameId !== 0) {
+      try {
+        jobMetadata = await chrome.tabs.sendMessage(
+          tabId,
+          {
+            type: 'EXTRACT_JOB_METADATA',
+          },
+          { frameId: formFrameId }
+        );
+        console.log('[Autofill Mode] Metadata from iframe frame:', jobMetadata);
+      } catch (e) {
+        console.log('[Autofill Mode] Iframe frame metadata failed, trying main frame...');
+      }
+    }
+    // Fallback to main frame if iframe gave nothing useful
+    if (!jobMetadata?.title && !jobMetadata?.company) {
+      jobMetadata = await chrome.tabs.sendMessage(tabId, {
+        type: 'EXTRACT_JOB_METADATA',
+      });
+      console.log('[Autofill Mode] Metadata from main frame:', jobMetadata);
+    }
+
+    const jobTitle = jobMetadata?.title || 'Unknown Job';
+    const company = jobMetadata?.company || 'Unknown Company';
+    const location = jobMetadata?.location || '';
+
+    console.log('[Autofill Mode] Extracted job metadata:', { jobTitle, company, location });
+
+    try {
+      const trackPayload = {
+        type: 'TRACK_MANUAL_SUBMIT',
+        data: {
+          jobUrl: currentTab.url,
+          jobTitle,
+          company,
+          location,
+        },
+      };
+
+      // Always send to main frame (frameId 0) for URL-change detection
+      console.log(
+        '[Autofill Mode] 📤 Sending TRACK_MANUAL_SUBMIT to main frame (tabId:',
+        tabId,
+        ')'
+      );
+      await chrome.tabs.sendMessage(tabId, trackPayload);
+
+      // Also send to the iframe frame if the form was embedded in an iframe,
+      // so the DOM mutation / URL detection works inside the iframe context too
+      if (formFrameId !== 0) {
+        console.log('[Autofill Mode] 📤 Sending TRACK_MANUAL_SUBMIT to iframe frame:', formFrameId);
+        await chrome.tabs.sendMessage(tabId, trackPayload, { frameId: formFrameId });
+      }
+
+      console.log('[Autofill Mode] ✅ Submit tracking enabled successfully');
+    } catch (error) {
+      console.error('[Autofill Mode] ❌ Error setting up submit tracking:', error);
+    }
+
+    broadcastEngineState('RUNNING', 'Form filled! Please review and submit.');
+  } catch (error) {
+    console.error('[Autofill Mode] Error:', error);
+    broadcastEngineState(
+      'IDLE',
+      `Error: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
