@@ -361,8 +361,8 @@ async function handleModalAction(
     // Check validation of the found element
     const isModalVisible = modalElement && isTrulyVisible(modalElement);
 
-    // In autofill mode, skip modal opening logic (user already opened it)
-    if (!isModalVisible && mode !== 'autofill') {
+    // Open the modal if it's not visible yet
+    if (!isModalVisible) {
       logger.log('Navigator', 'Modal is hidden, looking for button to show modal...');
 
       const allShowModalButtons = Array.from(document.querySelectorAll('button, a')).filter(

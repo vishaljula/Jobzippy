@@ -6,8 +6,19 @@ import { getAllJobs } from './jobs/db';
 import { getAllStorage, setStorageMultiple } from './storage';
 import { logger } from './logger';
 import { FirestoreRepository } from './firebase/userRepository';
+import { getFirebaseApp } from './firebase/client';
+import { getAuth } from 'firebase/auth';
 import type { JobRecord } from './jobs/store-types';
 import type { ExtensionStorage } from './types';
+
+/** Get the Firebase UID from in-memory Firebase Auth, or null if not signed in. */
+function getFirebaseUid(): string | null {
+  try {
+    return getAuth(getFirebaseApp()).currentUser?.uid ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const BACKUP_SHEET_NAME = 'Jobzippy Backup';
 
@@ -31,12 +42,16 @@ async function getBackupSheetId(): Promise<string | null> {
 
   // If not in chrome.storage, try Firestore
   try {
-    const userId = storage.userId;
+    const userId = storage.userId || getFirebaseUid();
     if (!userId) {
-      logger.log('SheetsBackup', 'No userId found, cannot check Firestore', {
-        storageKeys: Object.keys(storage),
-        hasUserInfo: !!storage.user_info,
-      });
+      logger.log(
+        'SheetsBackup',
+        'No userId found (storage or Firebase Auth), cannot check Firestore',
+        {
+          storageKeys: Object.keys(storage),
+          hasUserInfo: !!storage.user_info,
+        }
+      );
       return null;
     }
 
@@ -130,13 +145,17 @@ async function getOrCreateBackupSheet(accessToken: string): Promise<string> {
   // If this fails, the backup is not truly safe (chrome.storage can be cleared)
   logger.log('SheetsBackup', `Attempting to save backup sheet ID to Firestore...`);
 
-  const userId = storage.userId;
+  const userId = storage.userId || getFirebaseUid();
   if (!userId) {
-    logger.error('SheetsBackup', 'CRITICAL: No userId found in storage, cannot save to Firestore', {
-      storageKeys: Object.keys(storage),
-      hasUserInfo: !!storage.user_info,
-      userInfoSub: storage.user_info?.sub,
-    });
+    logger.error(
+      'SheetsBackup',
+      'CRITICAL: No userId found in storage or Firebase Auth, cannot save to Firestore',
+      {
+        storageKeys: Object.keys(storage),
+        hasUserInfo: !!storage.user_info,
+        userInfoSub: storage.user_info?.sub,
+      }
+    );
     throw new Error('Cannot save backup sheet ID: No userId found. User must be signed in.');
   }
 

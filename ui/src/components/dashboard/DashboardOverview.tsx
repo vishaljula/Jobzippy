@@ -1,13 +1,23 @@
-import { Loader2, PenSquare, Briefcase, MapPin, Check, X, AlertCircle, Trash2 } from 'lucide-react';
+import {
+  Loader2,
+  PenSquare,
+  Check,
+  X,
+  AlertCircle,
+  Trash2,
+  Sparkles,
+  ExternalLink,
+  Briefcase,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { UserInfo } from '@/lib/types';
 import { useApplicationsData } from '@/lib/jobs/useApplicationsData';
 import type { JobRecord } from '@/lib/jobs/store-types';
-import { AutofillCard } from './AutofillCard';
 import { updateJobMetadata } from '@/lib/jobs/store';
 import { MetadataConfirmationModal } from './MetadataConfirmationModal';
+import { logger } from '@/lib/logger';
 
 interface DashboardOverviewProps {
   user: UserInfo | null;
@@ -16,149 +26,6 @@ interface DashboardOverviewProps {
   engineStatus?: string;
   onStartAgent: () => void;
   onStopAgent: () => void;
-}
-
-interface DonutChartProps {
-  stats: {
-    completed: number;
-    applying: number;
-    ats_filling: number;
-    queued: number;
-    failed: number;
-    skipped: number;
-    total: number;
-  };
-}
-
-function DonutChart({ stats }: DonutChartProps) {
-  // Only show final states in donut chart
-  const donutData = [
-    { label: 'Applied', value: stats.completed, color: 'url(#gradient-applied)' },
-    { label: 'Failed', value: stats.failed, color: 'url(#gradient-failed)' },
-    { label: 'Skipped', value: stats.skipped, color: 'url(#gradient-skipped)' },
-  ].filter((item) => item.value > 0);
-
-  const total = stats.completed + stats.failed + stats.skipped;
-  const activeJobs = stats.applying + stats.ats_filling;
-  const pendingJobs = stats.queued;
-
-  if (total === 0) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <p className="text-sm text-slate-500">No applications yet</p>
-      </div>
-    );
-  }
-
-  // Calculate segments for SVG
-  let accumulatedAngle = 0;
-  const radius = 70; // Radius of the circle
-  const circumference = 2 * Math.PI * radius;
-  const center = 80; // Center of the SVG (80x80 viewbox would be tight, let's say 160x160)
-
-  const segments = donutData.map((segment) => {
-    const percentage = segment.value / total;
-    const strokeDasharray = `${percentage * circumference} ${circumference}`;
-    const rotate = accumulatedAngle;
-    accumulatedAngle += percentage * 360;
-
-    return {
-      ...segment,
-      strokeDasharray,
-      rotate,
-    };
-  });
-
-  return (
-    <div className="flex items-center gap-8">
-      <div className="relative h-40 w-40">
-        {/* Glow effect behind chart */}
-        <div className="absolute inset-0 rounded-full bg-[#00f0ff]/10 blur-xl" />
-
-        <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90 transform drop-shadow-2xl">
-          <defs>
-            <linearGradient id="gradient-applied" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#00f0ff" />
-              <stop offset="100%" stopColor="#00ff9d" />
-            </linearGradient>
-            <linearGradient id="gradient-failed" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#7000ff" />
-              <stop offset="100%" stopColor="#ff0055" />
-            </linearGradient>
-            <linearGradient id="gradient-skipped" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#94a3b8" />
-              <stop offset="100%" stopColor="#64748b" />
-            </linearGradient>
-          </defs>
-
-          {/* Background Circle */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="#1e293b"
-            strokeWidth="12"
-          />
-
-          {/* Segments */}
-          {segments.map((segment, i) => (
-            <circle
-              key={i}
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={segment.color}
-              strokeWidth="12"
-              strokeDasharray={segment.strokeDasharray}
-              strokeDashoffset={0}
-              strokeLinecap="round"
-              transform={`rotate(${segment.rotate} ${center} ${center})`}
-            />
-          ))}
-        </svg>
-
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold text-white tracking-tight drop-shadow-lg">
-            {total}
-          </span>
-          <span className="text-[10px] uppercase tracking-wider font-medium text-slate-400 mt-1">
-            Total apps
-          </span>
-          {(activeJobs > 0 || pendingJobs > 0) && (
-            <span className="text-[10px] text-[#00f0ff] mt-1 font-medium drop-shadow-[0_0_8px_rgba(0,240,255,0.5)]">
-              {activeJobs + pendingJobs} active
-            </span>
-          )}
-        </div>
-      </div>
-
-      <ul className="space-y-4 text-sm flex-1">
-        {donutData.map((segment) => (
-          <li key={segment.label} className="flex items-center justify-between gap-4 group">
-            <div className="flex items-center gap-3">
-              <span
-                className="h-3 w-3 rounded-full shadow-[0_0_8px_currentColor]"
-                style={{
-                  background:
-                    segment.label === 'Applied'
-                      ? 'linear-gradient(135deg, #00f0ff, #00ff9d)'
-                      : segment.label === 'Failed'
-                        ? 'linear-gradient(135deg, #7000ff, #ff0055)'
-                        : '#64748b',
-                }}
-              />
-              <span className="text-slate-300 font-medium group-hover:text-white transition-colors">
-                {segment.label}
-              </span>
-            </div>
-            <span className="font-bold text-white font-mono">{segment.value}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
 }
 
 function formatAppliedDate(timestamp: number | undefined): string {
@@ -175,93 +42,23 @@ function formatAppliedDate(timestamp: number | undefined): string {
   });
 }
 
-/*
-function ControlCard({
-  engineState,
-  engineStatus,
-  onStart,
-  onStop,
-}: {
-  engineState: 'IDLE' | 'RUNNING' | 'PAUSED';
-  engineStatus?: string;
-  onStart: () => void;
-  onStop: () => void;
-}) {
-  const isRunning = engineState === 'RUNNING';
-  const isStopping = engineState === 'PAUSED';
-
-  return (
-    <div className="relative group w-full">
-      {/* Glow Effect *\/}
-      <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
-
-      <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-6 rounded-2xl flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div
-            className={`h-12 w-12 rounded-full flex items-center justify-center ${isRunning ? 'bg-[#00ff9d]/20 text-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.3)]' : 'bg-slate-800 text-slate-400'}`}
-          >
-            {isRunning ? <CheckCircle2 className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-white tracking-tight">
-              Agent Status:{' '}
-              <span className={isRunning ? 'text-[#00ff9d]' : 'text-slate-400'}>
-                {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Stopped'}
-              </span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {isRunning
-                ? engineStatus || 'Jobzippy is actively searching and applying to jobs.'
-                : 'Start the agent to begin your job search automation.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {!isRunning && !isStopping && (
-            <Button
-              onClick={onStart}
-              className="bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(0,240,255,0.3)] border-0 h-10 px-6 rounded-xl font-bold transition-all hover:scale-105"
-            >
-              <Play className="h-4 w-4 mr-2 fill-current" />
-              Start Agent
-            </Button>
-          )}
-
-          {(isRunning || isStopping) && (
-            <Button
-              onClick={onStop}
-              disabled={isStopping}
-              className="bg-gradient-to-r from-[#00f0ff] to-[#7000ff] hover:opacity-90 text-white shadow-[0_0_20px_rgba(0,240,255,0.3)] border-0 h-10 px-6 rounded-xl font-bold transition-all hover:scale-105"
-            >
-              {isStopping ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Stopping...
-                </>
-              ) : (
-                <>
-                  <Square className="h-4 w-4 mr-2 fill-current" />
-                  Stop Agent
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace('www.', '');
+  } catch {
+    return url.substring(0, 20);
+  }
 }
-*/
 
-export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProps) {
+export function DashboardOverview({ user: _user }: DashboardOverviewProps) {
   const { inProgress, history, stats, isLoading, error, refresh } = useApplicationsData();
-  const displayName = user?.given_name ?? user?.name?.split(' ')[0] ?? 'Job seeker';
 
   // Autofill mode state
   const [isAutofilling, setIsAutofilling] = useState(false);
 
-  // Removed modal state - autofill now adds job directly to table in editable state
+  // Pagination
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Modal state for post-submit confirmation
   const [showMetadataModal, setShowMetadataModal] = useState(false);
@@ -278,69 +75,49 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
   const [editedCompany, setEditedCompany] = useState('');
   const [editedLocation, setEditedLocation] = useState('');
 
-  // Listen for OPEN_JOB_IN_EDIT_MODE message from background (now shows modal instead)
+  // Listen for OPEN_JOB_IN_EDIT_MODE message from background
   useEffect(() => {
-    console.log('[Dashboard] Setting up OPEN_JOB_IN_EDIT_MODE listener');
     const handler = (message: any) => {
-      console.log('[Dashboard] Received message:', message.type, message);
       if (message.type === 'OPEN_JOB_IN_EDIT_MODE' && message.data?.metadata) {
-        console.log(
-          '[Dashboard] Success detected, showing confirmation modal with metadata:',
-          message.data.metadata
-        );
         setExtractedMetadata(message.data.metadata);
         setShowMetadataModal(true);
       }
     };
     chrome.runtime.onMessage.addListener(handler);
-    return () => {
-      console.log('[Dashboard] Removing OPEN_JOB_IN_EDIT_MODE listener');
-      chrome.runtime.onMessage.removeListener(handler);
-    };
+    return () => chrome.runtime.onMessage.removeListener(handler);
   }, []);
 
-  // Autofill handler - extract metadata first, then show confirmation
+  // Autofill handler
   const handleAutofill = async () => {
-    console.log('[Dashboard] Autofill button clicked');
     setIsAutofilling(true);
     try {
-      // Get the current active tab
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       const currentTab = tabs[0];
 
-      console.log('[Dashboard] Current tab:', currentTab?.id, currentTab?.url);
-
       if (!currentTab?.id || !currentTab?.url) {
-        console.error('[Dashboard] No active tab found');
         setIsAutofilling(false);
         return;
       }
 
-      // Inject content script first (in case it's not already loaded)
       try {
         await chrome.scripting.executeScript({
           target: { tabId: currentTab.id },
           files: ['content/executor-v2.js'],
         });
-        console.log('[Dashboard] Content script injected successfully');
-        // Wait a bit for script to initialize
         await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        // Script might already be injected, that's okay
-        console.log('[Dashboard] Content script already injected or injection failed:', error);
+      } catch {
+        // Script might already be injected
       }
 
-      // Extract metadata from the page
-      console.log('[Dashboard] Extracting metadata from page...');
       const response = await chrome.tabs.sendMessage(currentTab.id, {
         type: 'EXTRACT_JOB_METADATA',
       });
 
-      console.log('[Dashboard] Metadata extraction response:', response);
-
       if (response?.success) {
-        // Trigger autofill (job will be created when user clicks submit)
-        console.log('[Dashboard] Sending START_AUTOFILL message');
+        // 🔍 DIAGNOSTIC: Log START_AUTOFILL being sent — should happen exactly ONCE per button click
+        logger.log(
+          `[⚡ AUTOFILL] Sending START_AUTOFILL to background — tabId:${currentTab.id} at ${new Date().toISOString()}`
+        );
         await chrome.runtime.sendMessage({
           type: 'START_AUTOFILL',
           tabId: currentTab.id,
@@ -350,16 +127,11 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
             location: response.location || '',
           },
         });
-        console.log('[Dashboard] START_AUTOFILL message sent');
-
-        // Reset after a delay (actual completion detected by engine state)
         setTimeout(() => setIsAutofilling(false), 3000);
       } else {
-        console.error('[Dashboard] Metadata extraction failed');
         setIsAutofilling(false);
       }
-    } catch (error) {
-      console.error('[Dashboard] Autofill error:', error);
+    } catch {
       setIsAutofilling(false);
     }
   };
@@ -386,12 +158,10 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
         company: editedCompany,
         location: editedLocation || undefined,
       });
-      // Exit edit mode
       setEditingJobId(null);
       setEditedTitle('');
       setEditedCompany('');
       setEditedLocation('');
-      // Refresh the data to show updated values
       refresh();
     } catch (error) {
       console.error('[Dashboard] Error updating job metadata:', error);
@@ -400,39 +170,28 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
 
   const handleDeleteJob = async (jobId: string) => {
     try {
-      // Import deleteJob from db
       const { deleteJob } = await import('@/lib/jobs/db');
       await deleteJob(jobId);
-      // Exit edit mode
       setEditingJobId(null);
       setEditedTitle('');
       setEditedCompany('');
       setEditedLocation('');
-      // Refresh the data to remove deleted job
       refresh();
-      console.log('[Dashboard] Job deleted:', jobId);
     } catch (error) {
       console.error('[Dashboard] Error deleting job:', error);
     }
   };
 
-  // Handle metadata confirmation after submit - save to DB
   const handleMetadataConfirm = async (confirmed: {
     title: string;
     company: string;
     jobUrl: string;
   }) => {
-    console.log('[Dashboard] Metadata confirmed:', confirmed);
     setShowMetadataModal(false);
-
     try {
-      // Determine platform from the confirmed URL (user may have edited it)
       const jobUrl = confirmed.jobUrl || extractedMetadata?.jobUrl || '';
-
-      // Import job store functions
       const { upsertJob } = await import('@/lib/jobs/store');
 
-      // Determine platform from URL
       let platform = 'unknown';
       let jobId = `autofill_${Date.now()}`;
 
@@ -446,7 +205,6 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
         if (match) jobId = match[1]!;
       }
 
-      // Save the job as completed with confirmed metadata
       await upsertJob(platform, jobId, {
         title: confirmed.title,
         company: confirmed.company,
@@ -455,7 +213,6 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
         needsConfirmation: false,
       });
 
-      console.log('[Dashboard] Job saved successfully');
       refresh();
       setExtractedMetadata(null);
     } catch (error) {
@@ -463,48 +220,39 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
     }
   };
 
-  // Handle metadata modal cancel
   const handleMetadataCancel = () => {
-    console.log('[Dashboard] Metadata confirmation cancelled');
     setShowMetadataModal(false);
     setExtractedMetadata(null);
   };
 
-  const profileSummary = [
-    { label: 'Visa', value: 'H‑1B (needs sponsorship)' },
-    { label: 'Locations', value: 'Remote • Austin, TX • NYC' },
-    { label: 'Min salary', value: '$150k USD' },
-  ];
-
   // Combine in-progress and recent history for the table (show latest 20)
-  // Deduplicate by id to prevent duplicate rows
   const allJobs = [...inProgress, ...history];
   const uniqueJobsMap = new Map<string, JobRecord>();
   for (const job of allJobs) {
-    // Keep the most recent version if duplicate
     const existing = uniqueJobsMap.get(job.id);
     if (!existing || job.updatedAt > existing.updatedAt) {
       uniqueJobsMap.set(job.id, job);
     }
   }
-  const tableJobs = Array.from(uniqueJobsMap.values())
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 20);
+  const tableJobs = Array.from(uniqueJobsMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 
-  // Use stats for donut chart, fallback to empty stats
-  const donutStats = stats ?? {
-    completed: 0,
-    applying: 0,
-    ats_filling: 0,
-    queued: 0,
-    failed: 0,
-    skipped: 0,
-    total: 0,
-  };
+  const totalPages = Math.max(1, Math.ceil(tableJobs.length / ITEMS_PER_PAGE));
+  const paginatedJobs = tableJobs.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset to page 1 whenever data reloads
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tableJobs.length]);
+
+  const totalApps = stats?.completed ?? 0;
+  const totalFills = stats?.total ?? 0;
 
   return (
-    <div className="space-y-8">
-      {/* Metadata Confirmation Modal - shown after successful submit */}
+    <div className="space-y-5">
+      {/* Metadata Confirmation Modal */}
       {extractedMetadata && (
         <MetadataConfirmationModal
           isOpen={showMetadataModal}
@@ -514,117 +262,99 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
         />
       )}
 
-      {/* Autofill Card - Primary CTA */}
-      <AutofillCard isAutofilling={isAutofilling} onAutofill={handleAutofill} />
+      {/* ── Stats + Autofill Banner ── */}
+      <div className="relative group w-full">
+        {/* Glow – purple gradient like Applications This Month */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-3xl blur opacity-[0.15] group-hover:opacity-[0.25] transition duration-500" />
 
-      {/* Control Center - Agent Mode (hidden for MVP - autofill only) */}
-      {/* <ControlCard
-        engineState={engineState}
-        engineStatus={engineStatus}
-        onStart={onStartAgent}
-        onStop={onStopAgent}
-      /> */}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Pipeline Card */}
-        <div className="group relative">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#00f0ff] to-[#7000ff] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
-          <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px] h-full">
-            <div className="flex items-center justify-between mb-8">
+        <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl overflow-hidden">
+          {/* Top strip: stats row */}
+          <div className="flex items-center gap-6 px-6 py-4 border-b border-white/5">
+            {/* Stat: Total Apps */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#00ff9d]/10 border border-[#00ff9d]/20">
+                <Briefcase className="h-4 w-4 text-[#00ff9d]" />
+              </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#00f0ff] mb-1">
-                  Pipeline
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                  Jobs Applied
                 </p>
-                <h2 className="text-xl font-bold text-white tracking-tight">
-                  Where your apps stand
-                </h2>
+                <p className="text-xl font-bold text-white leading-none mt-0.5">
+                  {isLoading ? <span className="text-slate-500 text-sm">—</span> : totalApps}
+                </p>
               </div>
             </div>
 
-            <div className="flex justify-center py-2">
-              {isLoading ? (
-                <div className="flex items-center justify-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#00f0ff]" />
-                </div>
-              ) : (
-                <DonutChart stats={donutStats} />
-              )}
-            </div>
+            <div className="h-8 w-px bg-white/10" />
 
-            <p className="mt-8 text-xs text-slate-400 text-center font-medium">
-              Updates automatically as new roles are queued.
-            </p>
+            {/* Stat: Form Fills */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#00f0ff]/10 border border-[#00f0ff]/20">
+                <Sparkles className="h-4 w-4 text-[#00f0ff]" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                  AI Form Fills
+                </p>
+                <p className="text-xl font-bold text-white leading-none mt-0.5">
+                  {isLoading ? <span className="text-slate-500 text-sm">—</span> : totalFills}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Profile Card */}
-        <div className="group relative">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#7000ff] to-[#00ff9d] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
-          <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px] h-full flex flex-col">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#7000ff] mb-1">
-                  Profile
-                </p>
-                <h2 className="text-xl font-bold text-white tracking-tight">{displayName}</h2>
+          {/* Bottom strip: autofill CTA */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full flex items-center justify-center bg-gradient-to-br from-[#00ff9d] to-[#00f0ff] shadow-[0_0_12px_rgba(0,255,157,0.3)]">
+                <Sparkles className="h-4 w-4 text-slate-900" />
               </div>
-              <Button
-                variant="default"
-                size="sm"
-                className="gap-2 text-xs bg-[#7000ff] hover:bg-[#6000e0] text-white shadow-[0_0_15px_rgba(112,0,255,0.4)] border-0 px-4 h-8 rounded-full font-medium transition-all hover:scale-105"
-                onClick={onEditProfile}
-              >
-                <PenSquare className="h-3.5 w-3.5" />
-                Edit via chat agent
-              </Button>
+              <div>
+                <p className="text-sm font-semibold text-white">AI Autofill</p>
+                <p className="text-xs text-slate-400">
+                  {isAutofilling
+                    ? 'Filling form fields with your profile...'
+                    : 'Open a job application, then click to autofill'}
+                </p>
+              </div>
             </div>
 
-            <div className="flex-1 space-y-4">
-              {profileSummary.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4 transition-colors hover:bg-white/[0.05] hover:border-white/10"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f172a] border border-white/10 shadow-inner">
-                    {item.label === 'Visa' ? (
-                      <Briefcase className="h-5 w-5 text-[#00f0ff]" />
-                    ) : (
-                      <MapPin className="h-5 w-5 text-[#00f0ff]" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
-                      {item.label}
-                    </p>
-                    <p className="font-medium text-white text-sm">{item.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="mt-8 text-xs text-slate-500 leading-relaxed">
-              All edits flow through the onboarding chat agent so everything stays in sync with your
-              vault.
-            </p>
+            <Button
+              onClick={handleAutofill}
+              disabled={isAutofilling}
+              className="bg-gradient-to-r from-[#00ff9d] to-[#00f0ff] hover:opacity-90 text-slate-900 shadow-[0_0_20px_rgba(0,255,157,0.35)] border-0 h-10 px-5 rounded-xl font-bold text-sm transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            >
+              {isAutofilling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Autofilling...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Autofill Form
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Live Matches Card */}
+      {/* ── Applied Jobs Table ── */}
       <div className="group relative">
         <div className="absolute -inset-1 bg-gradient-to-r from-[#00ff9d] to-[#00f0ff] rounded-[32px] blur opacity-[0.0625] group-hover:opacity-[0.125] transition duration-500" />
-        <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-[32px]">
-          <div className="flex items-center justify-between mb-6">
+        <div className="relative bg-white/5 backdrop-blur-lg border border-white/10 p-6 rounded-[32px]">
+          <div className="flex items-center justify-between mb-5">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#00ff9d] mb-1">
                 Applied Jobs
               </p>
-              <h2 className="text-xl font-bold text-white tracking-tight">Your applications</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Your applications</h2>
             </div>
           </div>
 
           {error && (
-            <div className="mb-6 rounded-2xl border border-[#7000ff]/30 bg-[#7000ff]/10 px-4 py-3 text-sm text-[#a78bfa]">
+            <div className="mb-5 rounded-2xl border border-[#7000ff]/30 bg-[#7000ff]/10 px-4 py-3 text-sm text-[#a78bfa]">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium">{error}</p>
                 <Button
@@ -640,42 +370,42 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <table className="w-full text-sm table-fixed">
+              <thead className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-300">
                 <tr>
-                  <th className="pb-4 pl-4">Company / Job Title</th>
-                  <th className="pb-4">Job URL</th>
-                  <th className="pb-4 pr-4 text-right">Date applied</th>
+                  <th className="pb-3 pl-2 pr-4 w-[38%]">Company / Job Title</th>
+                  <th className="pb-3 w-[28%]">Link</th>
+                  <th className="pb-3 hidden sm:table-cell w-[20%]">Date</th>
+                  <th className="pb-3 pr-2 text-right w-[14%]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {isLoading && tableJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400">
+                    <td colSpan={4} className="py-8 text-center text-slate-400">
                       <Loader2 className="h-5 w-5 animate-spin inline-block mr-2 text-[#00f0ff]" />
                       Loading applications...
                     </td>
                   </tr>
-                ) : tableJobs.length > 0 ? (
-                  tableJobs.map((job) => {
+                ) : paginatedJobs.length > 0 ? (
+                  paginatedJobs.map((job) => {
                     const isEditing = editingJobId === job.id;
                     const needsConfirmation = job.needsConfirmation;
                     return (
                       <tr
                         key={job.id}
-                        className={`group transition-all ${
+                        className={`group/row transition-all ${
                           needsConfirmation
                             ? 'bg-[#00ff9d]/5 hover:bg-[#00ff9d]/10 border-l-2 border-[#00ff9d]'
                             : 'hover:bg-white/[0.02]'
                         }`}
                       >
                         {isEditing ? (
-                          /* Edit Mode - Form-style layout */
-                          <td colSpan={3} className="py-4 px-4">
+                          /* ── Edit Mode ── */
+                          <td colSpan={4} className="py-4 px-2">
                             <div className="space-y-4">
-                              {/* Form Grid - 2 columns */}
                               <div className="grid grid-cols-2 gap-4">
-                                {/* Left Column */}
+                                {/* Left */}
                                 <div className="space-y-3">
                                   <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -703,7 +433,7 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                                   </div>
                                 </div>
 
-                                {/* Right Column */}
+                                {/* Right */}
                                 <div className="space-y-3">
                                   <div>
                                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -730,9 +460,8 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                                 </div>
                               </div>
 
-                              {/* Action Buttons - Bottom Right */}
+                              {/* Action Buttons */}
                               <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
-                                {/* Delete button on the left */}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -742,8 +471,6 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                                   <Trash2 className="h-4 w-4 mr-1" />
                                   Delete
                                 </Button>
-
-                                {/* Cancel and Confirm on the right */}
                                 <div className="flex items-center gap-2">
                                   <Button
                                     size="sm"
@@ -767,15 +494,16 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                             </div>
                           </td>
                         ) : (
-                          /* Normal Mode - Regular table cells */
+                          /* ── Normal Mode ── */
                           <>
-                            <td className="py-4 pl-4">
+                            {/* Company / Title */}
+                            <td className="py-3 pl-2 pr-4">
                               <div className="flex items-start gap-2">
-                                <div className="flex-1">
-                                  <p className="font-bold text-white group-hover:text-[#00f0ff] transition-colors">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-white truncate group-hover/row:text-[#00f0ff] transition-colors text-sm">
                                     {job.company}
                                   </p>
-                                  <p className="text-xs font-medium text-slate-400 mt-0.5">
+                                  <p className="text-xs font-medium text-slate-400 mt-0.5 truncate">
                                     {job.title}
                                   </p>
                                 </div>
@@ -787,37 +515,41 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                               </div>
                             </td>
 
-                            <td className="py-4 max-w-[200px]">
+                            {/* URL – styled link chip */}
+                            <td className="py-3 pr-2">
                               {job.url ? (
                                 <a
                                   href={job.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs text-[#00f0ff]/70 hover:text-[#00f0ff] font-mono truncate block max-w-[200px] transition-colors"
                                   title={job.url}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[#00f0ff] text-xs font-medium hover:bg-[#00f0ff]/10 hover:border-[#00f0ff]/30 transition-all group/link max-w-[120px]"
                                 >
-                                  {job.url.replace(/^https?:\/\//, '').substring(0, 45)}
-                                  {job.url.replace(/^https?:\/\//, '').length > 45 ? '…' : ''}
+                                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">{getHostname(job.url)}</span>
                                 </a>
                               ) : (
                                 <span className="text-slate-600 text-xs">—</span>
                               )}
                             </td>
 
-                            <td className="py-4 pr-4 text-right">
-                              <div className="flex items-center justify-end gap-3">
-                                <span className="font-mono text-xs text-slate-400">
-                                  {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
-                                </span>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleStartEdit(job)}
-                                  className="h-7 px-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-[#00f0ff]"
-                                >
-                                  <PenSquare className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
+                            {/* Date – hidden on narrow widths */}
+                            <td className="py-3 hidden sm:table-cell">
+                              <span className="font-mono text-xs text-slate-400">
+                                {formatAppliedDate(job.lastAppliedAt ?? job.updatedAt)}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3 pr-2 text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(job)}
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-[#00f0ff] hover:bg-[#00f0ff]/10 transition-all rounded-lg"
+                              >
+                                <PenSquare className="h-3.5 w-3.5" />
+                              </Button>
                             </td>
                           </>
                         )}
@@ -826,14 +558,14 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
                   })
                 ) : (
                   <tr>
-                    <td colSpan={3} className="py-12 text-center">
+                    <td colSpan={4} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center">
                           <Briefcase className="h-6 w-6 text-slate-500" />
                         </div>
                         <p className="text-slate-400 font-medium">No applications yet</p>
                         <p className="text-xs text-slate-500">
-                          Start the agent to begin applying to jobs
+                          Open a job application and use Autofill to get started
                         </p>
                       </div>
                     </td>
@@ -842,6 +574,39 @@ export function DashboardOverview({ user, onEditProfile }: DashboardOverviewProp
               </tbody>
             </table>
           </div>
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+              <p className="text-xs text-slate-400">
+                {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+                {Math.min(currentPage * ITEMS_PER_PAGE, tableJobs.length)} of {tableJobs.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="h-7 px-3 text-xs text-slate-300 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ← Prev
+                </Button>
+                <span className="text-xs text-slate-400 font-mono">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-7 px-3 text-xs text-slate-300 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

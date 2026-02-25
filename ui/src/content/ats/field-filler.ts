@@ -40,9 +40,10 @@ export async function fillAllFields(
 
   try {
     // 1. Create Filler (Local + LLM Config)
-    // In autofill mode, set skipPreFilled to false to fill all fields
-    // In autonomous mode (or default), set skipPreFilled to true to skip pre-filled fields
-    const skipPreFilled = context.mode !== 'autofill';
+    // Always skip pre-filled fields — re-filling already-correct fields causes corruption
+    // on repeated autofill runs and overwrites user edits. The only exception is when
+    // a field has a validation error (handled inside FormFiller.fillField).
+    const skipPreFilled = true;
     const filler = await createFormFillerFromVault(context.resume, context.profile, skipPreFilled);
 
     if (!filler) {

@@ -119,17 +119,16 @@ export default function Hero() {
       <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
         {/* Headline */}
         <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 animate-fade-in-up">
-          Skill Isn&apos;t the Problem. <br />
+          Job application fatigue is real. <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-green to-neon-purple text-glow">
-            Visibility Is.
+            It ends here.
           </span>
         </h1>
 
         {/* Subtext */}
         <p className="text-xl text-slate-400 mb-12 max-w-2xl mx-auto leading-relaxed animate-fade-in-up [animation-delay:200ms]">
-          JobZippy applies to jobs on LinkedIn{' '}
-          <span className="text-white font-semibold">10× faster</span>, automatically. Stop filling
-          forms. Start interviewing.
+          Open any job posting, click <span className="text-neon-green font-semibold">Fill Form</span>, and let JobZippy
+          instantly fill out the application with your profile — no copy-pasting, no repetitive typing.
         </p>
 
         {/* Single CTA Button */}
@@ -142,7 +141,7 @@ export default function Hero() {
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300" />
             <span className="relative flex items-center gap-2">
-              Start Free Trial
+              Start free trial
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </span>
           </Link>

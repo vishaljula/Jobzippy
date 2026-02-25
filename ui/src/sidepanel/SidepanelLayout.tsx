@@ -1,4 +1,4 @@
-import { Sparkles, LogOut, Settings, BarChart3, Shield, Bell } from 'lucide-react';
+import { Sparkles, LogOut, Shield } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UserInfo } from '@/lib/types';
 import clsx from 'clsx';
@@ -12,12 +12,7 @@ interface SidepanelLayoutProps {
   composer?: ReactNode;
 }
 
-const NAV_ITEMS = [
-  { key: 'settings', icon: Settings, label: 'Settings' },
-  { key: 'insights', icon: BarChart3, label: 'Insights' },
-  { key: 'vault', icon: Shield, label: 'Vault' },
-  { key: 'alerts', icon: Bell, label: 'Alerts' },
-] as const;
+const NAV_ITEMS = [{ key: 'vault', icon: Shield, label: 'Vault' }] as const;
 
 export function SidepanelLayout({
   user,

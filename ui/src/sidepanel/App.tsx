@@ -1,15 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  Rocket,
-  LogOut,
-  Settings,
-  BarChart3,
-  Shield,
-  Bell,
-  ClipboardCheck,
-  Upload,
-  CreditCard,
-} from 'lucide-react';
+import { Rocket, LogOut, Shield, ClipboardCheck, Upload, CreditCard } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -18,7 +8,7 @@ import { useJobMatches } from '@/lib/jobs/useJobMatches';
 import { OnboardingWizard, ResumeOnboardingCard } from '@/components/onboarding';
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { TutorialCarousel } from '@/components/dashboard/TutorialCarousel';
-import { SubscriptionStatus, PricingWelcome } from '@/components/subscription';
+import { PricingWelcome } from '@/components/subscription';
 import { LayoutShell } from './LayoutShell';
 import { logger } from '@/lib/logger';
 import {
@@ -31,8 +21,6 @@ import {
 } from '@/components/ui/dialog';
 
 const NAV_ITEMS = [
-  { key: 'settings', icon: Settings, label: 'Settings' },
-  { key: 'insights', icon: BarChart3, label: 'Insights' },
   {
     key: 'vault',
     icon: Shield,
@@ -60,15 +48,18 @@ const NAV_ITEMS = [
     onClick: async () => {
       try {
         const { forceBackup } = await import('@/lib/backup-scheduler');
+        const { getValidAccessToken } = await import('@/lib/oauth/google-auth');
         const { toast } = await import('sonner');
-        const tokens = await chrome.storage.local.get('oauth_tokens');
-        if (tokens.oauth_tokens?.access_token) {
-          toast.loading('Backing up to Google Sheets...', { id: 'backup' });
-          await forceBackup(tokens.oauth_tokens.access_token);
-          toast.success('Backup completed!', { id: 'backup' });
-        } else {
-          toast.error('No OAuth token found', { id: 'backup' });
+        let accessToken: string;
+        try {
+          accessToken = await getValidAccessToken();
+        } catch {
+          toast.error('Please sign in to back up', { id: 'backup' });
+          return;
         }
+        toast.loading('Backing up to Google Sheets...', { id: 'backup' });
+        await forceBackup(accessToken);
+        toast.success('Backup completed!', { id: 'backup' });
       } catch (error) {
         const { toast } = await import('sonner');
         toast.error('Backup failed', { id: 'backup' });
@@ -76,7 +67,6 @@ const NAV_ITEMS = [
       }
     },
   },
-  { key: 'alerts', icon: Bell, label: 'Alerts' },
 ] as const;
 
 interface ExtensionMessage {
@@ -299,8 +289,9 @@ function App() {
         label: 'Subscription',
         onClick: () => setManageOpen(true),
       },
+      ...onboardingNavItems,
     ],
-    []
+    [onboardingNavItems]
   );
 
   const {
@@ -1187,9 +1178,6 @@ function App() {
         onStartAgent={startAgent}
         onStopAgent={stopAgent}
       />
-
-      {/* Subscription Status - Shows trial/active status */}
-      <SubscriptionStatus />
     </div>
   );
 
@@ -1299,7 +1287,6 @@ function App() {
         statusLabel={null}
         history={historyContent}
         navItems={navItems}
-        secondaryNavItems={onboardingNavItems}
         avatar={
           user
             ? {

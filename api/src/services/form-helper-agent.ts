@@ -117,10 +117,9 @@ INSTRUCTIONS FOR HUMAN-LIKE ANSWERS:
 QUESTIONS TO ANSWER:
 ${questionsText}
 
-Return ONLY valid JSON with this exact format (no markdown, no explanation):
+Return ONLY valid JSON with every fieldId mapped to its answer (no markdown, no explanation):
 {
-  "${questions[0]?.fieldId || 'field1'}": "answer1",
-  "${questions[1]?.fieldId || 'field2'}": "answer2"
+${questions.map((q, i) => `  "${q.fieldId}": "answer${i + 1}"`).join(',\n')}
 }`;
 }
 

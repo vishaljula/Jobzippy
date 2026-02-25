@@ -23,7 +23,7 @@ export default function Pricing() {
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {/* Basic Plan */}
+          {/* Beta Free Plan */}
           <div className="relative group">
             {/* Glow Effect */}
             <div className="absolute -inset-1 bg-gradient-to-r from-neon-green to-neon-blue rounded-3xl blur opacity-25 group-hover:opacity-50 transition duration-500" />
@@ -45,18 +45,18 @@ export default function Pricing() {
                   <span className="text-slate-400">/month</span>
                 </div>
                 <p className="text-neon-green text-sm mt-2 font-medium">
-                  3-day free trial • Then $9.99/month
+                  3-day free trial &bull; Then $9.99/month
                 </p>
               </div>
 
               {/* Features */}
               <ul className="space-y-4 mb-8 flex-grow">
                 {[
-                  'LinkedIn auto-apply',
-                  '300 applications per month',
-                  'Google Sheets tracking',
-                  'Application analytics',
-                  'Email notifications',
+                  'One-click form filling on any job board',
+                  'AI-powered field detection & auto-fill',
+                  'Works on LinkedIn, Greenhouse, Lever, Ashby & more',
+                  'Application tracking dashboard',
+                  'Resume & profile storage',
                 ].map((feature, i) => (
                   <li key={i} className="flex items-center gap-3 text-slate-300">
                     <div className="w-5 h-5 rounded-full bg-neon-green/20 flex items-center justify-center shrink-0">
@@ -77,11 +77,11 @@ export default function Pricing() {
                 Start Free Trial
               </Link>
 
-              <p className="text-center text-xs text-slate-500 mt-4">Card required • Cancel anytime</p>
+              <p className="text-center text-xs text-slate-500 mt-4">Card required &bull; Cancel anytime</p>
             </div>
           </div>
 
-          {/* Premium Plan (Coming Soon) */}
+          {/* Pro Plan (Coming Soon) */}
           <div className="relative group opacity-60">
             {/* Glow Effect */}
             <div className="absolute -inset-1 bg-gradient-to-r from-neon-purple to-neon-blue rounded-3xl blur opacity-10 transition duration-500" />
@@ -98,7 +98,7 @@ export default function Pricing() {
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="w-5 h-5 text-neon-purple" />
-                  <h3 className="text-2xl font-bold">Premium</h3>
+                  <h3 className="text-2xl font-bold">Pro</h3>
                 </div>
                 <p className="text-slate-400 text-sm">For serious job seekers</p>
               </div>
@@ -107,20 +107,18 @@ export default function Pricing() {
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-bold text-white">$TBD</span>
-                  <span className="text-slate-400">/month</span>
                 </div>
                 <p className="text-slate-500 text-sm mt-2 font-medium">Pricing to be announced</p>
               </div>
 
               {/* Features */}
               <ul className="space-y-4 mb-8 flex-grow">
-                <li className="text-slate-400 text-sm font-medium mb-2">Everything in Basic, plus:</li>
+                <li className="text-slate-400 text-sm font-medium mb-2">Everything in Beta, plus:</li>
                 {[
-                  'Indeed auto-apply',
-                  'Glassdoor auto-apply',
-                  'Dice auto-apply',
-                  'ZipRecruiter auto-apply',
-                  'Unlimited applications',
+                  'Unlimited AI-assisted form fills',
+                  'Smart cover letter generation',
+                  'Priority queue & faster LLM responses',
+                  'Advanced application analytics',
                   'Priority support',
                 ].map((feature, i) => (
                   <li key={i} className="flex items-center gap-3 text-slate-400">

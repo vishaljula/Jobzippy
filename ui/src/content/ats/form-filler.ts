@@ -35,14 +35,22 @@ import {
 export interface FormFillerConfig {
   firstName: string;
   lastName: string;
+  middleName?: string;
   email: string;
   phone: string;
   address?: string;
+  streetAddress?: string;
+  city?: string;
+  zipCode?: string;
+  state?: string;
   workAuth?: 'yes' | 'no';
   sponsorshipRequired?: boolean;
   linkedin?: string;
   website?: string;
   resumeFile?: File;
+  // Employment context
+  currentEmployer?: string;
+  currentJobTitle?: string;
   // Job context for LLM
   jobTitle?: string;
   company?: string;
@@ -50,13 +58,93 @@ export interface FormFillerConfig {
   // Resume data for LLM
   resumeData?: ResumeData;
   // Control whether to skip pre-filled fields
-  // Set to false for manual autofill (fill everything)
-  // Set to true for orchestrator mode (skip pre-filled to avoid unnecessary changes)
   skipPreFilled?: boolean;
 }
 
 // Guard to prevent double-filling during the same session
 let isCurrentlyFilling = false;
+
+/**
+ * Parse a flat address string into components.
+ * Supports common US formats:
+ *   "123 Main St, San Francisco, CA 94102"
+ *   "123 Main St, San Francisco, CA"
+ */
+function parseAddressString(address: string): {
+  streetAddress: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+} {
+  // Try: "<street>, <city>, <STATE> <zip>"
+  const fullMatch = address.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+  if (fullMatch) {
+    return {
+      streetAddress: fullMatch[1]!.trim(),
+      city: fullMatch[2]!.trim(),
+      state: fullMatch[3]!.trim(),
+      zipCode: fullMatch[4]!.trim(),
+    };
+  }
+  // Try: "<street>, <city>, <STATE>"
+  const noZipMatch = address.match(/^(.+?),\s*(.+?),\s*([A-Z]{2})\s*$/);
+  if (noZipMatch) {
+    return {
+      streetAddress: noZipMatch[1]!.trim(),
+      city: noZipMatch[2]!.trim(),
+      state: noZipMatch[3]!.trim(),
+    };
+  }
+  // Fallback: treat whole address as street
+  return { streetAddress: address };
+}
+
+/**
+ * Attach a MutationObserver to a filled element to detect unexpected value resets.
+ * Logs with stack trace so we can trace what caused the reset.
+ */
+function watchForValueReset(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  context: string
+): void {
+  const expectedValue = element.value;
+  if (!expectedValue) return;
+
+  // Watch attribute changes (React may use defaultValue)
+  const observer = new MutationObserver((mutations) => {
+    for (const mut of mutations) {
+      if (mut.type === 'attributes' && mut.attributeName === 'value') {
+        const newAttrVal = (element as HTMLInputElement).getAttribute('value') || '';
+        if (newAttrVal !== expectedValue) {
+          console.warn(
+            `[ValueWatch] 🔴 ATTRIBUTE value changed for "${context}": "${expectedValue}" → "${newAttrVal}"`,
+            new Error('Stack trace').stack
+          );
+        }
+      }
+    }
+  });
+  observer.observe(element, { attributes: true, attributeFilter: ['value'] });
+
+  // Also watch via input/change events to see if something programmatically clears it
+  const inputHandler = (e: Event) => {
+    if (element.value !== expectedValue && element.value === '') {
+      console.warn(
+        `[ValueWatch] 🔴 VALUE emptied via '${e.type}' for "${context}": was "${expectedValue}"`,
+        new Error('Stack trace').stack
+      );
+    }
+  };
+  element.addEventListener('input', inputHandler, { capture: true });
+  element.addEventListener('change', inputHandler, { capture: true });
+
+  // Self-clean after 5s (form navigation should happen within that)
+  setTimeout(() => {
+    observer.disconnect();
+    element.removeEventListener('input', inputHandler, { capture: true });
+    element.removeEventListener('change', inputHandler, { capture: true });
+  }, 5000);
+}
 
 // SnapshotEntry records what the LLM filled so we can diff on button click.
 interface SnapshotEntry {
@@ -306,6 +394,16 @@ export class FormFiller {
           );
           // Fall through to LLM
         }
+      }
+
+      // Skip this unknown field if it already has a value (e.g. from a previous autofill run).
+      // This prevents re-sending answered fields to the LLM, which could return a different answer.
+      if (this.isFieldPreFilled(element)) {
+        console.log(
+          `[FormFiller] Skipping already-filled unknown field: "${questionText.substring(0, 60)}"`
+        );
+        localFilledCount++;
+        continue;
       }
 
       // Use unique ID for unknown fields to prevent collision in fieldMap
@@ -1034,10 +1132,20 @@ export class FormFiller {
       // Identity fields (from resume/onboarding)
       firstName: this.config.firstName,
       lastName: this.config.lastName,
+      middleName: this.config.middleName || '',
       fullName: `${this.config.firstName} ${this.config.lastName}`,
       email: this.config.email,
       phone: this.config.phone,
+      // Address — full string for generic "address" fields
       address: this.config.address,
+      // Address components — parsed from the flat address string
+      streetAddress: this.config.streetAddress || this.config.address,
+      city: this.config.city,
+      zipCode: this.config.zipCode,
+      state: this.config.state,
+      // Professional context
+      employer: this.config.currentEmployer,
+      jobTitle: this.config.currentJobTitle,
       linkedin: this.config.linkedin,
       website: this.config.website,
       resume: this.config.resumeFile?.name, // Return filename for radio-based selection
@@ -1112,6 +1220,9 @@ export class FormFiller {
       // For very long text (like cover letters), use direct set to save time
       await setValue(input, stringValue);
     }
+
+    // 🔍 DIAGNOSTIC: Watch for unexpected value resets after filling
+    watchForValueReset(input, input.name || input.id || input.placeholder || 'unknown');
   }
 
   /**
@@ -1871,12 +1982,27 @@ export async function createFormFillerFromVault(
     const jobContext = getJobContextFromPage();
 
     // Create config from vault data
+    const parsedAddress = parseAddressString(profile.identity.address || '');
+    const mostRecentJob = profile.history?.employment?.[0];
+
+    console.log('[FormFiller] Parsed address:', parsedAddress);
+    console.log('[FormFiller] Most recent job:', mostRecentJob?.company, '/', mostRecentJob?.title);
+
     const config: FormFillerConfig = {
       firstName: profile.identity.first_name,
       lastName: profile.identity.last_name,
+      middleName: profile.identity.middle_name,
       email: profile.identity.email,
       phone: profile.identity.phone,
       address: profile.identity.address,
+      // Parsed address components
+      streetAddress: parsedAddress.streetAddress,
+      city: parsedAddress.city,
+      state: parsedAddress.state,
+      zipCode: parsedAddress.zipCode,
+      // Employment context from most recent history entry
+      currentEmployer: mostRecentJob?.company,
+      currentJobTitle: mostRecentJob?.title,
       // Work auth: If sponsorship_required is false, they ARE authorized
       // Also check visa_type for explicit authorization
       workAuth:

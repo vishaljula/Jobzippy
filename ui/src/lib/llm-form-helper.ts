@@ -282,6 +282,8 @@ export function classifyQuestion(questionText: string): {
     | 'work_auth'
     | 'salary'
     | 'email'
+    | 'employer_name'
+    | 'job_title'
     | 'simple_pattern'
     | 'unknown';
   pattern?: RegExp;
@@ -308,6 +310,23 @@ export function classifyQuestion(questionText: string): {
     text.includes('desired')
   ) {
     return { type: 'salary' };
+  }
+
+  // Employer name questions
+  if (
+    (text.includes('employer') && (text.includes('name') || text.includes('company'))) ||
+    (text.includes('current') && text.includes('company')) ||
+    (text.includes('most recent') && (text.includes('employer') || text.includes('company')))
+  ) {
+    return { type: 'employer_name' };
+  }
+
+  // Job title questions
+  if (
+    (text.includes('job title') || text.includes('position') || text.includes('role')) &&
+    (text.includes('current') || text.includes('most recent') || text.includes('recent'))
+  ) {
+    return { type: 'job_title' };
   }
 
   // Work authorization - CHECK BEFORE yes_no since work auth questions often contain
@@ -352,6 +371,26 @@ export function tryAnswerLocally(
   const text = question.questionText.toLowerCase();
 
   switch (classification.type) {
+    case 'employer_name': {
+      // Current/Most Recent Employer Name — directly available in resume data
+      if (resumeData.recentCompany) {
+        console.log(
+          `[tryAnswerLocally] Answering employer name locally: ${resumeData.recentCompany}`
+        );
+        return resumeData.recentCompany;
+      }
+      return null;
+    }
+
+    case 'job_title': {
+      // Current/Most Recent Job Title — directly available in resume data
+      if (resumeData.recentJobTitle) {
+        console.log(`[tryAnswerLocally] Answering job title locally: ${resumeData.recentJobTitle}`);
+        return resumeData.recentJobTitle;
+      }
+      return null;
+    }
+
     case 'years_experience': {
       // Extract the keyword being asked about (e.g., "Angular", "management", "retail")
       // Pattern: "X experience" or "experience with/in X" or "experience as X"

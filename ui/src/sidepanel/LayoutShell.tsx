@@ -41,7 +41,7 @@ export function LayoutShell({
 }: LayoutShellProps) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] text-slate-50">
-      <div className="flex flex-1 flex-col overflow-hidden rounded-r-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <div className="flex flex-1 flex-col overflow-hidden rounded-r-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl min-w-0">
         <header className="flex h-16 items-center justify-between px-6 backdrop-blur">
           <div className="flex items-center gap-3">
             <Logo />
@@ -54,8 +54,8 @@ export function LayoutShell({
         </header>
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-8 py-6">
-            <div className="mx-auto max-w-4xl space-y-6 pb-6">
+          <div className="flex-1 overflow-y-auto px-4 py-6">
+            <div className="mx-auto max-w-4xl space-y-6 pb-6 min-w-0">
               <div className="rounded-3xl border border-white/10 p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)]">
                 {history}
               </div>
@@ -68,7 +68,7 @@ export function LayoutShell({
         </div>
       </div>
 
-      <aside className="hidden w-20 flex-col items-center justify-between py-6 text-slate-200 backdrop-blur-xl md:flex">
+      <aside className="flex w-[72px] flex-shrink-0 flex-col items-center justify-between py-6 text-slate-200 backdrop-blur-xl">
         <div className="flex flex-col items-center gap-6">
           {avatar ? (
             <img

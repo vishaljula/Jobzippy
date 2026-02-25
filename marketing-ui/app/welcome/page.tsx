@@ -44,21 +44,22 @@ function WelcomeContent() {
             </div>
           )}
 
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-neon-green to-neon-purple bg-clip-text text-transparent">
-            Welcome to JobZippy
+          <h1 className="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-white via-neon-green to-neon-purple bg-clip-text text-transparent">
+            Job application fatigue is real.
           </h1>
-          
+          <p className="text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-neon-green to-neon-purple">
+            It ends here.
+          </p>
+
           <p className="text-xl text-slate-300 mb-6 max-w-2xl mx-auto">
-            Your personal AI assistant that applies to jobs while you sleep.
-            <br />
-            Start your <span className="text-neon-green font-semibold">3-day free trial</span> to
-            get started.
+            Open any job posting, click <span className="text-neon-green font-semibold">Fill Form</span>, and let JobZippy
+            instantly fill out the application with your profile — no copy-pasting, no repetitive typing.
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-400">
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-neon-green" />
-              <span>Card required</span>
+              <span>3-day free trial</span>
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-neon-green" />
@@ -66,7 +67,7 @@ function WelcomeContent() {
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-neon-green" />
-              <span>300 applications/month</span>
+              <span>Works across 100s of job boards</span>
             </div>
           </div>
         </div>
@@ -76,12 +77,19 @@ function WelcomeContent() {
       <section className="pb-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-            {/* Basic Plan */}
+            {/* Beta Free Plan */}
             <div className="relative group">
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-neon-green to-neon-blue rounded-3xl blur opacity-25 group-hover:opacity-50 transition duration-500" />
-              
+
               <div className="relative glass p-8 rounded-3xl h-full flex flex-col border-2 border-neon-green/30">
+                {/* Beta Badge */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <div className="px-4 py-1 rounded-full bg-gradient-to-r from-neon-green to-neon-blue text-xs font-bold text-black">
+                    CURRENT PLAN
+                  </div>
+                </div>
+
                 {/* Header */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2">
@@ -98,18 +106,18 @@ function WelcomeContent() {
                     <span className="text-slate-400">/month</span>
                   </div>
                   <p className="text-neon-green text-sm mt-2 font-medium">
-                    3-day free trial • Then $9.99/month
+                    3-day free trial &bull; Then $9.99/month
                   </p>
                 </div>
 
                 {/* Features */}
                 <ul className="space-y-3 mb-8 flex-grow">
                   {[
-                    'LinkedIn auto-apply',
-                    '300 applications per month',
-                    'Google Sheets tracking',
-                    'Application analytics',
-                    'Email notifications',
+                    'One-click form filling on any job board',
+                    'AI-powered field detection & auto-fill',
+                    'Works on LinkedIn, Greenhouse, Lever, Ashby & more',
+                    'Application tracking dashboard',
+                    'Resume & profile storage',
                   ].map((feature, i) => (
                     <li key={i} className="flex items-start gap-3 text-slate-300">
                       <div className="w-5 h-5 rounded-full bg-neon-green/20 flex items-center justify-center shrink-0 mt-0.5">
@@ -136,11 +144,11 @@ function WelcomeContent() {
               </div>
             </div>
 
-            {/* Premium Plan (Coming Soon) */}
+            {/* Pro Plan (Coming Soon) */}
             <div className="relative group opacity-60">
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-neon-purple to-neon-green rounded-3xl blur opacity-10 transition duration-500" />
-              
+
               <div className="relative glass p-8 rounded-3xl h-full flex flex-col border-2 border-white/10">
                 {/* Coming Soon Badge */}
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -153,7 +161,7 @@ function WelcomeContent() {
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="w-5 h-5 text-neon-purple" />
-                    <h3 className="text-2xl font-bold">Premium</h3>
+                    <h3 className="text-2xl font-bold">Pro</h3>
                   </div>
                   <p className="text-slate-400 text-sm">For serious job seekers</p>
                 </div>
@@ -162,7 +170,6 @@ function WelcomeContent() {
                 <div className="mb-6">
                   <div className="flex items-baseline gap-2">
                     <span className="text-5xl font-bold text-white">$TBD</span>
-                    <span className="text-slate-400">/month</span>
                   </div>
                   <p className="text-slate-500 text-sm mt-2 font-medium">Pricing to be announced</p>
                 </div>
@@ -170,14 +177,13 @@ function WelcomeContent() {
                 {/* Features */}
                 <ul className="space-y-3 mb-8 flex-grow">
                   <li className="text-slate-400 text-sm font-medium mb-2">
-                    Everything in Basic, plus:
+                    Everything in Beta, plus:
                   </li>
                   {[
-                    'Indeed auto-apply',
-                    'Glassdoor auto-apply',
-                    'Dice auto-apply',
-                    'ZipRecruiter auto-apply',
-                    'Unlimited applications',
+                    'Unlimited AI-assisted form fills',
+                    'Smart cover letter generation',
+                    'Priority queue & faster LLM responses',
+                    'Advanced application analytics',
                     'Priority support',
                   ].map((feature, i) => (
                     <li key={i} className="flex items-start gap-3 text-slate-400">
@@ -199,27 +205,32 @@ function WelcomeContent() {
                 </button>
 
                 <p className="text-center text-xs text-slate-600 mt-4">
-                  Join waitlist to be notified
+                  Join the waitlist to be notified
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Trust Signals */}
-          <div className="mt-12 text-center">
-            <p className="text-slate-500 text-sm mb-4">Trusted by job seekers worldwide</p>
-            <div className="flex justify-center gap-8 text-slate-600 text-xs">
-              <div>
-                <div className="text-2xl font-bold text-neon-green mb-1">10K+</div>
-                <div>Applications sent</div>
+          {/* How It Works */}
+          <div className="mt-16 text-center">
+            <p className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-8">How It Works</p>
+            <div className="flex flex-col md:flex-row items-start w-full text-sm">
+              <div className="flex-1 flex flex-col items-center gap-2 px-4">
+                <div className="w-10 h-10 rounded-full bg-neon-green/20 flex items-center justify-center text-neon-green font-bold text-lg">1</div>
+                <p className="text-slate-300 font-medium text-center">Open a job posting</p>
+                <p className="text-slate-500 text-xs text-center">On LinkedIn, Greenhouse, Lever, or any ATS</p>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-neon-blue mb-1">500+</div>
-                <div>Users hired</div>
+              <div className="hidden md:flex items-start pt-3 shrink-0 text-slate-700 text-2xl">→</div>
+              <div className="flex-1 flex flex-col items-center gap-2 px-4">
+                <div className="w-10 h-10 rounded-full bg-neon-green/20 flex items-center justify-center text-neon-green font-bold text-lg">2</div>
+                <p className="text-slate-300 font-medium text-center">Click &quot;Fill Form&quot;</p>
+                <p className="text-slate-500 text-xs text-center">JobZippy detects all fields instantly</p>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-neon-purple mb-1">4.8/5</div>
-                <div>User rating</div>
+              <div className="hidden md:flex items-start pt-3 shrink-0 text-slate-700 text-2xl">→</div>
+              <div className="flex-1 flex flex-col items-center gap-2 px-4">
+                <div className="w-10 h-10 rounded-full bg-neon-green/20 flex items-center justify-center text-neon-green font-bold text-lg">3</div>
+                <p className="text-slate-300 font-medium text-center">Review &amp; Submit</p>
+                <p className="text-slate-500 text-xs text-center">You stay in control — always</p>
               </div>
             </div>
           </div>
