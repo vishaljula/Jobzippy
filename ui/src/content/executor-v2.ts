@@ -13,6 +13,7 @@ import { waitForJobDetailsDom, waitForLinkedInModal, waitForMessage } from '../l
 import type { ExternalATSOpenedMessage } from '../types/job-session';
 import { classifyPage } from './ats/page-classifier';
 import { humanClick, humanizeConfig } from '../lib/humanize';
+import { logger } from '../lib/logger';
 
 // ============================================================================
 // Visibility Helpers (Stealth-safe - works in background tabs)
@@ -696,6 +697,10 @@ if (!USE_ORCHESTRATOR_V2) {
 
             try {
               const { jobId, vaultProfile, vaultResume, mode } = message.data;
+              // 🔍 DIAGNOSTIC: Log every time EXECUTE_PAGE_ACTION arrives in this frame
+              logger.log(
+                `[🟢 EXECUTOR] EXECUTE_PAGE_ACTION RECEIVED in frame — mode:${mode} job:${jobId} url:${location.href.substring(0, 80)} at ${new Date().toISOString()}`
+              );
               console.log(
                 '[Executor V2] EXECUTE_PAGE_ACTION received for job:',
                 jobId,

@@ -20,6 +20,7 @@ import { broadcastJobStatusOnly } from './job-persistence';
 import { startDebugRun, logStep, logStepResult } from './orchestration-debug';
 import { backgroundVaultService, STORES } from './vault-service-worker';
 import { deriveVaultPassword } from '../lib/vault/utils';
+import { logger } from '../lib/logger';
 
 // ============================================================================
 // FEATURE FLAG
@@ -443,6 +444,10 @@ function determineNextStep(
  * User clicks "Autofill" button → fills form → user manually submits
  */
 export async function executeAutofillMode(tabId: number): Promise<void> {
+  // 🔍 DIAGNOSTIC: Log every time this function is called — should be exactly ONCE per Autofill click
+  logger.log(
+    `[🔴 AUTOFILL] executeAutofillMode CALLED — tab:${tabId} at ${new Date().toISOString()}`
+  );
   console.log('[Autofill Mode] Starting autofill on tab:', tabId);
   broadcastEngineState('RUNNING', 'Autofilling form...');
 
@@ -560,6 +565,10 @@ export async function executeAutofillMode(tabId: number): Promise<void> {
     // The content script will handle setting humanizeConfig.autofillMode based on mode='autofill'
     // Note: We don't pass classification - executor will re-classify the page
     console.log('[Autofill Mode] Filling form...');
+    // 🔍 DIAGNOSTIC: Log every time EXECUTE_PAGE_ACTION is about to be sent — should be ONCE
+    logger.log(
+      `[🟡 AUTOFILL] Sending EXECUTE_PAGE_ACTION — tab:${tabId} frame:${formFrameId} at ${new Date().toISOString()}`
+    );
     broadcastEngineState('RUNNING', 'Filling form fields...');
 
     // Send EXECUTE_PAGE_ACTION to the correct frame (may be an iframe for embedded ATS)

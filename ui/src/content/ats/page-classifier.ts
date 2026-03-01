@@ -687,9 +687,21 @@ function matchTextToPurpose(
   )
     return { purpose: 'phoneCountryCode', confidence: 0.9 };
 
-  if (hasAnyWord(['phone', 'mobile number', 'cell number']) || lowerText === 'mobile')
+  if (
+    hasAnyWord(['phone', 'cell', 'telephone']) ||
+    lowerText === 'mobile' ||
+    lowerText === 'phone number' ||
+    lowerText === 'telephone number' ||
+    // Standalone 'number' only when it's a short isolated label (e.g. Liberty Mutual "Number")
+    lowerText === 'number'
+  )
     return { purpose: 'phone', confidence: 0.9 };
   if (hasWord('email')) return { purpose: 'email', confidence: 0.95 };
+
+  // Middle name — must come BEFORE first/last checks to avoid substring conflicts
+  if (lowerText.includes('middle name') || lowerText.includes('middle initial'))
+    return { purpose: 'middleName', confidence: 0.95 };
+
   if (lowerText.includes('first name') || lowerText.includes('given name'))
     return { purpose: 'firstName', confidence: 0.95 };
   // IMPORTANT: Check 'full name' and 'legal name' BEFORE 'last name'.
@@ -707,7 +719,59 @@ function matchTextToPurpose(
     return { purpose: 'linkedin', confidence: 0.9 };
   if (hasAnyWord(['website', 'portfolio', 'url'])) return { purpose: 'website', confidence: 0.85 };
 
-  // 3. Work & Education
+  // 3. Address components
+  if (
+    lowerText.includes('street address') ||
+    lowerText === 'address line 1' ||
+    lowerText.includes('address line1') ||
+    lowerText.includes('mailing address') ||
+    lowerText === 'address 1' ||
+    lowerText === 'addr1'
+  )
+    return { purpose: 'streetAddress', confidence: 0.95 };
+
+  if (
+    lowerText === 'city' ||
+    lowerText === 'city *' ||
+    lowerText.startsWith('city,') ||
+    lowerText.endsWith(' city')
+  )
+    return { purpose: 'city', confidence: 0.9 };
+
+  if (
+    lowerText.includes('zip code') ||
+    lowerText.includes('postal code') ||
+    lowerText === 'zip' ||
+    lowerText === 'postal'
+  )
+    return { purpose: 'zipCode', confidence: 0.95 };
+
+  // State — placed before work_auth/exportControls which run after this block
+  if (
+    lowerText === 'state' ||
+    lowerText === 'state *' ||
+    lowerText.includes('state/province') ||
+    lowerText.includes('province/state') ||
+    lowerText === 'province'
+  )
+    return { purpose: 'state', confidence: 0.9 };
+
+  // 4. Work & Education — Employer / Job Title
+  if (hasAnyWord(['employer', 'current company', 'organization']) && lowerText.length <= 60)
+    return { purpose: 'employer', confidence: 0.85 };
+
+  if (
+    (lowerText.includes('job title') ||
+      lowerText.includes('current title') ||
+      lowerText.includes('current position') ||
+      lowerText === 'title' ||
+      lowerText === 'position' ||
+      lowerText === 'occupation') &&
+    lowerText.length <= 60
+  )
+    return { purpose: 'jobTitle', confidence: 0.85 };
+
+  // 5. Work & Education
   // Only classify as 'experience' if the text is short (e.g. "Years of experience", dropdown labels).
   // Long essay-style questions that mention "experience" (e.g. "Please describe your experience with React")
   // should stay as 'unknown' so the LLM can answer them properly.

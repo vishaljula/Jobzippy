@@ -19,9 +19,14 @@ export type PageType =
 export type FieldPurpose =
   | 'firstName'
   | 'lastName'
+  | 'middleName'
   | 'fullName'
   | 'email'
   | 'phone'
+  | 'streetAddress'
+  | 'city'
+  | 'zipCode'
+  | 'state'
   | 'resume'
   | 'coverLetter'
   | 'experience'
@@ -38,6 +43,8 @@ export type FieldPurpose =
   | 'previousApplication'
   | 'previousEmployment'
   | 'conflictOfInterest'
+  | 'employer'
+  | 'jobTitle'
   | 'submit'
   | 'apply'
   | 'close'
@@ -340,6 +347,16 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
     weight: 0.9,
   },
 
+  middleName: {
+    selectors: [
+      'input[autocomplete="additional-name"]',
+      'input[name*="middle" i]',
+      'input[id*="middle" i]',
+      'input[placeholder*="middle" i]',
+    ],
+    weight: 0.9,
+  },
+
   email: {
     selectors: [
       'input[type="email"]',
@@ -359,8 +376,86 @@ export const FIELD_PURPOSE_RULES: Record<FieldPurpose, { selectors: string[]; we
       'input[autocomplete="tel"]',
       'input[name*="phone" i]',
       'input[id*="phone" i]',
+      'input[name*="telephone" i]',
+      'input[id*="telephone" i]',
+      'input[placeholder*="phone" i]',
     ],
     weight: 0.9,
+  },
+
+  streetAddress: {
+    selectors: [
+      'input[autocomplete="street-address"]',
+      'input[autocomplete="address-line1"]',
+      'input[name*="street" i]',
+      'input[id*="street" i]',
+      'input[name*="address1" i]',
+      'input[name*="addr1" i]',
+      'input[id*="address1" i]',
+      'input[placeholder*="street address" i]',
+    ],
+    weight: 0.9,
+  },
+
+  city: {
+    selectors: [
+      'input[autocomplete="address-level2"]',
+      'input[name*="city" i]',
+      'input[id*="city" i]',
+      'input[placeholder*="city" i]',
+    ],
+    weight: 0.9,
+  },
+
+  zipCode: {
+    selectors: [
+      'input[autocomplete="postal-code"]',
+      'input[name*="zip" i]',
+      'input[id*="zip" i]',
+      'input[name*="postal" i]',
+      'input[id*="postal" i]',
+      'input[placeholder*="zip" i]',
+    ],
+    weight: 0.9,
+  },
+
+  state: {
+    selectors: [
+      'input[autocomplete="address-level1"]',
+      'select[name*="state" i]:not([name*="sponsor" i]):not([name*="auth" i])',
+      'select[id*="state" i]:not([id*="sponsor" i]):not([id*="auth" i])',
+      'input[name*="state" i]:not([name*="sponsor" i])',
+      'input[id*="state" i]:not([id*="sponsor" i])',
+    ],
+    weight: 0.85,
+  },
+
+  employer: {
+    selectors: [
+      'input[name*="employer" i]',
+      'input[id*="employer" i]',
+      'input[name*="company" i]',
+      'input[id*="company" i]',
+      'input[name*="organization" i]',
+      'input[id*="organization" i]',
+      'input[placeholder*="employer" i]',
+      'input[placeholder*="company" i]',
+    ],
+    weight: 0.85,
+  },
+
+  jobTitle: {
+    selectors: [
+      'input[name*="jobtitle" i]',
+      'input[id*="jobtitle" i]',
+      'input[name*="job_title" i]',
+      'input[id*="job_title" i]',
+      'input[name*="position" i]',
+      'input[id*="position" i]',
+      'input[name*="occupation" i]',
+      'input[placeholder*="job title" i]',
+    ],
+    weight: 0.85,
   },
 
   phoneCountryCode: {

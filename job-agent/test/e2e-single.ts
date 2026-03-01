@@ -8,6 +8,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
 import { expandComboboxOptions } from '../extractor/combobox.js';
+import { filterAtsWidgets } from '../extractor/field-filter.js';
 import { buildFillPlan } from '../llm/planner.js';
 import { reconcilePlan, printReconciliationReport } from '../llm/plan-reconciler.js';
 import { executeAllFills } from '../filler/fill.js';
@@ -46,21 +47,25 @@ async function main() {
     // ── 1. Extract ────────────────────────────────────────────────
     console.log('── Step 1: Extraction');
     const elements = await page.evaluate(FIELD_EXTRACTOR) as ExtractedElement[];
-    console.log(`   ${elements.length} elements stamped (${elements.filter(e => e.action_type === 'combobox').length} comboboxes)\n`);
+    console.log(`   ${elements.length} elements stamped (${elements.filter(e => e.action_type === 'combobox').length} comboboxes)`);
+
+    // ── 1b. Filter ATS native widgets ────────────────────────────
+    const cleanElements = filterAtsWidgets(elements);
+    console.log();
 
     // ── 2. Expand comboboxes ──────────────────────────────────────
     console.log('── Step 2: Combobox expansion');
-    await expandComboboxOptions(page, elements);
+    await expandComboboxOptions(page, cleanElements);
     console.log();
 
     // ── 3. LLM fill plan ─────────────────────────────────────────
     console.log('── Step 3: LLM fill plan (Claude Haiku)');
-    const fillPlan = await buildFillPlan(elements, PROFILE, JOB);
+    const fillPlan = await buildFillPlan(cleanElements, PROFILE, JOB);
     console.log(`   ${fillPlan.length} actions generated`);
 
     // Print the plan with options info
     for (const a of fillPlan) {
-        const el = elements.find(e => e.id === a.id);
+        const el = cleanElements.find(e => e.id === a.id);
         const label = `"${(el?.label ?? '?').slice(0, 35)}"`;
         const opts = el?.options?.length ? ` [opts: ${el.options.slice(0, 3).join(' | ')}${el.options.length > 3 ? '…' : ''}]` : '';
         const icon = a.action_type === 'skip' ? '⏭️ ' : '✏️ ';
@@ -69,7 +74,7 @@ async function main() {
 
     // ── 3b. Reconcile plan ────────────────────────────────────────
     console.log('\n── Step 3b: Plan Reconciler');
-    const { plan: reconciledPlan, corrections } = reconcilePlan(fillPlan, elements);
+    const { plan: reconciledPlan, corrections } = reconcilePlan(fillPlan, cleanElements);
     printReconciliationReport(corrections);
 
     // Save the original LLM plan (preserves intent for audit)

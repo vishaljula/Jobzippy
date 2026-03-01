@@ -35,7 +35,10 @@ export async function buildFillPlan(
             : '';
         const reqStr = el.required ? ' (required)' : '';
         const curVal = el.value ? ` [currently: "${el.value}"]` : '';
-        return `- id: "${el.id}", type: ${el.action_type}, label: "${el.label}"${reqStr}${curVal}${optStr}`;
+        const isPlaceholderLabel = /^(type here|start typing|search|enter|select|choose)[\.\.\s]*$/i.test(el.label.trim());
+        const labelNote = isPlaceholderLabel ? ` [NOTE: label is a UI placeholder, infer field purpose from position in form]` : '';
+        return `- id: "${el.id}", type: ${el.action_type}, label: "${el.label}"${reqStr}${curVal}${labelNote}${optStr}`;
+
     }).join('\n');
 
     const prompt = `Fill out this job application for the applicant below.
@@ -52,8 +55,9 @@ ${fieldDescriptions}
 INSTRUCTIONS:
 - Return a JSON array where each item is: { "id": "<field id>", "action_type": "<type>", "value": "<value>", "note": "<brief reason>" }
 - action_type must exactly match the field's type from above
-- COMBOBOX RULE (strict): When a field has options[] listed, your value MUST be copied EXACTLY from that options list — character for character. Do NOT use the profile value if it is not in the options list. Instead pick the closest matching option. If no option is relevant, pick the most neutral/generic one available.
-- When a combobox has NO options listed, make a reasonable guess from the profile.
+- PRE-FILLED FIELDS: If a combobox or select_option field shows [currently: "..."] with a non-empty, non-placeholder value, use action_type "skip" — it is already correctly filled. Do NOT change pre-filled fields.
+- COMBOBOX / SELECT_OPTION RULE (strict): Both "combobox" and "select_option" are dropdown fields. When options[] are listed, your value MUST be copied EXACTLY from that options list — character for character. Pick the closest matching option from the list. If nothing matches and the field is optional, use action_type "skip".
+- When a combobox/select_option has NO options listed, make a reasonable guess from the profile.
 - For upload_file fields that are resume/CV: use value "__RESUME_PATH__"
 - For upload_file fields that are cover letters or optional: use action_type "skip" with value ""
 - For input_text: use the applicant's real data (name, email, phone, etc.)

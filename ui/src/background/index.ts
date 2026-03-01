@@ -90,6 +90,8 @@ async function logToContentScripts(component: string, message: string, data?: an
 type EngineState = 'IDLE' | 'RUNNING' | 'PAUSED';
 let engineState: EngineState = 'IDLE';
 let engineStatus: string = 'Idle';
+// Guard: prevents concurrent autofill calls (e.g. rapid double-clicks on Autofill button)
+let autofillInProgress = false;
 
 // -----------------------------------------------------------------------------
 // JobSession - Single Source of Truth
@@ -1438,12 +1440,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         }
 
+        // Guard: prevent concurrent autofill calls (e.g. from rapid double-clicks)
+        if (autofillInProgress) {
+          console.warn(
+            '[Jobzippy] ⚠️ Autofill already in progress, ignoring duplicate START_AUTOFILL'
+          );
+          sendResponse({ status: 'already_running' });
+          break;
+        }
+        autofillInProgress = true;
+
         console.log('[Jobzippy] 🚀 Importing and calling executeAutofillMode for tab:', tabId);
         import('./orchestration').then(({ executeAutofillMode }) => {
           console.log('[Jobzippy] 📞 Calling executeAutofillMode...');
-          executeAutofillMode(tabId).catch((error: Error) => {
-            console.error('[Jobzippy] ❌ Autofill mode error:', error);
-          });
+          executeAutofillMode(tabId)
+            .catch((error: Error) => {
+              console.error('[Jobzippy] ❌ Autofill mode error:', error);
+            })
+            .finally(() => {
+              autofillInProgress = false;
+            });
         });
 
         sendResponse({ status: 'autofilling' });

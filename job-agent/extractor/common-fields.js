@@ -16,10 +16,11 @@
     const elements = [];
 
     // ── Label resolution ────────────────────────────────────────────
+    // Returns { text, source } where source identifies how the label was found.
     function getLabel(el) {
         // 1. aria-label
         const ariaLabel = el.getAttribute('aria-label');
-        if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+        if (ariaLabel && ariaLabel.trim()) return { text: ariaLabel.trim(), source: 'aria-label' };
 
         // 2. aria-labelledby → resolve referenced element text
         const labelledBy = el.getAttribute('aria-labelledby');
@@ -28,7 +29,7 @@
                 .map(id => document.getElementById(id)?.textContent?.trim())
                 .filter(Boolean)
                 .join(' ');
-            if (text) return text;
+            if (text) return { text, source: 'aria-labelledby' };
         }
 
         // 3. <label for="id">
@@ -38,7 +39,7 @@
                 const clone = label.cloneNode(true);
                 clone.querySelectorAll('input,select,textarea').forEach(e => e.remove());
                 const text = clone.textContent.trim();
-                if (text) return text;
+                if (text) return { text, source: 'for-attr' };
             }
         }
 
@@ -48,7 +49,19 @@
             const clone = parentLabel.cloneNode(true);
             clone.querySelectorAll('input,select,textarea,button').forEach(e => e.remove());
             const text = clone.textContent.trim();
-            if (text) return text;
+            if (text) return { text, source: 'parent-label' };
+        }
+
+        // 4b. Sibling div text — Workday hides native inputs and puts Yes/No text in a sibling div
+        // e.g. <div><input type="radio"><span/><div>Yes</div></div>
+        const parentEl = el.parentElement;
+        if (parentEl) {
+            for (const sib of Array.from(parentEl.children)) {
+                if (sib === el) continue;
+                if (sib.tagName === 'INPUT' || sib.tagName === 'BUTTON') continue;
+                const t = (sib.textContent ?? '').trim();
+                if (t && t.length >= 1 && t.length <= 50) return { text: t, source: 'sibling-div' };
+            }
         }
 
         // 5. Preceding legend/label/title in parent
@@ -57,19 +70,19 @@
             const prev = parent.querySelector('legend, label, [class*="label"], [class*="title"]');
             if (prev && prev !== el) {
                 const text = prev.textContent.trim();
-                if (text) return text;
+                if (text) return { text, source: 'sibling' };
             }
         }
 
         // 6. placeholder
         const placeholder = el.getAttribute('placeholder');
-        if (placeholder && placeholder.trim()) return placeholder.trim();
+        if (placeholder && placeholder.trim()) return { text: placeholder.trim(), source: 'placeholder' };
 
         // 7. name attribute (humanized)
         const name = el.getAttribute('name');
-        if (name) return name.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+        if (name) return { text: name.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim(), source: 'name' };
 
-        return '(unlabelled)';
+        return { text: '(unlabelled)', source: 'none' };
     }
 
     // ── Action type classification ──────────────────────────────────
@@ -90,9 +103,34 @@
         if (role === 'checkbox') return 'click_checkbox';
         if (role === 'radio') return 'click_radio';
         if (role === 'textbox') return 'input_text';
-        if (tag === 'input') return 'input_text';
+
+        if (tag === 'input') {
+            // Workday "selectinput" pattern — the input has data-uxi-element-id starting with "selectinput"
+            // This is Workday's custom multiselect widget (e.g. "How Did You Hear About Us")
+            const uxiId = el.getAttribute('data-uxi-element-id') || '';
+            if (uxiId.startsWith('selectinput')) return 'combobox';
+
+            // Workday: parent div has data-automation-hiddensearch attribute
+            if (el.parentElement?.hasAttribute('data-automation-hiddensearch')) return 'combobox';
+
+            // Generic: inside a [role="combobox"] ancestor
+            if (el.closest('[role="combobox"]')) return 'combobox';
+
+            // Generic: nearby button[aria-haspopup="listbox"]
+            const parent = el.parentElement;
+            if (parent) {
+                const hasListboxTrigger =
+                    parent.querySelector('button[aria-haspopup="listbox"], [aria-haspopup="listbox"]') ||
+                    parent.parentElement?.querySelector('button[aria-haspopup="listbox"]');
+                if (hasListboxTrigger) return 'combobox';
+            }
+
+            return 'input_text';
+        }
+
         return 'input_text';
     }
+
 
     // ── Options (native <select> and radio groups only) ─────────────
     // NOTE: ARIA combobox options are NOT read here.
@@ -119,20 +157,47 @@
         return [];
     }
 
+    // ── Group ID: find the question container wrapping label + input ──
+    // Walk up from the element until we find an ancestor that contains BOTH
+    // a text-like label node AND another interactive element (or the element itself).
+    // All elements sharing the same container node get the same group_id.
+    let groupCounter = 0;
+    const groupMap = new WeakMap(); // node → group_id string
+
+    function getGroupId(el) {
+        let node = el.parentElement;
+        // Walk up max 6 levels
+        for (let i = 0; i < 6 && node && node !== document.body; i++) {
+            const hasLabel = node.querySelector('label, legend, [class*="label"], [class*="title"]');
+            const hasInput = node.querySelector('input:not([type=hidden]), select, textarea, [role="combobox"], [role="radio"], [role="checkbox"]');
+            if (hasLabel && hasInput) {
+                if (!groupMap.has(node)) groupMap.set(node, 'grp-' + (++groupCounter));
+                return groupMap.get(node);
+            }
+            node = node.parentElement;
+        }
+        return '';
+    }
+
+
     // ── Visibility check ────────────────────────────────────────────
     function isVisible(el) {
-        const rect = el.getBoundingClientRect();
         const style = window.getComputedStyle(el);
-        return (
-            (rect.width > 0 || rect.height > 0) &&
-            style.visibility !== 'hidden' &&
-            style.display !== 'none' &&
-            style.opacity !== '0' &&
-            !el.disabled
-        );
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        const rect = el.getBoundingClientRect();
+        const tag = el.tagName.toLowerCase();
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        // Native radio/checkbox and native select inputs are often disabled or CSS-hidden
+        // by ATS frameworks (Workday) but still have options/values we can read and fill.
+        // Accept them even if disabled or bbox is zero.
+        if (type === 'radio' || type === 'checkbox' || tag === 'select') return true;
+        if (el.disabled) return false;
+        return rect.width > 0 || rect.height > 0;
     }
 
     // ── Gather all interactive elements ────────────────────────────
+    // Expanded: now also catches button groups and ARIA button roles
+    // so that custom pill buttons get jz-ids for SoM annotation.
     const SELECTOR = [
         'input:not([type=hidden])',
         'select',
@@ -144,23 +209,66 @@
         '[role="radio"]',
     ].join(', ');
 
+    // Secondary selector for button groups (caught separately to avoid
+    // polluting the primary extraction with nav/submit buttons).
+    const BTN_SELECTOR = [
+        'button:not([type="submit"]):not([type="reset"])',
+        '[role="button"]:not([type="submit"])',
+        '[role="switch"]',
+    ].join(', ');
+
     const seen = new Set();
 
-    for (const el of document.querySelectorAll(SELECTOR)) {
-        if (seen.has(el)) continue;
+    function processElement(el) {
+        if (seen.has(el)) return;
         seen.add(el);
 
-        if (!isVisible(el)) continue;
+        if (!isVisible(el)) return;
 
         const type = (el.getAttribute('type') || '').toLowerCase();
-        if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) continue;
+        if (['hidden', 'submit', 'reset', 'image'].includes(type)) return;
+
+        // ── Combobox trigger promotion ─────────────────────────────────────────────
+        // If this input is classified as 'combobox' (listbox-backed), find the
+        // real clickable trigger element (the button[aria-haspopup]) so that:
+        //   a) The jz-id is stamped on the TRIGGER (correct click target)
+        //   b) The TRIGGER's current displayed value is captured for pre-fill detection
+        //   c) The inner <input> is marked as seen so it doesn't get its own jz-id
+        const wouldBeCombobox = getActionType(el) === 'combobox';
+        const isInputEl = el.tagName.toLowerCase() === 'input';
+        if (wouldBeCombobox && isInputEl) {
+            // Look for the listbox trigger button in the surrounding container
+            const parent = el.parentElement;
+            const grandParent = parent?.parentElement;
+            const trigger =
+                parent?.querySelector('button[aria-haspopup]') ||
+                grandParent?.querySelector('button[aria-haspopup]') ||
+                el.closest('[role="combobox"]');
+            if (trigger && trigger !== el && !seen.has(trigger)) {
+                // Stamp the trigger instead, and mark the original input as seen
+                seen.add(el); // don't double-stamp the input
+                processElement(trigger); // recursively process the trigger
+                return;
+            }
+            // If no trigger found, fall through and stamp the input itself
+        }
 
         const id = 'jz-' + (++counter);
         el.setAttribute('data-jz-id', id);
 
         const actionType = getActionType(el);
-        const label = getLabel(el);
+        const { text: labelText, source: labelSource } = getLabel(el);
         const options = getOptions(el);
+        const group_id = getGroupId(el);
+
+        // Scroll-adjusted bounding box for SoM annotation
+        const rect = el.getBoundingClientRect();
+        const bbox = {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top + window.scrollY),
+            w: Math.round(rect.width),
+            h: Math.round(rect.height),
+        };
 
         elements.push({
             id,
@@ -168,22 +276,44 @@
             type: el.getAttribute('type') || '',
             role: el.getAttribute('role') || '',
             action_type: actionType,
-            label,
+            label: labelText,
+            label_source: labelSource,
             name: el.getAttribute('name') || '',
             placeholder: el.getAttribute('placeholder') || '',
             value: el.value || '',
             required: el.hasAttribute('required') || el.getAttribute('aria-required') === 'true',
-            // aria-controls tells us which listbox container this combobox controls —
-            // used by combobox.ts to scope option reading during expand-and-read pass
             ariaControls: el.getAttribute('aria-controls') || '',
-            options, // empty [] for comboboxes — filled in by combobox.ts
+            options,
+            bbox,
+            group_id,
         });
 
-        // For radio groups: mark all siblings as seen so only first gets an id
+        // ── Native radio: mark all siblings as seen (only first gets jz-id) ────
+        // Stamping data-jz-id on every native input[type=radio] triggers React
+        // re-renders in SPAs like Ashby, wiping jz-ids from later elements.
+        // [role="radio"] elements (the styled clickable options) are handled
+        // separately via the SELECTOR and each get their own jz-id safely.
         if (type === 'radio' && el.name) {
             document.querySelectorAll('input[type="radio"][name="' + el.name + '"]')
                 .forEach(m => seen.add(m));
         }
+    }
+
+    // Process primary form fields
+    for (const el of document.querySelectorAll(SELECTOR)) {
+        processElement(el);
+    }
+
+    // Process button groups — only if they appear to be inside a form field
+    // container (i.e., their parent has a label). This catches Ashby's pill
+    // buttons while ignoring nav/header buttons.
+    for (const el of document.querySelectorAll(BTN_SELECTOR)) {
+        if (el.getAttribute('data-jz-id')) continue; // already processed
+        const parent = el.closest('form, [role="form"], main, [class*="form"], [class*="application"]');
+        if (!parent) continue;
+        const hasNearbyLabel = el.closest('[class*="question"], [class*="field"], [class*="group"], fieldset, li');
+        if (!hasNearbyLabel) continue;
+        processElement(el);
     }
 
     return elements;
