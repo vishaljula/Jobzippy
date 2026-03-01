@@ -57,7 +57,7 @@ INSTRUCTIONS:
 - action_type must exactly match the field's type from above
 - PRE-FILLED FIELDS: If a combobox or select_option field shows [currently: "..."] with a non-empty, non-placeholder value, use action_type "skip" — it is already correctly filled. Do NOT change pre-filled fields.
 - COMBOBOX / SELECT_OPTION RULE (strict): Both "combobox" and "select_option" are dropdown fields. When options[] are listed, your value MUST be copied EXACTLY from that options list — character for character. Pick the closest matching option from the list. If nothing matches and the field is optional, use action_type "skip".
-- When a combobox/select_option has NO options listed, make a reasonable guess from the profile.
+- When a combobox/select_option has NO options listed, make a reasonable guess from the profile. If it asks for "Location", provide the City and State (e.g. "Dallas, Texas") so our system can search for it.
 - For upload_file fields that are resume/CV: use value "__RESUME_PATH__"
 - For upload_file fields that are cover letters or optional: use action_type "skip" with value ""
 - For input_text: use the applicant's real data (name, email, phone, etc.)

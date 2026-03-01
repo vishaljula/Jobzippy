@@ -64,14 +64,19 @@
             }
         }
 
-        // 5. Preceding legend/label/title in parent
-        const parent = el.parentElement;
-        if (parent) {
-            const prev = parent.querySelector('legend, label, [class*="label"], [class*="title"]');
-            if (prev && prev !== el) {
+        // 5. Preceding legend/label/title in parent or grandparent
+        let currentParent = el.parentElement;
+        for (let i = 0; i < 3 && currentParent; i++) {
+            const prev = currentParent.querySelector('legend, label, [class*="label"], [class*="title"], [class*="heading"]');
+            if (prev && prev !== el && !prev.contains(el)) {
+                // Ignore if it's a generic UI string
                 const text = prev.textContent.trim();
-                if (text) return { text, source: 'sibling' };
+                // Ensure the label we found isn't actually just the placeholder mapped differently
+                if (text && text.length < 100 && !text.toLowerCase().includes('start typing')) {
+                    return { text, source: 'ancestor-sibling' };
+                }
             }
+            currentParent = currentParent.parentElement;
         }
 
         // 6. placeholder
