@@ -96,10 +96,11 @@
         if (type === 'checkbox') return 'click_checkbox';
         if (type === 'radio') return 'click_radio';
         if (type === 'file') return 'upload_file';
+
+        if (role === 'combobox' || role === 'listbox' || el.hasAttribute('aria-haspopup')) return 'combobox';
+
         if (type === 'submit' || type === 'button') return 'click_button';
         if (tag === 'button') return 'click_button';
-        if (role === 'combobox') return 'combobox';
-        if (role === 'listbox') return 'combobox';
         if (role === 'checkbox') return 'click_checkbox';
         if (role === 'radio') return 'click_radio';
         if (role === 'textbox') return 'input_text';
@@ -207,6 +208,9 @@
         '[role="textbox"]',
         '[role="checkbox"]',
         '[role="radio"]',
+        'button[aria-haspopup="listbox"]',
+        'button[aria-haspopup="true"]',
+        'button[aria-haspopup="menu"]'
     ].join(', ');
 
     // Secondary selector for button groups (caught separately to avoid

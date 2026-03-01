@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const JOB_URL = 'https://workday.wd1.myworkdayjobs.com/en-US/Adobecareers/job/Senior-Staff-Engineer---Web--Firefly-Boards_R153027/apply/applyManually';
+const JOB_URL = 'https://adobe.wd5.myworkdayjobs.com/en-US/external_experienced/job/San-Francisco/Senior-Staff-Engineer---Web--Firefly-Boards_R165858/apply/applyManually?jr_id=699e49db81476f6176b739ba';
 const EXTRACTOR_CODE = fs.readFileSync(path.join(process.cwd(), 'extractor/common-fields.js'), 'utf8');
 
 (async () => {
