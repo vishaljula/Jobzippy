@@ -240,6 +240,23 @@ export async function executeFill(
                 return { id, action_type, value, status: 'ok', verified: true };
             }
 
+            // ── Button (e.g. Ashby pill buttons) ──────────────────────
+            case 'click_button': {
+                try { await el.click({ force: true }); } catch { await el.click(); }
+                await page.waitForTimeout(300);
+
+                // Readback: check if the button now has an active/selected state
+                const handle = await el.elementHandle();
+                const state = handle ? await page.evaluate((node: Element) => {
+                    return node.getAttribute('aria-pressed') ?? node.getAttribute('aria-selected') ??
+                        node.getAttribute('aria-checked') ??
+                        (node.className && /selected|active|checked/i.test(node.className) ? 'true' : null);
+                }, handle) : null;
+
+                const verified = state === 'true' || state === 'mixed'; // mixed is sometimes used
+                return { id, action_type, value, status: verified || state !== null ? 'ok' : 'warning', verified: state !== null ? verified : undefined };
+            }
+
             default:
                 return { id, action_type, value, status: 'error', error: `unknown action_type: ${action_type}` };
         }
